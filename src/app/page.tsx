@@ -1,48 +1,69 @@
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createClient, getUser } from '@/lib/supabase/server'
+import {
+  getHeadlinesData,
+  getFeedData,
+  getIndicatorsData,
+  listFeeds,
+  listIndicators,
+} from '@/lib/dashboard/data'
+import { getDefaultLayout, type WidgetInstance } from '@/lib/dashboard/widgets'
+import type { DashboardWidgetData } from '@/lib/dashboard/types'
+import DashboardGrid from '@/components/dashboard/DashboardGrid'
 
 export default async function Home() {
   const user = await getUser()
+  if (!user) redirect('/login')
+
   const supabase = await createClient()
-  const { data: indicators, error } = await supabase
-    .from('indicators')
-    .select('*')
+  const { data: savedWidgets } = await supabase
+    .from('dashboard_widgets')
+    .select('id, widget_type, config, x, y, w, h')
+    .eq('user_id', user.id)
+
+  const widgets: WidgetInstance[] =
+    savedWidgets && savedWidgets.length > 0 ? savedWidgets : getDefaultLayout()
+
+  const feedIds = [
+    ...new Set(
+      widgets.filter((w) => w.widget_type === 'feed').map((w) => w.config.feed_id)
+    ),
+  ].filter(Boolean)
+  const indicatorIds = [
+    ...new Set(
+      widgets
+        .filter((w) => w.widget_type === 'indicators')
+        .map((w) => w.config.indicator_id)
+    ),
+  ].filter(Boolean)
+  const needsHeadlines = widgets.some((w) => w.widget_type === 'headlines')
+
+  const [headlines, feedEntries, indicatorEntries, feedOptions, indicatorOptions] =
+    await Promise.all([
+      needsHeadlines ? getHeadlinesData() : Promise.resolve([]),
+      Promise.all(feedIds.map(async (id) => [id, await getFeedData(id)] as const)),
+      Promise.all(
+        indicatorIds.map(async (id) => [id, await getIndicatorsData(id)] as const)
+      ),
+      listFeeds(),
+      listIndicators(),
+    ])
+
+  const widgetData: DashboardWidgetData = {
+    headlines,
+    feeds: Object.fromEntries(feedEntries),
+    indicators: Object.fromEntries(indicatorEntries),
+  }
 
   return (
     <div className="p-8">
-      <h1 className="text-xl font-semibold mb-4">Indicators</h1>
-
-      {error && (
-        <p className="text-red-600">
-          Error querying indicators: {error.message}
-        </p>
-      )}
-
-      {!error && indicators?.length === 0 && (
-        <p className="text-gray-500">
-          {user ? (
-            'Connected, but no rows came back — check that RLS policies allow this read.'
-          ) : (
-            <>
-              No indicators visible while signed out.{' '}
-              <Link href="/login" className="underline">
-                Sign in
-              </Link>{' '}
-              if indicators are restricted to authenticated users.
-            </>
-          )}
-        </p>
-      )}
-
-      {!error && indicators && indicators.length > 0 && (
-        <ul className="list-disc list-inside space-y-1">
-          {indicators.map((indicator) => (
-            <li key={indicator.id}>
-              {indicator.display_name ?? JSON.stringify(indicator)}
-            </li>
-          ))}
-        </ul>
-      )}
+      <h1 className="text-xl font-semibold mb-4">Dashboard</h1>
+      <DashboardGrid
+        initialWidgets={widgets}
+        widgetData={widgetData}
+        feedOptions={feedOptions}
+        indicatorOptions={indicatorOptions}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import Parser from 'rss-parser'
 import { stripHtml, translateArticle } from '@/lib/translate'
+import { summarizeArticle } from '@/lib/summarize'
 
 // Cron-triggered background job, not user-facing — always run fresh,
 // and force the Node.js runtime since rss-parser and the Supabase admin
@@ -105,6 +106,7 @@ async function ingestFeeds(): Promise<{
         original_language: string
         title_en: string | null
         summary_en: string | null
+        summary_ai: string | null
       }> = []
 
       for (const { item, guid } of newItems) {
@@ -119,6 +121,11 @@ async function ingestFeeds(): Promise<{
           const { original_language, title_en, summary_en } =
             await translateArticle(rawTitle, rawSummary)
 
+          const summary_ai = await summarizeArticle(
+            title_en ?? stripHtml(rawTitle),
+            summary_en ?? stripHtml(rawSummary)
+          )
+
           rows.push({
             feed_id: feed.id,
             guid,
@@ -129,6 +136,7 @@ async function ingestFeeds(): Promise<{
             original_language,
             title_en,
             summary_en,
+            summary_ai,
           })
         } catch (itemErr) {
           // A single malformed item (missing/garbage fields) shouldn't
