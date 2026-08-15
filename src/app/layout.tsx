@@ -19,20 +19,36 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        <header className="flex items-center justify-end gap-4 p-4 border-b text-sm">
+        <header className="flex items-center justify-between gap-4 p-4 border-b text-sm">
           {user ? (
             <>
-              <span className="text-gray-600">{user.email}</span>
-              <form action={signOut}>
-                <button type="submit" className="underline">
-                  Sign out
-                </button>
-              </form>
+              <nav className="flex items-center gap-4">
+                <Link href="/" className="hover:underline">
+                  Dashboard
+                </Link>
+                <Link href="/feeds" className="hover:underline">
+                  Feeds
+                </Link>
+                <Link href="/indicators" className="hover:underline">
+                  Indicators
+                </Link>
+              </nav>
+              <div className="flex items-center gap-4">
+                <span className="text-gray-600">{user.email}</span>
+                <form action={signOut}>
+                  <button type="submit" className="underline">
+                    Sign out
+                  </button>
+                </form>
+              </div>
             </>
           ) : (
-            <Link href="/login" className="underline">
-              Sign in
-            </Link>
+            <>
+              <span />
+              <Link href="/login" className="underline">
+                Sign in
+              </Link>
+            </>
           )}
         </header>
         {children}

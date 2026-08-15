@@ -8,7 +8,7 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
     return <p className="text-sm text-gray-500">Indicator not found.</p>
   }
 
-  const { display_name, latest_value, previous_value, readings } = data
+  const { display_name, series_code, latest_value, previous_value, readings } = data
   const delta =
     latest_value !== null && previous_value !== null ? latest_value - previous_value : null
   const deltaPct =
@@ -45,6 +45,14 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
           </ResponsiveContainer>
         </div>
       )}
+      <a
+        href={`https://fred.stlouisfed.org/series/${series_code}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-gray-400 hover:underline mt-2 block"
+      >
+        Source: FRED®, Federal Reserve Bank of St. Louis
+      </a>
     </div>
   )
 }

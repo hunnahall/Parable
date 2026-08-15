@@ -22,6 +22,7 @@ export interface IndicatorOption {
 export interface IndicatorData {
   id: string
   display_name: string | null
+  series_code: string
   latest_value: number | null
   previous_value: number | null
   readings: { date: string; value: number }[]
@@ -116,7 +117,7 @@ export async function getIndicatorsData(
 
   const { data: indicator } = await supabase
     .from('indicators')
-    .select('id, display_name')
+    .select('id, display_name, series_code')
     .eq('id', indicatorId)
     .single()
 
@@ -136,6 +137,7 @@ export async function getIndicatorsData(
   return {
     id: indicator.id,
     display_name: indicator.display_name,
+    series_code: indicator.series_code,
     latest_value: ordered.at(-1)?.value ?? null,
     previous_value: ordered.at(-2)?.value ?? null,
     readings: ordered.map((r) => ({ date: r.reading_date, value: r.value })),
