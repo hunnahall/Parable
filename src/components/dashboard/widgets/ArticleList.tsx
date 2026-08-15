@@ -1,4 +1,9 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ArticleItem } from '@/lib/dashboard/data'
+import { saveArticle, ignoreArticle, clearArticleState } from '@/lib/articles/actions'
 
 function formatDate(dateString: string | null): string | null {
   if (!dateString) return null
@@ -8,6 +13,50 @@ function formatDate(dateString: string | null): string | null {
 }
 
 export default function ArticleList({ items }: { items: ArticleItem[] }) {
+  const router = useRouter()
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [errorId, setErrorId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSave(id: string) {
+    setPendingId(id)
+    setError(null)
+    const result = await saveArticle(id)
+    setPendingId(null)
+    if (result.error) {
+      setErrorId(id)
+      setError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleIgnore(id: string) {
+    setPendingId(id)
+    setError(null)
+    const result = await ignoreArticle(id)
+    setPendingId(null)
+    if (result.error) {
+      setErrorId(id)
+      setError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleUnsave(id: string) {
+    setPendingId(id)
+    setError(null)
+    const result = await clearArticleState(id)
+    setPendingId(null)
+    if (result.error) {
+      setErrorId(id)
+      setError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
   if (items.length === 0) {
     return <p className="text-sm text-gray-500">No articles yet.</p>
   }
@@ -34,6 +83,38 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
           )}
           {item.summary && (
             <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{item.summary}</p>
+          )}
+          <div className="flex items-center gap-3 mt-1">
+            {item.state === 'saved' ? (
+              <button
+                type="button"
+                disabled={pendingId === item.id}
+                onClick={() => handleUnsave(item.id)}
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              >
+                Unsave
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={pendingId === item.id}
+                onClick={() => handleSave(item.id)}
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              >
+                Save
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={pendingId === item.id}
+              onClick={() => handleIgnore(item.id)}
+              className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+            >
+              Ignore
+            </button>
+          </div>
+          {errorId === item.id && error && (
+            <p className="text-xs text-red-600 mt-1">{error}</p>
           )}
         </li>
       ))}

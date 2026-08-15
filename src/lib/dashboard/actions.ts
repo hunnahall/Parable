@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import type { WidgetInstance, WidgetType } from './widgets'
 
-export async function saveDashboardLayout(widgets: WidgetInstance[]) {
+export async function saveDashboardLayout(
+  widgets: WidgetInstance[]
+): Promise<{ error: string | null }> {
   const user = await getUser()
-  if (!user) return
+  if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
   const rows = widgets.map((widget) => ({
@@ -20,16 +22,19 @@ export async function saveDashboardLayout(widgets: WidgetInstance[]) {
     h: widget.h,
   }))
 
-  await supabase.from('dashboard_widgets').upsert(rows)
+  const { error } = await supabase.from('dashboard_widgets').upsert(rows)
+  if (error) return { error: error.message }
+
   revalidatePath('/')
+  return { error: null }
 }
 
 export async function addWidget(
   widgetType: WidgetType,
   config: Record<string, string>
-): Promise<WidgetInstance | null> {
+): Promise<{ widget: WidgetInstance; error: null } | { widget: null; error: string }> {
   const user = await getUser()
-  if (!user) return null
+  if (!user) return { widget: null, error: 'Not signed in' }
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -46,17 +51,20 @@ export async function addWidget(
     .select('id, widget_type, config, x, y, w, h')
     .single()
 
-  if (error || !data) return null
+  if (error || !data) return { widget: null, error: error?.message ?? 'Insert failed' }
 
   revalidatePath('/')
-  return data
+  return { widget: data, error: null }
 }
 
-export async function removeWidget(id: string) {
+export async function removeWidget(id: string): Promise<{ error: string | null }> {
   const user = await getUser()
-  if (!user) return
+  if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
-  await supabase.from('dashboard_widgets').delete().eq('id', id)
+  const { error } = await supabase.from('dashboard_widgets').delete().eq('id', id)
+  if (error) return { error: error.message }
+
   revalidatePath('/')
+  return { error: null }
 }

@@ -39,6 +39,7 @@ export default function WidgetCard({
         {widget.widget_type === 'indicators' && (
           <IndicatorsWidget data={data.indicators[widget.config.indicator_id] ?? null} />
         )}
+        {widget.widget_type === 'saved' && <HeadlinesWidget items={data.saved} />}
       </div>
     </div>
   )

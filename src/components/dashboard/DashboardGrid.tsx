@@ -25,6 +25,20 @@ export default function DashboardGrid({
   indicatorOptions: IndicatorOption[]
 }) {
   const [widgets, setWidgets] = useState(initialWidgets)
+  // Tracks the initialWidgets reference this state was last synced from,
+  // so a changed prop can be detected and applied during render — see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
+  // useState only seeds from initialWidgets on mount, so without this,
+  // a fresh prop from router.refresh() (e.g. after adding a widget) would
+  // sit unused until a full remount. Drag/resize/remove don't need this
+  // since they already update `widgets` locally and directly.
+  const [syncedFrom, setSyncedFrom] = useState(initialWidgets)
+  if (initialWidgets !== syncedFrom) {
+    setSyncedFrom(initialWidgets)
+    setWidgets(initialWidgets)
+  }
+
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   // Fires once per completed drag/resize gesture, not per pixel — safe to
@@ -40,23 +54,36 @@ export default function DashboardGrid({
         return item ? { ...widget, x: item.x, y: item.y, w: item.w, h: item.h } : widget
       })
       setWidgets(updated)
-      void saveDashboardLayout(updated)
+      setError(null)
+      saveDashboardLayout(updated).then((result) => {
+        if (result.error) setError(result.error)
+      })
     },
     [widgets]
   )
 
   const handleAdd = useCallback(
     async (widgetType: WidgetType, config: Record<string, string>) => {
-      const created = await addWidget(widgetType, config)
-      if (created) router.refresh()
+      setError(null)
+      const result = await addWidget(widgetType, config)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      router.refresh()
     },
     [router]
   )
 
   const handleRemove = useCallback(
     async (id: string) => {
+      setError(null)
       setWidgets((prev) => prev.filter((widget) => widget.id !== id))
-      await removeWidget(id)
+      const result = await removeWidget(id)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
       router.refresh()
     },
     [router]
@@ -72,6 +99,7 @@ export default function DashboardGrid({
 
   return (
     <div>
+      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
       <div className="flex justify-end mb-4">
         <AddWidgetMenu
           feedOptions={feedOptions}

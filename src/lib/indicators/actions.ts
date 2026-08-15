@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { runFetchIndicators, type FetchIndicatorsSummary } from './fetch'
+import { getComparisonData, type ComparisonSeries } from './data'
 
 // Only FRED is wired up in /api/cron/fetch-indicators today (see the
 // comment at the top of that file) — EIA's v2 API needs a real series to
@@ -70,6 +71,15 @@ export async function removeIndicator(id: string): Promise<{ error: string | nul
   revalidatePath('/indicators')
   revalidatePath('/')
   return { error: null }
+}
+
+export async function fetchComparisonData(
+  indicatorIds: string[]
+): Promise<ComparisonSeries[]> {
+  const user = await getUser()
+  if (!user) return []
+
+  return getComparisonData(indicatorIds)
 }
 
 export async function runFetchIndicatorsNow(): Promise<

@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
+import type { ArticleCuration } from '@/lib/articles/actions'
 
 export interface ArticleItem {
   id: string
@@ -7,6 +8,7 @@ export interface ArticleItem {
   summary: string | null
   published_at: string | null
   feed_title: string | null
+  state: ArticleCuration | null
 }
 
 export interface FeedOption {
@@ -61,53 +63,118 @@ async function attachFeedTitles<T extends { feed_id: string }>(
   return new Map((feeds ?? []).map((feed) => [feed.id, feed.title]))
 }
 
-export async function getHeadlinesData(): Promise<ArticleItem[]> {
-  const supabase = await createClient()
-  const { data: items } = await supabase
-    .from('feed_items')
-    .select(
-      'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at'
-    )
-    .order('published_at', { ascending: false })
-    .limit(HEADLINES_LIMIT)
+// All of a user's curation state fits comfortably in one query at personal
+// scale — used both to exclude ignored items from the default views and to
+// annotate the ones that are saved.
+async function getArticleStatesMap(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<Map<string, ArticleCuration>> {
+  const user = await getUser()
+  if (!user) return new Map()
 
-  if (!items) return []
+  const { data } = await supabase
+    .from('article_states')
+    .select('feed_item_id, state')
+    .eq('user_id', user.id)
 
-  const feedTitles = await attachFeedTitles(supabase, items)
+  return new Map((data ?? []).map((row) => [row.feed_item_id, row.state as ArticleCuration]))
+}
 
-  return items.map((item) => ({
+const ARTICLE_SELECT =
+  'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at'
+
+function toArticleItem(
+  item: {
+    id: string
+    feed_id: string
+    title: string
+    title_en: string | null
+    link: string | null
+    summary: string
+    summary_en: string | null
+    summary_ai: string | null
+    published_at: string | null
+  },
+  feedTitles: Map<string, string | null>,
+  states: Map<string, ArticleCuration>
+): ArticleItem {
+  return {
     id: item.id,
     title: bestTitle(item),
     link: item.link,
     summary: bestSummary(item),
     published_at: item.published_at,
     feed_title: feedTitles.get(item.feed_id) ?? null,
-  }))
+    state: states.get(item.id) ?? null,
+  }
+}
+
+export async function getHeadlinesData(): Promise<ArticleItem[]> {
+  const supabase = await createClient()
+  const states = await getArticleStatesMap(supabase)
+  const ignoredIds = [...states.entries()]
+    .filter(([, state]) => state === 'ignored')
+    .map(([id]) => id)
+
+  let query = supabase
+    .from('feed_items')
+    .select(ARTICLE_SELECT)
+    .order('published_at', { ascending: false })
+    .limit(HEADLINES_LIMIT)
+  if (ignoredIds.length > 0) {
+    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  }
+
+  const { data: items } = await query
+  if (!items) return []
+
+  const feedTitles = await attachFeedTitles(supabase, items)
+  return items.map((item) => toArticleItem(item, feedTitles, states))
 }
 
 export async function getFeedData(feedId: string): Promise<ArticleItem[]> {
   const supabase = await createClient()
-  const { data: items } = await supabase
+  const states = await getArticleStatesMap(supabase)
+  const ignoredIds = [...states.entries()]
+    .filter(([, state]) => state === 'ignored')
+    .map(([id]) => id)
+
+  let query = supabase
     .from('feed_items')
-    .select(
-      'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at'
-    )
+    .select(ARTICLE_SELECT)
     .eq('feed_id', feedId)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
+  if (ignoredIds.length > 0) {
+    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  }
+
+  const { data: items } = await query
+  if (!items) return []
+
+  const feedTitles = await attachFeedTitles(supabase, items)
+  return items.map((item) => toArticleItem(item, feedTitles, states))
+}
+
+export async function getSavedArticlesData(): Promise<ArticleItem[]> {
+  const supabase = await createClient()
+  const states = await getArticleStatesMap(supabase)
+  const savedIds = [...states.entries()]
+    .filter(([, state]) => state === 'saved')
+    .map(([id]) => id)
+
+  if (savedIds.length === 0) return []
+
+  const { data: items } = await supabase
+    .from('feed_items')
+    .select(ARTICLE_SELECT)
+    .in('id', savedIds)
+    .order('published_at', { ascending: false })
 
   if (!items) return []
 
   const feedTitles = await attachFeedTitles(supabase, items)
-
-  return items.map((item) => ({
-    id: item.id,
-    title: bestTitle(item),
-    link: item.link,
-    summary: bestSummary(item),
-    published_at: item.published_at,
-    feed_title: feedTitles.get(item.feed_id) ?? null,
-  }))
+  return items.map((item) => toArticleItem(item, feedTitles, states))
 }
 
 export async function getIndicatorsData(

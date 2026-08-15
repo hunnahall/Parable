@@ -119,14 +119,23 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
             Fetches new items for every feed instead of waiting for the cron job.
           </p>
           {ingestSummary && (
-            <p className="text-xs text-gray-600 mt-1">
-              Processed {ingestSummary.feedsProcessed} feed
-              {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
-              {ingestSummary.itemsInserted} new item
-              {ingestSummary.itemsInserted === 1 ? '' : 's'}.
-              {ingestSummary.feedsFailed.length > 0 &&
-                ` ${ingestSummary.feedsFailed.length} feed(s) failed — see server logs.`}
-            </p>
+            <div className="text-xs text-gray-600 mt-1">
+              <p>
+                Processed {ingestSummary.feedsProcessed} feed
+                {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
+                {ingestSummary.itemsInserted} new item
+                {ingestSummary.itemsInserted === 1 ? '' : 's'}.
+              </p>
+              {ingestSummary.feedsFailed.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {ingestSummary.feedsFailed.map((failure) => (
+                    <li key={failure.feedId} className="text-red-600">
+                      {failure.url}: {failure.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {ingestError && <p className="text-xs text-red-600 mt-1">{ingestError}</p>}
         </div>

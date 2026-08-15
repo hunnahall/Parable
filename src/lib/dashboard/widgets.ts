@@ -1,4 +1,4 @@
-export type WidgetType = 'headlines' | 'indicators' | 'feed'
+export type WidgetType = 'headlines' | 'indicators' | 'feed' | 'saved'
 
 export interface WidgetInstance {
   id: string
@@ -14,6 +14,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   headlines: 'Latest headlines',
   feed: 'Single feed',
   indicators: 'Economic indicator',
+  saved: 'Saved articles',
 }
 
 // Shown when a signed-in user has no saved dashboard_widgets rows yet.

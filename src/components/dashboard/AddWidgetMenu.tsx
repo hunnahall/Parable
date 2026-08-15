@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { WIDGET_LABELS, type WidgetType } from '@/lib/dashboard/widgets'
 import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
 
-const WIDGET_TYPES: WidgetType[] = ['headlines', 'feed', 'indicators']
+const WIDGET_TYPES: WidgetType[] = ['headlines', 'feed', 'indicators', 'saved']
 
 export default function AddWidgetMenu({
   feedOptions,

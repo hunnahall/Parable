@@ -2,20 +2,44 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts'
 import {
   addIndicator,
   updateIndicator,
   removeIndicator,
   runFetchIndicatorsNow,
+  fetchComparisonData,
 } from '@/lib/indicators/actions'
-import type { IndicatorRow } from '@/lib/indicators/data'
+import type { IndicatorRow, ComparisonSeries } from '@/lib/indicators/data'
 import type { FetchIndicatorsSummary } from '@/lib/indicators/fetch'
+import CompareChart from './CompareChart'
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return 'no readings yet'
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return 'no readings yet'
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function Sparkline({ readings }: { readings: { date: string; value: number }[] }) {
+  if (readings.length < 2) return null
+  return (
+    <div className="h-8 w-24">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={readings}>
+          <YAxis domain={['dataMin', 'dataMax']} hide />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="currentColor"
+            className="text-gray-400"
+            strokeWidth={1.5}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }
 
 export default function IndicatorManager({ indicators }: { indicators: IndicatorRow[] }) {
@@ -32,6 +56,10 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
   const [fetching, setFetching] = useState(false)
   const [fetchSummary, setFetchSummary] = useState<FetchIndicatorsSummary | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [comparing, setComparing] = useState(false)
+  const [compareSeries, setCompareSeries] = useState<ComparisonSeries[] | null>(null)
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -79,6 +107,11 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       setError(result.error)
       return
     }
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
     router.refresh()
   }
 
@@ -96,6 +129,22 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
     router.refresh()
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleCompare() {
+    setComparing(true)
+    const result = await fetchComparisonData([...selectedIds])
+    setComparing(false)
+    setCompareSeries(result)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between border rounded-lg p-4">
@@ -105,14 +154,23 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
             Pulls new readings for every indicator instead of waiting for the cron job.
           </p>
           {fetchSummary && (
-            <p className="text-xs text-gray-600 mt-1">
-              Processed {fetchSummary.indicatorsProcessed} indicator
-              {fetchSummary.indicatorsProcessed === 1 ? '' : 's'}, upserted{' '}
-              {fetchSummary.readingsUpserted} reading
-              {fetchSummary.readingsUpserted === 1 ? '' : 's'}.
-              {fetchSummary.indicatorsFailed.length > 0 &&
-                ` ${fetchSummary.indicatorsFailed.length} indicator(s) failed — see server logs.`}
-            </p>
+            <div className="text-xs text-gray-600 mt-1">
+              <p>
+                Processed {fetchSummary.indicatorsProcessed} indicator
+                {fetchSummary.indicatorsProcessed === 1 ? '' : 's'}, upserted{' '}
+                {fetchSummary.readingsUpserted} reading
+                {fetchSummary.readingsUpserted === 1 ? '' : 's'}.
+              </p>
+              {fetchSummary.indicatorsFailed.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {fetchSummary.indicatorsFailed.map((failure) => (
+                    <li key={failure.indicatorId} className="text-red-600">
+                      {failure.seriesCode}: {failure.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {fetchError && <p className="text-xs text-red-600 mt-1">{fetchError}</p>}
         </div>
@@ -160,6 +218,47 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      {selectedIds.size > 0 && (
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm">
+              {selectedIds.size} indicator{selectedIds.size === 1 ? '' : 's'} selected
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedIds(new Set())
+                  setCompareSeries(null)
+                }}
+                className="text-sm text-gray-500"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={handleCompare}
+                disabled={selectedIds.size < 2 || comparing}
+                className="rounded bg-black text-white px-4 py-2 text-sm disabled:opacity-50"
+              >
+                {comparing ? 'Comparing…' : 'Compare selected'}
+              </button>
+            </div>
+          </div>
+          {selectedIds.size < 2 && (
+            <p className="text-xs text-gray-500">Pick at least 2 indicators to compare.</p>
+          )}
+          {compareSeries && (
+            <>
+              <p className="text-xs text-gray-500">
+                Normalized to % change from each series&apos; earliest fetched reading.
+              </p>
+              <CompareChart series={compareSeries} />
+            </>
+          )}
+        </div>
+      )}
+
       {indicators.length === 0 ? (
         <p className="text-sm text-gray-500">No indicators yet.</p>
       ) : (
@@ -192,30 +291,40 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">
-                        {indicator.display_name ?? indicator.series_code}
-                      </span>
-                      <span className="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">
-                        {indicator.source} · {indicator.series_code}
-                      </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(indicator.id)}
+                      onChange={() => toggleSelected(indicator.id)}
+                      className="shrink-0"
+                      aria-label={`Select ${indicator.display_name ?? indicator.series_code} for comparison`}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">
+                          {indicator.display_name ?? indicator.series_code}
+                        </span>
+                        <span className="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">
+                          {indicator.source} · {indicator.series_code}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Latest reading: {formatDate(indicator.latest_reading_date)}
+                      </p>
+                      {indicator.source === 'FRED' && (
+                        <a
+                          href={`https://fred.stlouisfed.org/series/${indicator.series_code}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-gray-400 hover:underline"
+                        >
+                          Source: FRED®, Federal Reserve Bank of St. Louis
+                        </a>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Latest reading: {formatDate(indicator.latest_reading_date)}
-                    </p>
-                    {indicator.source === 'FRED' && (
-                      <a
-                        href={`https://fred.stlouisfed.org/series/${indicator.series_code}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-gray-400 hover:underline"
-                      >
-                        Source: FRED®, Federal Reserve Bank of St. Louis
-                      </a>
-                    )}
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-4 shrink-0">
+                    <Sparkline readings={indicator.recent_readings} />
                     <button
                       type="button"
                       onClick={() => startEdit(indicator)}

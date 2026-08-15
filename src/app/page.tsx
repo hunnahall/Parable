@@ -4,6 +4,7 @@ import {
   getHeadlinesData,
   getFeedData,
   getIndicatorsData,
+  getSavedArticlesData,
   listFeeds,
   listIndicators,
 } from '@/lib/dashboard/data'
@@ -37,14 +38,16 @@ export default async function Home() {
     ),
   ].filter(Boolean)
   const needsHeadlines = widgets.some((w) => w.widget_type === 'headlines')
+  const needsSaved = widgets.some((w) => w.widget_type === 'saved')
 
-  const [headlines, feedEntries, indicatorEntries, feedOptions, indicatorOptions] =
+  const [headlines, feedEntries, indicatorEntries, saved, feedOptions, indicatorOptions] =
     await Promise.all([
       needsHeadlines ? getHeadlinesData() : Promise.resolve([]),
       Promise.all(feedIds.map(async (id) => [id, await getFeedData(id)] as const)),
       Promise.all(
         indicatorIds.map(async (id) => [id, await getIndicatorsData(id)] as const)
       ),
+      needsSaved ? getSavedArticlesData() : Promise.resolve([]),
       listFeeds(),
       listIndicators(),
     ])
@@ -53,6 +56,7 @@ export default async function Home() {
     headlines,
     feeds: Object.fromEntries(feedEntries),
     indicators: Object.fromEntries(indicatorEntries),
+    saved,
   }
 
   return (
