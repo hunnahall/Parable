@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { addFeed, updateFeed, removeFeed } from '@/lib/feeds/actions'
+import { addFeed, updateFeed, removeFeed, runIngestNow } from '@/lib/feeds/actions'
 import type { FeedRow } from '@/lib/feeds/data'
+import type { IngestSummary } from '@/lib/feeds/ingest'
 
 const UNCATEGORIZED = 'Uncategorized'
 
@@ -32,6 +33,10 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
 
   const [editTitle, setEditTitle] = useState('')
   const [editCategory, setEditCategory] = useState('')
+
+  const [ingesting, setIngesting] = useState(false)
+  const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null)
+  const [ingestError, setIngestError] = useState<string | null>(null)
 
   const categories = useMemo(() => {
     const set = new Set(feeds.map((feed) => feed.category || UNCATEGORIZED))
@@ -91,8 +96,50 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
     router.refresh()
   }
 
+  async function handleRunIngest() {
+    setIngesting(true)
+    setIngestError(null)
+    setIngestSummary(null)
+    const result = await runIngestNow()
+    setIngesting(false)
+    if (result.error) {
+      setIngestError(result.error)
+      return
+    }
+    setIngestSummary(result.summary)
+    router.refresh()
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between border rounded-lg p-4">
+        <div>
+          <h2 className="text-sm font-medium">Run ingest now</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Fetches new items for every feed instead of waiting for the cron job.
+          </p>
+          {ingestSummary && (
+            <p className="text-xs text-gray-600 mt-1">
+              Processed {ingestSummary.feedsProcessed} feed
+              {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
+              {ingestSummary.itemsInserted} new item
+              {ingestSummary.itemsInserted === 1 ? '' : 's'}.
+              {ingestSummary.feedsFailed.length > 0 &&
+                ` ${ingestSummary.feedsFailed.length} feed(s) failed — see server logs.`}
+            </p>
+          )}
+          {ingestError && <p className="text-xs text-red-600 mt-1">{ingestError}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={handleRunIngest}
+          disabled={ingesting}
+          className="rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 shrink-0"
+        >
+          {ingesting ? 'Running…' : 'Run ingest now'}
+        </button>
+      </div>
+
       <form onSubmit={handleAdd} className="border rounded-lg p-4 space-y-3">
         <h2 className="text-sm font-medium">Add a feed</h2>
         <div className="flex flex-wrap gap-3">
@@ -106,8 +153,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
           />
           <input
             type="text"
-            placeholder="Title"
-            required
+            placeholder="Title (auto-detected if left blank)"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             className="flex-1 min-w-[10rem] border rounded px-3 py-2 text-sm"

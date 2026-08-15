@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { runFetchIndicators, type FetchIndicatorsSummary } from './fetch'
 
 // Only FRED is wired up in /api/cron/fetch-indicators today (see the
 // comment at the top of that file) — EIA's v2 API needs a real series to
@@ -69,4 +70,21 @@ export async function removeIndicator(id: string): Promise<{ error: string | nul
   revalidatePath('/indicators')
   revalidatePath('/')
   return { error: null }
+}
+
+export async function runFetchIndicatorsNow(): Promise<
+  { summary: FetchIndicatorsSummary; error: null } | { summary: null; error: string }
+> {
+  const user = await getUser()
+  if (!user) return { summary: null, error: 'Not signed in' }
+
+  try {
+    const summary = await runFetchIndicators(null)
+    revalidatePath('/indicators')
+    revalidatePath('/')
+    return { summary, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { summary: null, error: message }
+  }
 }

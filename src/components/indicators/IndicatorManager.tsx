@@ -2,8 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { addIndicator, updateIndicator, removeIndicator } from '@/lib/indicators/actions'
+import {
+  addIndicator,
+  updateIndicator,
+  removeIndicator,
+  runFetchIndicatorsNow,
+} from '@/lib/indicators/actions'
 import type { IndicatorRow } from '@/lib/indicators/data'
+import type { FetchIndicatorsSummary } from '@/lib/indicators/fetch'
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return 'no readings yet'
@@ -22,6 +28,10 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
   const [newDisplayName, setNewDisplayName] = useState('')
 
   const [editDisplayName, setEditDisplayName] = useState('')
+
+  const [fetching, setFetching] = useState(false)
+  const [fetchSummary, setFetchSummary] = useState<FetchIndicatorsSummary | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -72,8 +82,50 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
     router.refresh()
   }
 
+  async function handleRunFetch() {
+    setFetching(true)
+    setFetchError(null)
+    setFetchSummary(null)
+    const result = await runFetchIndicatorsNow()
+    setFetching(false)
+    if (result.error) {
+      setFetchError(result.error)
+      return
+    }
+    setFetchSummary(result.summary)
+    router.refresh()
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between border rounded-lg p-4">
+        <div>
+          <h2 className="text-sm font-medium">Fetch latest readings now</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Pulls new readings for every indicator instead of waiting for the cron job.
+          </p>
+          {fetchSummary && (
+            <p className="text-xs text-gray-600 mt-1">
+              Processed {fetchSummary.indicatorsProcessed} indicator
+              {fetchSummary.indicatorsProcessed === 1 ? '' : 's'}, upserted{' '}
+              {fetchSummary.readingsUpserted} reading
+              {fetchSummary.readingsUpserted === 1 ? '' : 's'}.
+              {fetchSummary.indicatorsFailed.length > 0 &&
+                ` ${fetchSummary.indicatorsFailed.length} indicator(s) failed — see server logs.`}
+            </p>
+          )}
+          {fetchError && <p className="text-xs text-red-600 mt-1">{fetchError}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={handleRunFetch}
+          disabled={fetching}
+          className="rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 shrink-0"
+        >
+          {fetching ? 'Running…' : 'Fetch now'}
+        </button>
+      </div>
+
       <form onSubmit={handleAdd} className="border rounded-lg p-4 space-y-3">
         <h2 className="text-sm font-medium">Add an indicator (FRED)</h2>
         <p className="text-xs text-gray-500">
