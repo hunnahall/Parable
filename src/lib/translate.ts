@@ -1,4 +1,5 @@
 import sanitizeHtml from 'sanitize-html'
+import he from 'he'
 import { franc } from 'franc'
 import langs from 'langs'
 
@@ -38,7 +39,10 @@ function toTwoLetterCode(iso6393: string): string {
   return entry?.['1'] || iso6393
 }
 
-function stripHtml(html: string): string {
+// Exported so callers that persist the original-language title/summary
+// (e.g. the ingest route) can clean text with the exact same rules used
+// for detection/translation, instead of re-implementing HTML stripping.
+export function stripHtml(html: string): string {
   // sanitize-html discards tags without inserting whitespace, so
   // "<p>A</p><p>B</p>" becomes "AB" instead of "A B". Since most feed
   // summaries are wrapped in <p>/<br>, that would run words together
@@ -48,7 +52,20 @@ function stripHtml(html: string): string {
     .replace(/<\/(p|div|li|h[1-6])\s*>/gi, ' ')
     .replace(/<br\s*\/?>/gi, ' ')
 
-  return sanitizeHtml(withBreaks, { allowedTags: [], allowedAttributes: {} })
+  const withoutTags = sanitizeHtml(withBreaks, {
+    allowedTags: [],
+    allowedAttributes: {},
+  })
+
+  // sanitize-html's output is still valid HTML text — it re-escapes "&"
+  // back to "&amp;" rather than decoding it, since its job is HTML-to-HTML
+  // (a safe subset), not HTML-to-plain-text. RSS titles/summaries are full
+  // of entities (&amp;, &quot;, &#8217; curly quotes, &nbsp;), so without an
+  // explicit decode step they'd leak into storage, language detection, and
+  // translation as literal entity text instead of the characters they
+  // represent.
+  return he
+    .decode(withoutTags)
     .replace(/\s+/g, ' ')
     .trim()
 }
