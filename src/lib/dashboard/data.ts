@@ -156,6 +156,37 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[]> {
   return items.map((item) => toArticleItem(item, feedTitles, states))
 }
 
+export async function getFeedCategoryData(category: string): Promise<ArticleItem[]> {
+  const supabase = await createClient()
+  const states = await getArticleStatesMap(supabase)
+  const ignoredIds = [...states.entries()]
+    .filter(([, state]) => state === 'ignored')
+    .map(([id]) => id)
+
+  const { data: feedsInCategory } = await supabase
+    .from('feeds')
+    .select('id')
+    .eq('category', category)
+  const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
+  if (feedIds.length === 0) return []
+
+  let query = supabase
+    .from('feed_items')
+    .select(ARTICLE_SELECT)
+    .in('feed_id', feedIds)
+    .order('published_at', { ascending: false })
+    .limit(HEADLINES_LIMIT)
+  if (ignoredIds.length > 0) {
+    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  }
+
+  const { data: items } = await query
+  if (!items) return []
+
+  const feedTitles = await attachFeedTitles(supabase, items)
+  return items.map((item) => toArticleItem(item, feedTitles, states))
+}
+
 export async function getSavedArticlesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)

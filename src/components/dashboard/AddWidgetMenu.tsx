@@ -1,29 +1,50 @@
 'use client'
 
 import { useState } from 'react'
-import { WIDGET_LABELS, type WidgetType } from '@/lib/dashboard/widgets'
+import { Plus } from 'lucide-react'
+import { WIDGET_LABELS, WIDGET_DEFAULT_SIZE, type WidgetType } from '@/lib/dashboard/widgets'
 import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
 
-const WIDGET_TYPES: WidgetType[] = ['headlines', 'feed', 'indicators', 'saved']
+const WIDGET_TYPES: WidgetType[] = [
+  'headlines',
+  'feed',
+  'indicators',
+  'saved',
+  'feed-category',
+  'clock',
+  'calendar',
+]
 
 export default function AddWidgetMenu({
   feedOptions,
   indicatorOptions,
+  categoryOptions,
   onAdd,
 }: {
   feedOptions: FeedOption[]
   indicatorOptions: IndicatorOption[]
-  onAdd: (widgetType: WidgetType, config: Record<string, string>) => void | Promise<void>
+  categoryOptions: string[]
+  onAdd: (
+    widgetType: WidgetType,
+    config: Record<string, string>,
+    size?: { w: number; h: number }
+  ) => void | Promise<void>
 }) {
   const [open, setOpen] = useState(false)
   const [widgetType, setWidgetType] = useState<WidgetType>('headlines')
   const [feedId, setFeedId] = useState(feedOptions[0]?.id ?? '')
   const [indicatorId, setIndicatorId] = useState(indicatorOptions[0]?.id ?? '')
+  const [category, setCategory] = useState(categoryOptions[0] ?? '')
   const [submitting, setSubmitting] = useState(false)
 
   const needsFeed = widgetType === 'feed'
   const needsIndicator = widgetType === 'indicators'
-  const canSubmit = (!needsFeed || feedId) && (!needsIndicator || indicatorId) && !submitting
+  const needsCategory = widgetType === 'feed-category'
+  const canSubmit =
+    (!needsFeed || feedId) &&
+    (!needsIndicator || indicatorId) &&
+    (!needsCategory || category) &&
+    !submitting
 
   async function handleSubmit() {
     if (!canSubmit) return
@@ -31,7 +52,8 @@ export default function AddWidgetMenu({
     const config: Record<string, string> = {}
     if (needsFeed) config.feed_id = feedId
     if (needsIndicator) config.indicator_id = indicatorId
-    await onAdd(widgetType, config)
+    if (needsCategory) config.category = category
+    await onAdd(widgetType, config, WIDGET_DEFAULT_SIZE[widgetType])
     setSubmitting(false)
     setOpen(false)
   }
@@ -41,19 +63,20 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm rounded border px-3 py-1.5 hover:bg-gray-50"
+        className="flex items-center text-sm rounded border border-border px-3 py-1.5 hover:bg-foreground/5"
       >
-        + Add widget
+        <Plus size={16} strokeWidth={2} className="-ms-1 me-2 opacity-60" aria-hidden="true" />
+        Add widget
       </button>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm border rounded px-3 py-2 bg-white shadow-sm">
+    <div className="flex items-center gap-2 text-sm border border-border rounded px-3 py-2 bg-background shadow-sm">
       <select
         value={widgetType}
         onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-        className="border rounded px-2 py-1"
+        className="border border-border rounded px-2 py-1 bg-background"
       >
         {WIDGET_TYPES.map((type) => (
           <option key={type} value={type}>
@@ -67,7 +90,7 @@ export default function AddWidgetMenu({
           <select
             value={feedId}
             onChange={(e) => setFeedId(e.target.value)}
-            className="border rounded px-2 py-1"
+            className="border border-border rounded px-2 py-1 bg-background"
           >
             {feedOptions.map((feed) => (
               <option key={feed.id} value={feed.id}>
@@ -76,7 +99,7 @@ export default function AddWidgetMenu({
             ))}
           </select>
         ) : (
-          <span className="text-gray-500">No feeds yet — add one to the feeds table first.</span>
+          <span className="text-muted">No feeds yet — add one to the feeds table first.</span>
         )
       )}
 
@@ -85,7 +108,7 @@ export default function AddWidgetMenu({
           <select
             value={indicatorId}
             onChange={(e) => setIndicatorId(e.target.value)}
-            className="border rounded px-2 py-1"
+            className="border border-border rounded px-2 py-1 bg-background"
           >
             {indicatorOptions.map((indicator) => (
               <option key={indicator.id} value={indicator.id}>
@@ -94,9 +117,27 @@ export default function AddWidgetMenu({
             ))}
           </select>
         ) : (
-          <span className="text-gray-500">
+          <span className="text-muted">
             No indicators yet — add one to the indicators table first.
           </span>
+        )
+      )}
+
+      {needsCategory && (
+        categoryOptions.length > 0 ? (
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="border border-border rounded px-2 py-1 bg-background"
+          >
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-muted">No categories yet — add one on the Feeds page first.</span>
         )
       )}
 
@@ -104,11 +145,11 @@ export default function AddWidgetMenu({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="rounded bg-black text-white px-3 py-1 disabled:opacity-50"
+        className="rounded bg-accent text-accent-foreground px-3 py-1 disabled:opacity-50"
       >
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-gray-400 px-1">
+      <button type="button" onClick={() => setOpen(false)} className="text-muted px-1">
         Cancel
       </button>
     </div>

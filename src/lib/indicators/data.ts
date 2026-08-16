@@ -5,6 +5,7 @@ export interface IndicatorRow {
   source: string
   series_code: string
   display_name: string | null
+  description: string | null
   latest_reading_date: string | null
   recent_readings: { date: string; value: number }[]
 }
@@ -16,7 +17,7 @@ export async function listIndicatorsDetailed(): Promise<IndicatorRow[]> {
   const supabase = await createClient()
   const { data: indicators } = await supabase
     .from('indicators')
-    .select('id, source, series_code, display_name')
+    .select('id, source, series_code, display_name, description')
     .order('display_name')
 
   if (!indicators) return []

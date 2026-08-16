@@ -5,6 +5,9 @@ import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import HeadlinesWidget from './widgets/HeadlinesWidget'
 import FeedWidget from './widgets/FeedWidget'
 import IndicatorsWidget from './widgets/IndicatorsWidget'
+import FeedCategoryWidget from './widgets/FeedCategoryWidget'
+import ClockWidget from './widgets/ClockWidget'
+import CalendarWidget from './widgets/CalendarWidget'
 
 export default function WidgetCard({
   widget,
@@ -15,17 +18,20 @@ export default function WidgetCard({
   data: DashboardWidgetData
   onRemove: (id: string) => void
 }) {
+  const label =
+    widget.widget_type === 'feed-category' && widget.config.category
+      ? `${widget.config.category} Feed`
+      : WIDGET_LABELS[widget.widget_type]
+
   return (
-    <div className="h-full flex flex-col rounded-lg border bg-white shadow-sm overflow-hidden">
-      <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b bg-gray-50 cursor-move shrink-0">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          {WIDGET_LABELS[widget.widget_type]}
-        </span>
+    <div className="h-full flex flex-col rounded-lg border border-border bg-background shadow-sm overflow-hidden">
+      <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-border bg-foreground/5 cursor-move shrink-0">
+        <span className="text-xs font-medium text-muted uppercase tracking-wide">{label}</span>
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => onRemove(widget.id)}
-          className="text-gray-400 hover:text-gray-700 text-sm leading-none px-1"
+          className="text-muted hover:text-foreground text-sm leading-none px-1"
           aria-label="Remove widget"
         >
           ×
@@ -40,6 +46,11 @@ export default function WidgetCard({
           <IndicatorsWidget data={data.indicators[widget.config.indicator_id] ?? null} />
         )}
         {widget.widget_type === 'saved' && <HeadlinesWidget items={data.saved} />}
+        {widget.widget_type === 'feed-category' && (
+          <FeedCategoryWidget items={data.feedCategories[widget.config.category] ?? []} />
+        )}
+        {widget.widget_type === 'clock' && <ClockWidget />}
+        {widget.widget_type === 'calendar' && <CalendarWidget />}
       </div>
     </div>
   )

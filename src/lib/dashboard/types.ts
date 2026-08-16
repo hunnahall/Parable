@@ -5,4 +5,5 @@ export interface DashboardWidgetData {
   feeds: Record<string, ArticleItem[]>
   indicators: Record<string, IndicatorData | null>
   saved: ArticleItem[]
+  feedCategories: Record<string, ArticleItem[]>
 }

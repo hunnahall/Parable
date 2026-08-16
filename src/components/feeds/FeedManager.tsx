@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { addFeed, updateFeed, removeFeed, runIngestNow } from '@/lib/feeds/actions'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
+import CategoryManager from './CategoryManager'
 
 const UNCATEGORIZED = 'Uncategorized'
 
@@ -20,7 +21,13 @@ function formatDate(dateString: string | null): string {
   })
 }
 
-export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
+export default function FeedManager({
+  feeds,
+  categories,
+}: {
+  feeds: FeedRow[]
+  categories: string[]
+}) {
   const router = useRouter()
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -38,7 +45,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
   const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null)
   const [ingestError, setIngestError] = useState<string | null>(null)
 
-  const categories = useMemo(() => {
+  const filterOptions = useMemo(() => {
     const set = new Set(feeds.map((feed) => feed.category || UNCATEGORIZED))
     return ['all', ...Array.from(set).sort()]
   }, [feeds])
@@ -52,7 +59,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
     e.preventDefault()
     setPending(true)
     setError(null)
-    const result = await addFeed({ url: newUrl, title: newTitle, category: newCategory })
+    const result = await addFeed({ url: newUrl, title: newTitle, category: newCategory || null })
     setPending(false)
     if (result.error) {
       setError(result.error)
@@ -74,7 +81,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
   async function handleSaveEdit(id: string) {
     setPending(true)
     setError(null)
-    const result = await updateFeed(id, { title: editTitle, category: editCategory })
+    const result = await updateFeed(id, { title: editTitle, category: editCategory || null })
     setPending(false)
     if (result.error) {
       setError(result.error)
@@ -112,14 +119,14 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between border rounded-lg p-4">
+      <div className="flex items-center justify-between border border-border rounded-lg p-4">
         <div>
           <h2 className="text-sm font-medium">Run ingest now</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Fetches new items for every feed instead of waiting for the cron job.
           </p>
           {ingestSummary && (
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="text-xs text-muted mt-1">
               <p>
                 Processed {ingestSummary.feedsProcessed} feed
                 {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
@@ -143,13 +150,13 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
           type="button"
           onClick={handleRunIngest}
           disabled={ingesting}
-          className="rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 shrink-0"
+          className="rounded border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
         >
           {ingesting ? 'Running…' : 'Run ingest now'}
         </button>
       </div>
 
-      <form onSubmit={handleAdd} className="border rounded-lg p-4 space-y-3">
+      <form onSubmit={handleAdd} className="border border-border rounded-lg p-4 space-y-3">
         <h2 className="text-sm font-medium">Add a feed</h2>
         <div className="flex flex-wrap gap-3">
           <input
@@ -158,26 +165,31 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
             required
             value={newUrl}
             onChange={(e) => setNewUrl(e.target.value)}
-            className="flex-1 min-w-[16rem] border rounded px-3 py-2 text-sm"
+            className="flex-1 min-w-[16rem] border border-border rounded px-3 py-2 text-sm bg-background"
           />
           <input
             type="text"
             placeholder="Title (auto-detected if left blank)"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            className="flex-1 min-w-[10rem] border rounded px-3 py-2 text-sm"
+            className="flex-1 min-w-[10rem] border border-border rounded px-3 py-2 text-sm bg-background"
           />
-          <input
-            type="text"
-            placeholder="Category (optional)"
+          <select
             value={newCategory}
             onChange={(e) => setNewCategory(e.target.value)}
-            className="flex-1 min-w-[10rem] border rounded px-3 py-2 text-sm"
-          />
+            className="flex-1 min-w-[10rem] border border-border rounded px-3 py-2 text-sm bg-background"
+          >
+            <option value="">{UNCATEGORIZED}</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-black text-white px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
           >
             Add feed
           </button>
@@ -186,14 +198,16 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <CategoryManager categories={categories} />
+
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-gray-500">Category:</span>
+        <span className="text-muted">Category:</span>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="border border-border rounded px-2 py-1 bg-background"
         >
-          {categories.map((category) => (
+          {filterOptions.map((category) => (
             <option key={category} value={category}>
               {category === 'all' ? 'All' : category}
             </option>
@@ -202,9 +216,9 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
       </div>
 
       {visibleFeeds.length === 0 ? (
-        <p className="text-sm text-gray-500">No feeds yet.</p>
+        <p className="text-sm text-muted">No feeds yet.</p>
       ) : (
-        <ul className="divide-y border rounded-lg">
+        <ul className="divide-y divide-border border border-border rounded-lg">
           {visibleFeeds.map((feed) => (
             <li key={feed.id} className="p-4">
               {editingId === feed.id ? (
@@ -213,27 +227,32 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="flex-1 min-w-[10rem] border rounded px-3 py-1.5 text-sm"
+                    className="flex-1 min-w-[10rem] border border-border rounded px-3 py-1.5 text-sm bg-background"
                   />
-                  <input
-                    type="text"
-                    placeholder="Category"
+                  <select
                     value={editCategory}
                     onChange={(e) => setEditCategory(e.target.value)}
-                    className="flex-1 min-w-[10rem] border rounded px-3 py-1.5 text-sm"
-                  />
+                    className="flex-1 min-w-[10rem] border border-border rounded px-3 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">{UNCATEGORIZED}</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(feed.id)}
-                    className="rounded bg-black text-white px-3 py-1.5 text-sm disabled:opacity-50"
+                    className="rounded bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingId(null)}
-                    className="text-sm text-gray-500"
+                    className="text-sm text-muted"
                   >
                     Cancel
                   </button>
@@ -243,7 +262,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{feed.title}</span>
-                      <span className="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">
+                      <span className="text-xs rounded-full bg-foreground/5 text-muted px-2 py-0.5">
                         {feed.category || UNCATEGORIZED}
                       </span>
                     </div>
@@ -251,11 +270,11 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
                       href={feed.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-500 hover:underline truncate block"
+                      className="text-xs text-muted hover:underline truncate block"
                     >
                       {feed.url}
                     </a>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-muted mt-0.5">
                       Last fetched: {formatDate(feed.last_fetched_at)}
                     </p>
                   </div>
@@ -263,7 +282,7 @@ export default function FeedManager({ feeds }: { feeds: FeedRow[] }) {
                     <button
                       type="button"
                       onClick={() => startEdit(feed)}
-                      className="text-sm text-gray-500 hover:text-gray-800"
+                      className="text-sm text-muted hover:text-foreground"
                     >
                       Edit
                     </button>

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
-import { runFetchIndicators, type FetchIndicatorsSummary } from './fetch'
+import { runFetchIndicators, fetchSeriesMetadata, type FetchIndicatorsSummary } from './fetch'
+import { describeIndicator } from './describe'
 import { getComparisonData, type ComparisonSeries } from './data'
 
 // Only FRED is wired up in /api/cron/fetch-indicators today (see the
@@ -11,22 +12,31 @@ import { getComparisonData, type ComparisonSeries } from './data'
 // would technically allow it.
 export async function addIndicator(input: {
   series_code: string
-  display_name: string
+  display_name?: string
 }): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
   const series_code = input.series_code.trim()
-  const display_name = input.display_name.trim()
+  let display_name = input.display_name?.trim() || null
 
-  if (!series_code || !display_name) {
-    return { error: 'Series code and display name are required' }
+  if (!series_code) {
+    return { error: 'Series code is required' }
   }
+
+  // Always look up FRED metadata: it fills in the display name when the
+  // user left it blank, and its `notes` field feeds describeIndicator()
+  // below regardless of whether a display name was already supplied.
+  const metadata = await fetchSeriesMetadata(series_code)
+  if (!display_name) {
+    display_name = metadata?.title ?? series_code
+  }
+  const description = await describeIndicator(display_name, metadata?.notes ?? null)
 
   const supabase = await createClient()
   const { error } = await supabase
     .from('indicators')
-    .insert({ source: 'FRED', series_code, display_name })
+    .insert({ source: 'FRED', series_code, display_name, description })
 
   if (error) return { error: error.message }
 

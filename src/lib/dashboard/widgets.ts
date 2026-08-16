@@ -1,4 +1,11 @@
-export type WidgetType = 'headlines' | 'indicators' | 'feed' | 'saved'
+export type WidgetType =
+  | 'headlines'
+  | 'indicators'
+  | 'feed'
+  | 'saved'
+  | 'feed-category'
+  | 'clock'
+  | 'calendar'
 
 export interface WidgetInstance {
   id: string
@@ -15,6 +22,17 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   feed: 'Single feed',
   indicators: 'Economic indicator',
   saved: 'Saved articles',
+  'feed-category': 'Feeds by category',
+  clock: 'Clock',
+  calendar: 'Calendar',
+}
+
+// Sizing hints for addWidget when a widget type wants something other
+// than the generic 4x4 default (e.g. a clock reads better roughly square,
+// a calendar needs more vertical room).
+export const WIDGET_DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
+  clock: { w: 3, h: 3 },
+  calendar: { w: 4, h: 5 },
 }
 
 // Shown when a signed-in user has no saved dashboard_widgets rows yet.

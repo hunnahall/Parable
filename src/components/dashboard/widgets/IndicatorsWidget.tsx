@@ -1,11 +1,12 @@
 'use client'
 
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, Tooltip } from 'recharts'
 import type { IndicatorData } from '@/lib/dashboard/data'
+import PointTooltip from '@/components/charts/PointTooltip'
 
 export default function IndicatorsWidget({ data }: { data: IndicatorData | null }) {
   if (!data) {
-    return <p className="text-sm text-gray-500">Indicator not found.</p>
+    return <p className="text-sm text-muted">Indicator not found.</p>
   }
 
   const { display_name, series_code, latest_value, previous_value, readings } = data
@@ -16,13 +17,13 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
 
   return (
     <div>
-      <h3 className="text-sm font-medium text-gray-700 mb-1">{display_name ?? 'Indicator'}</h3>
+      <h3 className="text-sm font-medium text-foreground mb-1">{display_name ?? 'Indicator'}</h3>
       <div className="flex items-baseline gap-2 mb-2">
         <span className="text-2xl font-semibold">
           {latest_value !== null ? latest_value.toLocaleString() : '—'}
         </span>
         {delta !== null && (
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-muted">
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString()}
             {deltaPct !== null && ` (${Math.abs(deltaPct).toFixed(1)}%)`}
           </span>
@@ -33,11 +34,13 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={readings}>
               <YAxis domain={['dataMin', 'dataMax']} hide />
+              <XAxis dataKey="date" hide />
+              <Tooltip content={<PointTooltip />} />
               <Line
                 type="monotone"
                 dataKey="value"
                 stroke="currentColor"
-                className="text-gray-700"
+                className="text-foreground"
                 strokeWidth={2}
                 dot={false}
               />
@@ -49,7 +52,7 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
         href={`https://fred.stlouisfed.org/series/${series_code}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-gray-400 hover:underline mt-2 block"
+        className="text-xs text-muted hover:underline mt-2 block"
       >
         Source: FRED®, Federal Reserve Bank of St. Louis
       </a>

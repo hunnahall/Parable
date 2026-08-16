@@ -58,14 +58,14 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
   }
 
   if (items.length === 0) {
-    return <p className="text-sm text-gray-500">No articles yet.</p>
+    return <p className="text-sm text-muted">No articles yet.</p>
   }
 
   return (
     <ul className="space-y-3">
       {items.map((item) => (
-        <li key={item.id} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-          <div className="flex items-center gap-2 text-xs text-gray-500 mb-0.5">
+        <li key={item.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+          <div className="flex items-center gap-2 text-xs text-muted mb-0.5">
             {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
             {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
           </div>
@@ -82,7 +82,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
             <p className="text-sm font-medium">{item.title}</p>
           )}
           {item.summary && (
-            <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{item.summary}</p>
+            <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.summary}</p>
           )}
           <div className="flex items-center gap-3 mt-1">
             {item.state === 'saved' ? (
@@ -90,7 +90,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => handleUnsave(item.id)}
-                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+                className="text-xs text-muted hover:text-foreground disabled:opacity-50"
               >
                 Unsave
               </button>
@@ -99,7 +99,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => handleSave(item.id)}
-                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+                className="text-xs text-muted hover:text-foreground disabled:opacity-50"
               >
                 Save
               </button>
@@ -108,7 +108,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
               type="button"
               disabled={pendingId === item.id}
               onClick={() => handleIgnore(item.id)}
-              className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              className="text-xs text-muted hover:text-foreground disabled:opacity-50"
             >
               Ignore
             </button>

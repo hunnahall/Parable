@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const FRED_OBSERVATIONS_URL = 'https://api.stlouisfed.org/fred/series/observations'
+const FRED_SERIES_URL = 'https://api.stlouisfed.org/fred/series'
 const FETCH_TIMEOUT_MS = 15_000
 
 // EIA support isn't implemented yet — no EIA indicators are seeded, and
@@ -85,6 +86,46 @@ async function fetchFredReadings(
     readings.push({ date: obs.date, value })
   }
   return readings
+}
+
+export interface SeriesMetadata {
+  title: string
+  notes: string | null
+}
+
+// Looks up a FRED series' real title/notes so a series code alone is
+// enough to add an indicator — used by addIndicator to auto-fill the
+// display name and to give describeIndicator() context. Fail-soft: never
+// throws, just returns null so a lookup failure doesn't block adding the
+// indicator (the caller falls back to the raw series code).
+export async function fetchSeriesMetadata(seriesCode: string): Promise<SeriesMetadata | null> {
+  const apiKey = process.env.FRED_API_KEY
+  if (!apiKey) {
+    console.error('fetchSeriesMetadata: FRED_API_KEY not set, skipping lookup')
+    return null
+  }
+
+  try {
+    const url = new URL(FRED_SERIES_URL)
+    url.searchParams.set('series_id', seriesCode)
+    url.searchParams.set('api_key', apiKey)
+    url.searchParams.set('file_type', 'json')
+
+    const response = await fetchWithTimeout(url.toString())
+    if (!response.ok) {
+      console.error(`fetchSeriesMetadata: FRED returned ${response.status} ${response.statusText}`)
+      return null
+    }
+
+    const data: { seriess?: Array<{ title?: string; notes?: string }> } = await response.json()
+    const series = data.seriess?.[0]
+    if (!series?.title) return null
+
+    return { title: series.title, notes: series.notes ?? null }
+  } catch (err) {
+    console.error('fetchSeriesMetadata: request failed', err)
+    return null
+  }
 }
 
 // Shared by the cron-triggered /api/cron/fetch-indicators route and the

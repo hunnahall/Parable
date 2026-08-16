@@ -18,11 +18,13 @@ export default function DashboardGrid({
   widgetData,
   feedOptions,
   indicatorOptions,
+  categoryOptions,
 }: {
   initialWidgets: WidgetInstance[]
   widgetData: DashboardWidgetData
   feedOptions: FeedOption[]
   indicatorOptions: IndicatorOption[]
+  categoryOptions: string[]
 }) {
   const [widgets, setWidgets] = useState(initialWidgets)
   // Tracks the initialWidgets reference this state was last synced from,
@@ -63,9 +65,13 @@ export default function DashboardGrid({
   )
 
   const handleAdd = useCallback(
-    async (widgetType: WidgetType, config: Record<string, string>) => {
+    async (
+      widgetType: WidgetType,
+      config: Record<string, string>,
+      size?: { w: number; h: number }
+    ) => {
       setError(null)
-      const result = await addWidget(widgetType, config)
+      const result = await addWidget(widgetType, config, size)
       if (result.error) {
         setError(result.error)
         return
@@ -104,11 +110,12 @@ export default function DashboardGrid({
         <AddWidgetMenu
           feedOptions={feedOptions}
           indicatorOptions={indicatorOptions}
+          categoryOptions={categoryOptions}
           onAdd={handleAdd}
         />
       </div>
       {widgets.length === 0 ? (
-        <p className="text-sm text-gray-500">No widgets yet — add one to get started.</p>
+        <p className="text-sm text-muted">No widgets yet — add one to get started.</p>
       ) : (
         <GridLayout
           layout={layout}

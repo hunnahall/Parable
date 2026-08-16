@@ -31,7 +31,8 @@ export async function saveDashboardLayout(
 
 export async function addWidget(
   widgetType: WidgetType,
-  config: Record<string, string>
+  config: Record<string, string>,
+  size?: { w: number; h: number }
 ): Promise<{ widget: WidgetInstance; error: null } | { widget: null; error: string }> {
   const user = await getUser()
   if (!user) return { widget: null, error: 'Not signed in' }
@@ -45,8 +46,8 @@ export async function addWidget(
       config,
       x: 0,
       y: 0,
-      w: 4,
-      h: 4,
+      w: size?.w ?? 4,
+      h: size?.h ?? 4,
     })
     .select('id, widget_type, config, x, y, w, h')
     .single()

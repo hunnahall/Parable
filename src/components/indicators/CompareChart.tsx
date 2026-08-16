@@ -11,6 +11,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import type { ComparisonSeries } from '@/lib/indicators/data'
+import PointTooltip from '@/components/charts/PointTooltip'
 
 const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2']
 
@@ -44,11 +45,11 @@ export default function CompareChart({ series }: { series: ComparisonSeries[] })
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={40} />
           <YAxis tick={{ fontSize: 11 }} unit="%" width={48} />
           <Tooltip
-            formatter={(value) => (typeof value === 'number' ? `${value.toFixed(1)}%` : value)}
+            content={<PointTooltip formatValue={(value) => `${value.toFixed(1)}%`} />}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           {series.map((s, i) => (
