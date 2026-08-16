@@ -22,8 +22,20 @@ export async function saveDashboardLayout(
     h: widget.h,
   }))
 
-  const { error } = await supabase.from('dashboard_widgets').upsert(rows)
-  if (error) return { error: error.message }
+  // Make this save authoritative for the whole layout, not just an upsert
+  // of the given rows: a stale tab that never learned about a widget
+  // deleted elsewhere would otherwise resurrect it, since a plain upsert
+  // never removes rows missing from its payload.
+  const ids = widgets.map((widget) => widget.id)
+  const deleteQuery = supabase.from('dashboard_widgets').delete().eq('user_id', user.id)
+  const { error: deleteError } =
+    ids.length > 0 ? await deleteQuery.not('id', 'in', `(${ids.join(',')})`) : await deleteQuery
+  if (deleteError) return { error: deleteError.message }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('dashboard_widgets').upsert(rows)
+    if (error) return { error: error.message }
+  }
 
   revalidatePath('/')
   return { error: null }

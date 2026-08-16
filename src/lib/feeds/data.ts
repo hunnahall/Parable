@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { logQueryError } from '@/lib/supabase/logError'
 
 export interface FeedRow {
   id: string
@@ -10,9 +11,10 @@ export interface FeedRow {
 
 export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('feeds')
     .select('id, url, title, category, last_fetched_at')
     .order('title')
+  logQueryError('feeds/listFeedsDetailed', error)
   return data ?? []
 }

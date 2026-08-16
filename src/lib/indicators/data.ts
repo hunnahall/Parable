@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { logQueryError } from '@/lib/supabase/logError'
 
 export interface IndicatorRow {
   id: string
@@ -15,18 +16,20 @@ const COMPARE_READINGS_LIMIT = 260
 
 export async function listIndicatorsDetailed(): Promise<IndicatorRow[]> {
   const supabase = await createClient()
-  const { data: indicators } = await supabase
+  const { data: indicators, error: indicatorsError } = await supabase
     .from('indicators')
     .select('id, source, series_code, display_name, description')
     .order('display_name')
+  logQueryError('indicators/listIndicatorsDetailed (indicators)', indicatorsError)
 
   if (!indicators) return []
 
-  const { data: readings } = await supabase
+  const { data: readings, error: readingsError } = await supabase
     .from('indicator_readings')
     .select('indicator_id, reading_date, value')
     .in('indicator_id', indicators.map((indicator) => indicator.id))
     .order('reading_date', { ascending: false })
+  logQueryError('indicators/listIndicatorsDetailed (readings)', readingsError)
 
   // Readings come back newest-first per indicator, so capping each
   // indicator's list at RECENT_READINGS_PER_INDICATOR as we go is enough
@@ -64,21 +67,23 @@ export async function getComparisonData(indicatorIds: string[]): Promise<Compari
   if (indicatorIds.length === 0) return []
 
   const supabase = await createClient()
-  const { data: indicators } = await supabase
+  const { data: indicators, error: indicatorsError } = await supabase
     .from('indicators')
     .select('id, display_name, series_code')
     .in('id', indicatorIds)
+  logQueryError('indicators/getComparisonData (indicators)', indicatorsError)
 
   if (!indicators) return []
 
   const results: ComparisonSeries[] = []
   for (const indicator of indicators) {
-    const { data: readings } = await supabase
+    const { data: readings, error: readingsError } = await supabase
       .from('indicator_readings')
       .select('reading_date, value')
       .eq('indicator_id', indicator.id)
       .order('reading_date', { ascending: false })
       .limit(COMPARE_READINGS_LIMIT)
+    logQueryError('indicators/getComparisonData (readings)', readingsError)
 
     const ordered = (readings ?? []).slice().reverse()
     const base = ordered[0]?.value

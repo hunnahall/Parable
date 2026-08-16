@@ -39,10 +39,17 @@ export const WIDGET_DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: num
 // Not persisted until the user actually drags, resizes, adds, or removes
 // something — see saveDashboardLayout in ./actions, which upserts on `id`,
 // so these need real ids ready to become row ids the first time that happens.
+//
+// The id is a fixed constant rather than crypto.randomUUID(): a brand-new
+// user opening two tabs before ever saving would otherwise have each tab
+// compute its own random id for "the same" default widget, so the first
+// save from each tab would insert two separate rows instead of one.
+const DEFAULT_HEADLINES_WIDGET_ID = '00000000-0000-4000-8000-000000000001'
+
 export function getDefaultLayout(): WidgetInstance[] {
   return [
     {
-      id: crypto.randomUUID(),
+      id: DEFAULT_HEADLINES_WIDGET_ID,
       widget_type: 'headlines',
       config: {},
       x: 0,

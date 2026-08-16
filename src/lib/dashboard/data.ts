@@ -1,4 +1,5 @@
 import { createClient, getUser } from '@/lib/supabase/server'
+import { logQueryError } from '@/lib/supabase/logError'
 import type { ArticleCuration } from '@/lib/articles/actions'
 
 export interface ArticleItem {
@@ -55,10 +56,11 @@ async function attachFeedTitles<T extends { feed_id: string }>(
   const feedIds = [...new Set(items.map((item) => item.feed_id))]
   if (feedIds.length === 0) return new Map()
 
-  const { data: feeds } = await supabase
+  const { data: feeds, error } = await supabase
     .from('feeds')
     .select('id, title')
     .in('id', feedIds)
+  logQueryError('dashboard/attachFeedTitles', error)
 
   return new Map((feeds ?? []).map((feed) => [feed.id, feed.title]))
 }
@@ -72,10 +74,11 @@ async function getArticleStatesMap(
   const user = await getUser()
   if (!user) return new Map()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('article_states')
     .select('feed_item_id, state')
     .eq('user_id', user.id)
+  logQueryError('dashboard/getArticleStatesMap', error)
 
   return new Map((data ?? []).map((row) => [row.feed_item_id, row.state as ArticleCuration]))
 }
@@ -125,15 +128,33 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
     query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
   }
 
-  const { data: items } = await query
+  const { data: items, error } = await query
+  logQueryError('dashboard/getHeadlinesData', error)
   if (!items) return []
 
   const feedTitles = await attachFeedTitles(supabase, items)
   return items.map((item) => toArticleItem(item, feedTitles, states))
 }
 
-export async function getFeedData(feedId: string): Promise<ArticleItem[]> {
+export async function getFeedData(feedId: string): Promise<ArticleItem[] | null> {
   const supabase = await createClient()
+
+  // Distinguish "this feed was deleted" (null) from "this feed exists but
+  // has no items right now" ([]) — a widget pointing at a deleted feed
+  // would otherwise render the same generic empty state as a legitimately
+  // empty feed, with no signal to the user that anything's wrong.
+  const { data: feed, error: feedError } = await supabase
+    .from('feeds')
+    .select('id')
+    .eq('id', feedId)
+    .single()
+  // .single() reports "no row" as an error too (PGRST116), which is the
+  // expected/common case here (a deleted feed) — only log unexpected ones.
+  if (feedError && feedError.code !== 'PGRST116') {
+    logQueryError('dashboard/getFeedData (feed lookup)', feedError)
+  }
+  if (!feed) return null
+
   const states = await getArticleStatesMap(supabase)
   const ignoredIds = [...states.entries()]
     .filter(([, state]) => state === 'ignored')
@@ -149,24 +170,40 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[]> {
     query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
   }
 
-  const { data: items } = await query
+  const { data: items, error } = await query
+  logQueryError('dashboard/getFeedData', error)
   if (!items) return []
 
   const feedTitles = await attachFeedTitles(supabase, items)
   return items.map((item) => toArticleItem(item, feedTitles, states))
 }
 
-export async function getFeedCategoryData(category: string): Promise<ArticleItem[]> {
+export async function getFeedCategoryData(category: string): Promise<ArticleItem[] | null> {
   const supabase = await createClient()
+
+  // Same "deleted vs. genuinely empty" distinction as getFeedData — a
+  // widget pointing at a deleted category shouldn't look identical to a
+  // real category with no feeds in it yet.
+  const { data: categoryRow, error: categoryError } = await supabase
+    .from('categories')
+    .select('name')
+    .eq('name', category)
+    .single()
+  if (categoryError && categoryError.code !== 'PGRST116') {
+    logQueryError('dashboard/getFeedCategoryData (category lookup)', categoryError)
+  }
+  if (!categoryRow) return null
+
   const states = await getArticleStatesMap(supabase)
   const ignoredIds = [...states.entries()]
     .filter(([, state]) => state === 'ignored')
     .map(([id]) => id)
 
-  const { data: feedsInCategory } = await supabase
+  const { data: feedsInCategory, error: feedsInCategoryError } = await supabase
     .from('feeds')
     .select('id')
     .eq('category', category)
+  logQueryError('dashboard/getFeedCategoryData (feeds lookup)', feedsInCategoryError)
   const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
   if (feedIds.length === 0) return []
 
@@ -180,7 +217,8 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
     query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
   }
 
-  const { data: items } = await query
+  const { data: items, error } = await query
+  logQueryError('dashboard/getFeedCategoryData', error)
   if (!items) return []
 
   const feedTitles = await attachFeedTitles(supabase, items)
@@ -196,11 +234,12 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
 
   if (savedIds.length === 0) return []
 
-  const { data: items } = await supabase
+  const { data: items, error } = await supabase
     .from('feed_items')
     .select(ARTICLE_SELECT)
     .in('id', savedIds)
     .order('published_at', { ascending: false })
+  logQueryError('dashboard/getSavedArticlesData', error)
 
   if (!items) return []
 
@@ -213,20 +252,24 @@ export async function getIndicatorsData(
 ): Promise<IndicatorData | null> {
   const supabase = await createClient()
 
-  const { data: indicator } = await supabase
+  const { data: indicator, error: indicatorError } = await supabase
     .from('indicators')
     .select('id, display_name, series_code')
     .eq('id', indicatorId)
     .single()
+  if (indicatorError && indicatorError.code !== 'PGRST116') {
+    logQueryError('dashboard/getIndicatorsData (indicator lookup)', indicatorError)
+  }
 
   if (!indicator) return null
 
-  const { data: readings } = await supabase
+  const { data: readings, error: readingsError } = await supabase
     .from('indicator_readings')
     .select('reading_date, value')
     .eq('indicator_id', indicatorId)
     .order('reading_date', { ascending: false })
     .limit(READINGS_LIMIT)
+  logQueryError('dashboard/getIndicatorsData (readings)', readingsError)
 
   // Fetched newest-first (for a cheap "limit to most recent N" query) but
   // charted/reported oldest-first.
@@ -244,15 +287,17 @@ export async function getIndicatorsData(
 
 export async function listFeeds(): Promise<FeedOption[]> {
   const supabase = await createClient()
-  const { data } = await supabase.from('feeds').select('id, title').order('title')
+  const { data, error } = await supabase.from('feeds').select('id, title').order('title')
+  logQueryError('dashboard/listFeeds', error)
   return data ?? []
 }
 
 export async function listIndicators(): Promise<IndicatorOption[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('indicators')
     .select('id, display_name')
     .order('display_name')
+  logQueryError('dashboard/listIndicators', error)
   return data ?? []
 }

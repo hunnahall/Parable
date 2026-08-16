@@ -82,18 +82,7 @@ export async function runIngest(): Promise<IngestSummary> {
 
       const newItems = items.filter((entry) => !existingGuids.has(entry.guid))
 
-      const rows: Array<{
-        feed_id: string
-        guid: string
-        title: string
-        link: string | null
-        summary: string
-        published_at: string | null
-        original_language: string
-        title_en: string | null
-        summary_en: string | null
-        summary_ai: string | null
-      }> = []
+      let itemsInsertedForFeed = 0
 
       for (const { item, guid } of newItems) {
         try {
@@ -112,35 +101,50 @@ export async function runIngest(): Promise<IngestSummary> {
             summary_en ?? stripHtml(rawSummary)
           )
 
-          rows.push({
-            feed_id: feed.id,
-            guid,
-            title: stripHtml(rawTitle),
-            link: item.link ?? null,
-            summary: stripHtml(rawSummary),
-            published_at: item.isoDate ?? null,
-            original_language,
-            title_en,
-            summary_en,
-            summary_ai,
-          })
+          // Insert each item as soon as it's processed rather than
+          // buffering the whole feed's rows in memory for one bulk insert
+          // at the end of the loop — a large or first-time feed can have
+          // enough new items that a mid-run crash/timeout (each item pays
+          // for up to two sequential OpenAI calls) would otherwise discard
+          // every already-processed item for this feed, and re-pay for the
+          // same OpenAI calls on the next run.
+          //
+          // upsert + ignoreDuplicates rather than a plain insert: if this
+          // run overlaps another (cron firing while "Run ingest now" is
+          // also mid-flight for the same feed), both can pass the
+          // existingGuids check above for the same new item before either
+          // has inserted. A plain insert would then fail on the (feed_id,
+          // guid) unique constraint; ignoring the duplicate instead just
+          // no-ops that one row.
+          const { error: insertError } = await supabase.from('feed_items').upsert(
+            {
+              feed_id: feed.id,
+              guid,
+              title: stripHtml(rawTitle),
+              link: item.link ?? null,
+              summary: stripHtml(rawSummary),
+              published_at: item.isoDate ?? null,
+              original_language,
+              title_en,
+              summary_en,
+              summary_ai,
+            },
+            { onConflict: 'feed_id,guid', ignoreDuplicates: true }
+          )
+
+          if (insertError) {
+            throw new Error(`Failed to insert item: ${insertError.message}`)
+          }
+
+          itemsInsertedForFeed++
         } catch (itemErr) {
-          // A single malformed item (missing/garbage fields) shouldn't
-          // sink the rest of an otherwise-healthy feed.
+          // A single malformed item (missing/garbage fields) or a one-off
+          // insert failure shouldn't sink the rest of an otherwise-healthy
+          // feed.
           console.error(
             `ingest-feeds: skipping item guid=${guid} in feed ${feed.id} (${feed.url})`,
             itemErr
           )
-        }
-      }
-
-      if (rows.length > 0) {
-        const { error: insertError } = await supabase
-          .from('feed_items')
-          .insert(rows)
-
-        if (insertError) {
-          throw new Error(`Failed to insert items: ${insertError.message}`)
         }
       }
 
@@ -156,7 +160,7 @@ export async function runIngest(): Promise<IngestSummary> {
       }
 
       feedsProcessed++
-      itemsInserted += rows.length
+      itemsInserted += itemsInsertedForFeed
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)

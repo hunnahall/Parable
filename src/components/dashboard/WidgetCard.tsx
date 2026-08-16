@@ -42,14 +42,14 @@ export default function WidgetCard({
       <div className="p-3 overflow-auto grow">
         {widget.widget_type === 'headlines' && <HeadlinesWidget items={data.headlines} />}
         {widget.widget_type === 'feed' && (
-          <FeedWidget items={data.feeds[widget.config.feed_id] ?? []} />
+          <FeedWidget items={data.feeds[widget.config.feed_id] ?? null} />
         )}
         {widget.widget_type === 'indicators' && (
           <IndicatorsWidget data={data.indicators[widget.config.indicator_id] ?? null} />
         )}
         {widget.widget_type === 'saved' && <HeadlinesWidget items={data.saved} />}
         {widget.widget_type === 'feed-category' && (
-          <FeedCategoryWidget items={data.feedCategories[widget.config.category] ?? []} />
+          <FeedCategoryWidget items={data.feedCategories[widget.config.category] ?? null} />
         )}
         {widget.widget_type === 'clock' && <ClockWidget />}
         {widget.widget_type === 'calendar' && <CalendarWidget />}
