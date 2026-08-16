@@ -13,6 +13,8 @@ import { getDefaultLayout, type WidgetInstance } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import DashboardGrid from '@/components/dashboard/DashboardGrid'
 import LandingPage from '@/components/landing/LandingPage'
+import ParableLogo from '@/components/brand/ParableLogo'
+import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
 
 export default async function Home() {
   const user = await getUser()
@@ -79,7 +81,9 @@ export default async function Home() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+      <div className="mb-6">
+        <ParableLogo height={64} />
+      </div>
       <DashboardGrid
         initialWidgets={widgets}
         widgetData={widgetData}
@@ -87,6 +91,7 @@ export default async function Home() {
         indicatorOptions={indicatorOptions}
         categoryOptions={categoryOptions}
       />
+      <CovenantWorksCredit />
     </div>
   )
 }

@@ -12,7 +12,7 @@ export default async function FeedsPage() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Feeds</h1>
+      <h1 className="text-3xl font-bold mb-4">Feeds</h1>
       <FeedManager feeds={feeds} categories={categories} />
     </div>
   )

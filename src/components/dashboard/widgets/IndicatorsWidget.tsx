@@ -23,7 +23,13 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
           {latest_value !== null ? latest_value.toLocaleString() : '—'}
         </span>
         {delta !== null && (
-          <span className="text-sm text-muted">
+          <span
+            className={
+              delta >= 0
+                ? 'text-xs font-medium rounded-full bg-green-50 text-green-700 px-2 py-0.5'
+                : 'text-xs font-medium rounded-full bg-red-50 text-red-700 px-2 py-0.5'
+            }
+          >
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString()}
             {deltaPct !== null && ` (${Math.abs(deltaPct).toFixed(1)}%)`}
           </span>

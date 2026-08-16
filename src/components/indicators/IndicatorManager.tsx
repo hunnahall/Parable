@@ -181,7 +181,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           type="button"
           onClick={handleRunFetch}
           disabled={fetching}
-          className="rounded border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
+          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
         >
           {fetching ? 'Running…' : 'Fetch now'}
         </button>
@@ -211,7 +211,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
           >
             Add indicator
           </button>
@@ -241,7 +241,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                 type="button"
                 onClick={handleCompare}
                 disabled={selectedIds.size < 2 || comparing}
-                className="rounded bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+                className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
               >
                 {comparing ? 'Comparing…' : 'Compare selected'}
               </button>
@@ -279,7 +279,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(indicator.id)}
-                    className="rounded bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
+                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
                   >
                     Save
                   </button>

@@ -5,24 +5,35 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-brand: var(--brand);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --color-widget-header: var(--widget-header);
-  --color-widget-header-foreground: var(--widget-header-foreground);
 }
 
 :root {
   --background: #fafafa;
-  --foreground: #000000;
-  --accent: #000000;
+  --foreground: #131418;
+  /* Action blue: same hue as the Parable mark's brand blue, darkened for
+     AA-contrast solid fills (the mark's own #92afd7 is a pastel meant for
+     line art — at ~2.2:1 contrast it fails as a white-text button fill). */
+  --accent: #2f6fb8;
   --accent-foreground: #ffffff;
+  --accent-soft: #eaf1fb;
+  /* Exact brand blue from the Parable mark — used only where the mark
+     itself appears or as a light-touch decorative accent, never as a
+     solid button fill. */
+  --brand: #92afd7;
   --muted: #6b7280;
   --border: #e5e7eb;
-  --widget-header: #f3f4f6;
-  --widget-header-foreground: #4b5563;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
+}
+
+.bg-dot-grid {
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
 }

@@ -150,7 +150,7 @@ export default function FeedManager({
           type="button"
           onClick={handleRunIngest}
           disabled={ingesting}
-          className="rounded border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
+          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
         >
           {ingesting ? 'Running…' : 'Run ingest now'}
         </button>
@@ -189,7 +189,7 @@ export default function FeedManager({
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
           >
             Add feed
           </button>
@@ -200,19 +200,24 @@ export default function FeedManager({
 
       <CategoryManager categories={categories} />
 
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted">Category:</span>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="border border-border rounded px-2 py-1 bg-background"
-        >
-          {filterOptions.map((category) => (
-            <option key={category} value={category}>
+      <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1">
+        {filterOptions.map((category) => {
+          const active = categoryFilter === category
+          return (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setCategoryFilter(category)}
+              className={
+                active
+                  ? 'shrink-0 rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs font-medium'
+                  : 'shrink-0 rounded-full border border-border text-muted px-3 py-1 text-xs font-medium hover:bg-foreground/5'
+              }
+            >
               {category === 'all' ? 'All' : category}
-            </option>
-          ))}
-        </select>
+            </button>
+          )
+        })}
       </div>
 
       {visibleFeeds.length === 0 ? (
@@ -245,7 +250,7 @@ export default function FeedManager({
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(feed.id)}
-                    className="rounded bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
+                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
                   >
                     Save
                   </button>

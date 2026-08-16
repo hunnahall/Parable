@@ -3,6 +3,7 @@ import Link from 'next/link'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { signOut } from '@/app/login/actions'
+import ParableMark from '@/components/brand/ParableMark'
 
 export const metadata: Metadata = {
   title: 'Parable',
@@ -22,17 +23,22 @@ export default async function RootLayout({
         <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-sm">
           {user ? (
             <>
-              <nav className="flex items-center gap-4 text-base font-semibold">
-                <Link href="/" className="hover:underline">
-                  Dashboard
+              <div className="flex items-center gap-6">
+                <Link href="/" aria-label="Parable">
+                  <ParableMark size={22} />
                 </Link>
-                <Link href="/feeds" className="hover:underline">
-                  Feeds
-                </Link>
-                <Link href="/indicators" className="hover:underline">
-                  Indicators
-                </Link>
-              </nav>
+                <nav className="flex items-center gap-4 text-base font-semibold">
+                  <Link href="/" className="hover:underline">
+                    Dashboard
+                  </Link>
+                  <Link href="/feeds" className="hover:underline">
+                    Feeds
+                  </Link>
+                  <Link href="/indicators" className="hover:underline">
+                    Indicators
+                  </Link>
+                </nav>
+              </div>
               <div className="flex items-center gap-4">
                 <span className="text-muted">{user.email}</span>
                 <form action={signOut}>
@@ -44,7 +50,9 @@ export default async function RootLayout({
             </>
           ) : (
             <>
-              <span />
+              <Link href="/" aria-label="Parable">
+                <ParableMark size={22} />
+              </Link>
               <Link href="/login" className="underline">
                 Sign in
               </Link>
