@@ -9,7 +9,7 @@ export default async function LoginPage({
 
   return (
     <div className="p-8 max-w-sm mx-auto space-y-6">
-      <h1 className="text-xl font-semibold">Sign in</h1>
+      <h1 className="text-2xl font-bold">Sign in</h1>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {message && <p className="text-green-600 text-sm">{message}</p>}
@@ -24,7 +24,7 @@ export default async function LoginPage({
             name="email"
             type="email"
             required
-            className="w-full border rounded px-3 py-2"
+            className="w-full border border-border rounded px-3 py-2 bg-background"
           />
         </div>
         <div className="space-y-1">
@@ -37,17 +37,20 @@ export default async function LoginPage({
             type="password"
             required
             minLength={6}
-            className="w-full border rounded px-3 py-2"
+            className="w-full border border-border rounded px-3 py-2 bg-background"
           />
         </div>
         <div className="flex gap-3 pt-2">
           <button
             formAction={login}
-            className="flex-1 rounded bg-black text-white py-2"
+            className="flex-1 rounded bg-accent text-accent-foreground py-2"
           >
             Sign in
           </button>
-          <button formAction={signup} className="flex-1 rounded border py-2">
+          <button
+            formAction={signup}
+            className="flex-1 rounded border border-border py-2"
+          >
             Sign up
           </button>
         </div>

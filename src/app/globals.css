@@ -7,16 +7,34 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-widget-header: var(--widget-header);
+  --color-widget-header-foreground: var(--widget-header-foreground);
 }
 
-:root,
-[data-theme="light"] {
+:root {
   --background: #ffffff;
   --foreground: #000000;
   --accent: #000000;
   --accent-foreground: #ffffff;
   --muted: #6b7280;
   --border: #e5e7eb;
+  /* Default: widget headers just match the accent color. Themes that want
+     something else (light mode wants a plain grey, not solid black) override
+     these two below — everything else inherits this derived-from-accent
+     behavior automatically. */
+  --widget-header: var(--accent);
+  --widget-header-foreground: var(--accent-foreground);
+}
+
+[data-theme="light"] {
+  --background: #fafafa;
+  --foreground: #000000;
+  --accent: #000000;
+  --accent-foreground: #ffffff;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --widget-header: #f3f4f6;
+  --widget-header-foreground: #4b5563;
 }
 
 [data-theme="dark"] {
@@ -38,12 +56,12 @@
 }
 
 [data-theme="olive"] {
-  --background: #f5f5e8;
+  --background: #eef4ea;
   --foreground: #1c2b1f;
   --accent: #14532d;
   --accent-foreground: #ffffff;
-  --muted: #6b7d63;
-  --border: #d4d9c4;
+  --muted: #5e7a60;
+  --border: #cfdcc9;
 }
 
 body {

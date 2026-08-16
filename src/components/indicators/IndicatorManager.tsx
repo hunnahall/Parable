@@ -203,7 +203,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           />
           <input
             type="text"
-            placeholder="Display name (optional — looked up from FRED if blank)"
+            placeholder="Display name (optional)"
             value={newDisplayName}
             onChange={(e) => setNewDisplayName(e.target.value)}
             className="flex-1 min-w-[12rem] border border-border rounded px-3 py-2 text-sm bg-background"

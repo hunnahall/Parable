@@ -25,13 +25,15 @@ export default function WidgetCard({
 
   return (
     <div className="h-full flex flex-col rounded-lg border border-border bg-background shadow-sm overflow-hidden">
-      <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-border bg-foreground/5 cursor-move shrink-0">
-        <span className="text-xs font-medium text-muted uppercase tracking-wide">{label}</span>
+      <div className="widget-drag-handle flex items-center justify-between px-3 py-2 bg-widget-header cursor-move shrink-0">
+        <span className="text-xs font-medium text-widget-header-foreground uppercase tracking-wide">
+          {label}
+        </span>
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => onRemove(widget.id)}
-          className="text-muted hover:text-foreground text-sm leading-none px-1"
+          className="text-widget-header-foreground/70 hover:text-widget-header-foreground text-sm leading-none px-1"
           aria-label="Remove widget"
         >
           ×

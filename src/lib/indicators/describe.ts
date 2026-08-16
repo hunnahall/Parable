@@ -22,12 +22,12 @@ export async function describeIndicator(
       model: MODEL,
       reasoning: { effort: 'minimal' },
       text: { verbosity: 'low' },
-      max_output_tokens: 100,
+      max_output_tokens: 60,
       input: [
         {
           role: 'developer',
           content:
-            'In one concise sentence, explain why this economic indicator matters to a general audience. Output only the sentence, no preamble or labels.',
+            "In one short sentence of no more than 15 words, state literally what this economic indicator measures. Do not explain why it matters, and do not describe it as an indicator of something general like \"economic health\" — every indicator could be described that way. Just say what it is. Output only the sentence, no preamble or labels.",
         },
         {
           role: 'user',

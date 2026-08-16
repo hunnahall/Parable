@@ -1,40 +1,64 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import 'react-day-picker/style.css'
 
 export default function CalendarWidget() {
+  const outerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  // null until the first measurement — used to keep the unscaled calendar
+  // invisible for that one frame instead of flashing at full size.
+  const [scale, setScale] = useState<number | null>(null)
+
+  useEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+
+    // Renders the calendar at a fixed, comfortable size and shrinks the
+    // whole thing with a transform to fit whatever box the widget actually
+    // has — the react-day-picker grid has no built-in "fit both dimensions"
+    // mode, so this is the equivalent of object-fit: contain for it.
+    const recompute = () => {
+      const outerBox = outer.getBoundingClientRect()
+      const naturalWidth = inner.scrollWidth
+      const naturalHeight = inner.scrollHeight
+      if (naturalWidth === 0 || naturalHeight === 0) return
+      setScale(
+        Math.min(outerBox.width / naturalWidth, outerBox.height / naturalHeight, 1)
+      )
+    }
+
+    const observer = new ResizeObserver(recompute)
+    observer.observe(outer)
+    recompute()
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    // container-type: inline-size turns cqw below into "% of this div's own
-    // width" rather than the viewport's — needed since the widget's actual
-    // width varies with the dashboard's grid column width, not the window.
-    <div
-      className="text-foreground text-sm flex justify-center"
-      style={{ containerType: 'inline-size' }}
-    >
+    <div ref={outerRef} className="w-full h-full flex items-center justify-center overflow-hidden">
       <div
+        ref={innerRef}
+        className="text-foreground text-sm"
         style={
           {
+            visibility: scale === null ? 'hidden' : 'visible',
+            transform: scale !== null ? `scale(${scale})` : undefined,
             '--rdp-accent-color': 'var(--accent)',
             '--rdp-accent-background-color':
               'color-mix(in srgb, var(--accent) 15%, transparent)',
             '--rdp-today-color': 'var(--accent)',
-            // Fixed rem sizing left the calendar's rendered width constant
-            // regardless of the widget's actual box, so a wide card (wide
-            // viewport) showed mostly blank space beside it. Scaling with
-            // cqw keeps day cells proportional to the widget itself,
-            // clamped so they never get illegibly small or absurdly large.
-            // Floor raised to 2.25rem (not smaller): below that the month
-            // caption ("August 2026") collides with the prev/next chevron
-            // buttons, since the calendar's total width tracks 7x this value.
-            '--rdp-day-height': 'clamp(2.25rem, 11cqw, 2.75rem)',
-            '--rdp-day-width': 'clamp(2.25rem, 11cqw, 2.75rem)',
+            '--rdp-day-height': '2.5rem',
+            '--rdp-day-width': '2.5rem',
           } as React.CSSProperties
         }
       >
         <DayPicker
           showOutsideDays
+          navLayout="around"
+          modifiersClassNames={{ today: 'font-bold' }}
           components={{
             Chevron: ({ orientation, ...props }) =>
               orientation === 'left' ? (
