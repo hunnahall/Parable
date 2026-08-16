@@ -2,9 +2,10 @@ import sanitizeHtml from 'sanitize-html'
 import he from 'he'
 import { franc } from 'franc'
 import langs from 'langs'
+import OpenAI from 'openai'
 
-const AZURE_TRANSLATE_ENDPOINT =
-  'https://api.cognitive.microsofttranslator.com/translate'
+const MODEL = 'gpt-5-nano'
+const REQUEST_TIMEOUT_MS = 15_000
 const SUMMARY_MAX_LENGTH = 500
 
 export interface TranslatedArticle {
@@ -73,51 +74,61 @@ export function stripHtml(html: string): string {
 async function translateToEnglish(
   texts: [string, string]
 ): Promise<[string | null, string | null] | null> {
-  const key = process.env.AZURE_TRANSLATOR_KEY
-  const region = process.env.AZURE_TRANSLATOR_REGION
-
-  if (!key || !region) {
-    console.error(
-      'translate: AZURE_TRANSLATOR_KEY / AZURE_TRANSLATOR_REGION not set, skipping translation'
-    )
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    console.error('translate: OPENAI_API_KEY not set, skipping translation')
     return null
   }
 
-  try {
-    const response = await fetch(
-      `${AZURE_TRANSLATE_ENDPOINT}?api-version=3.0&to=en`,
-      {
-        method: 'POST',
-        headers: {
-          'Ocp-Apim-Subscription-Key': key,
-          'Ocp-Apim-Subscription-Region': region,
-          'Content-Type': 'application/json',
-        },
-        // Deliberately omitting `from`: we already have a locally-detected
-        // language for storage, but Azure's own auto-detection is more
-        // reliable for the actual translation than trusting our franc/langs
-        // code to be one Azure recognizes as a source language.
-        body: JSON.stringify(texts.map((text) => ({ text }))),
-      }
-    )
+  const [title, summary] = texts
+  const client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS })
 
-    if (!response.ok) {
-      console.error(
-        `translate: Azure Translator returned ${response.status} ${response.statusText}`
-      )
+  try {
+    const response = await client.responses.create({
+      model: MODEL,
+      // Deliberately not passing a source language: we already have a
+      // locally-detected one for storage, but the model's own detection
+      // is more reliable for the actual translation than trusting our
+      // franc/langs code to be one it recognizes as a source language.
+      reasoning: { effort: 'minimal' },
+      text: {
+        verbosity: 'low',
+        format: {
+          type: 'json_schema',
+          name: 'translation',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              summary: { type: 'string' },
+            },
+            required: ['title', 'summary'],
+            additionalProperties: false,
+          },
+        },
+      },
+      max_output_tokens: 500,
+      input: [
+        {
+          role: 'developer',
+          content:
+            'Translate the article title and summary into English. Preserve meaning and tone; do not add commentary or labels. If a field is already in English, return it unchanged.',
+        },
+        { role: 'user', content: `Title: ${title}\n\nSummary: ${summary}` },
+      ],
+    })
+
+    const text = response.output_text
+    if (!text) {
+      console.error('translate: OpenAI returned no output text')
       return null
     }
 
-    const data: Array<{ translations?: Array<{ text?: string }> }> =
-      await response.json()
-
-    const [titleResult, summaryResult] = data
-    return [
-      titleResult?.translations?.[0]?.text ?? null,
-      summaryResult?.translations?.[0]?.text ?? null,
-    ]
+    const parsed: { title?: string; summary?: string } = JSON.parse(text)
+    return [parsed.title ?? null, parsed.summary ?? null]
   } catch (err) {
-    console.error('translate: Azure Translator request failed', err)
+    console.error('translate: OpenAI request failed', err)
     return null
   }
 }

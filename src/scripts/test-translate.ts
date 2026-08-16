@@ -5,10 +5,10 @@
 // Run with:
 //   npx tsx src/scripts/test-translate.ts
 //
-// Loads AZURE_TRANSLATOR_KEY / AZURE_TRANSLATOR_REGION from .env.local if
-// present. Without them, translateArticle() still runs end-to-end — it
-// just falls back to nulls for the _en fields, which is the documented
-// "API failed" behavior, so this script is also a check of that path.
+// Loads OPENAI_API_KEY from .env.local if present. Without it,
+// translateArticle() still runs end-to-end — it just falls back to nulls
+// for the _en fields, which is the documented "API failed" behavior, so
+// this script is also a check of that path.
 //
 // A note on the Arabic samples specifically: a terminal's own bidi
 // renderer can visually reorder RTL text next to the ASCII labels this
@@ -123,12 +123,11 @@ function checkNoSurrogatePairs(sample: Sample) {
 }
 
 async function main() {
-  const hasCreds =
-    !!process.env.AZURE_TRANSLATOR_KEY && !!process.env.AZURE_TRANSLATOR_REGION
+  const hasCreds = !!process.env.OPENAI_API_KEY
   console.log(
     hasCreds
-      ? 'Azure Translator credentials found — non-English samples will call the live API.\n'
-      : 'No Azure Translator credentials found — non-English samples should come back with title_en/summary_en: null.\n'
+      ? 'OPENAI_API_KEY found — non-English samples will call the live API.\n'
+      : 'No OPENAI_API_KEY found — non-English samples should come back with title_en/summary_en: null.\n'
   )
 
   let failures = 0
