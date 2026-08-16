@@ -8,6 +8,8 @@ import IndicatorsWidget from './widgets/IndicatorsWidget'
 import FeedCategoryWidget from './widgets/FeedCategoryWidget'
 import ClockWidget from './widgets/ClockWidget'
 import CalendarWidget from './widgets/CalendarWidget'
+import TodoWidget from './widgets/TodoWidget'
+import WatchlistWidget from './widgets/WatchlistWidget'
 
 export default function WidgetCard({
   widget,
@@ -53,6 +55,16 @@ export default function WidgetCard({
         )}
         {widget.widget_type === 'clock' && <ClockWidget />}
         {widget.widget_type === 'calendar' && <CalendarWidget />}
+        {widget.widget_type === 'todo' && <TodoWidget items={data.tasks} />}
+        {widget.widget_type === 'watchlist' && (
+          <WatchlistWidget
+            widgetId={widget.id}
+            items={data.watchlist}
+            selectedIds={
+              widget.config.indicator_ids ? widget.config.indicator_ids.split(',').filter(Boolean) : []
+            }
+          />
+        )}
       </div>
     </div>
   )

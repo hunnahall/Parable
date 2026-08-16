@@ -6,6 +6,7 @@ import { addFeed, updateFeed, removeFeed, runIngestNow } from '@/lib/feeds/actio
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import CategoryManager from './CategoryManager'
+import OpmlImport from './OpmlImport'
 
 const UNCATEGORIZED = 'Uncategorized'
 
@@ -157,7 +158,10 @@ export default function FeedManager({
       </div>
 
       <form onSubmit={handleAdd} className="border border-border rounded-lg p-4 space-y-3">
-        <h2 className="text-sm font-medium">Add a feed</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">Add a feed</h2>
+          <OpmlImport />
+        </div>
         <div className="flex flex-wrap gap-3">
           <input
             type="url"
@@ -282,6 +286,11 @@ export default function FeedManager({
                     <p className="text-xs text-muted mt-0.5">
                       Last fetched: {formatDate(feed.last_fetched_at)}
                     </p>
+                    {feed.last_error && (
+                      <p className="text-xs text-red-600 mt-0.5">
+                        ⚠ Failing: {feed.last_error}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <button

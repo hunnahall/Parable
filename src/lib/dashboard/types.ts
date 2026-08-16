@@ -1,4 +1,5 @@
-import type { ArticleItem, IndicatorData } from './data'
+import type { ArticleItem, IndicatorData, WatchlistEntry } from './data'
+import type { TaskRow } from '@/lib/tasks/data'
 
 export interface DashboardWidgetData {
   headlines: ArticleItem[]
@@ -6,4 +7,6 @@ export interface DashboardWidgetData {
   indicators: Record<string, IndicatorData | null>
   saved: ArticleItem[]
   feedCategories: Record<string, ArticleItem[] | null>
+  tasks: TaskRow[]
+  watchlist: WatchlistEntry[]
 }

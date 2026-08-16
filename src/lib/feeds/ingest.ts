@@ -150,7 +150,7 @@ export async function runIngest(): Promise<IngestSummary> {
 
       const { error: updateError } = await supabase
         .from('feeds')
-        .update({ last_fetched_at: new Date().toISOString() })
+        .update({ last_fetched_at: new Date().toISOString(), last_error: null })
         .eq('id', feed.id)
 
       if (updateError) {
@@ -165,6 +165,21 @@ export async function runIngest(): Promise<IngestSummary> {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
       feedsFailed.push({ feedId: feed.id, url: feed.url, error: message })
+
+      // Best-effort — a feed a user thinks they're covering could otherwise
+      // stay silently broken indefinitely with nothing but a stale
+      // last_fetched_at to notice (and even that isn't surfaced anywhere
+      // in the UI today). Don't let a failure here mask the real error.
+      const { error: errorUpdateError } = await supabase
+        .from('feeds')
+        .update({ last_error: message })
+        .eq('id', feed.id)
+      if (errorUpdateError) {
+        console.error(
+          `ingest-feeds: failed to record last_error for feed ${feed.id}:`,
+          errorUpdateError.message
+        )
+      }
     }
   }
 

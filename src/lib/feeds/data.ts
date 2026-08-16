@@ -7,13 +7,14 @@ export interface FeedRow {
   title: string
   category: string | null
   last_fetched_at: string | null
+  last_error: string | null
 }
 
 export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('feeds')
-    .select('id, url, title, category, last_fetched_at')
+    .select('id, url, title, category, last_fetched_at, last_error')
     .order('title')
   logQueryError('feeds/listFeedsDetailed', error)
   return data ?? []

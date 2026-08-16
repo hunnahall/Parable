@@ -13,6 +13,8 @@ const WIDGET_TYPES: WidgetType[] = [
   'feed-category',
   'clock',
   'calendar',
+  'todo',
+  'watchlist',
 ]
 
 export default function AddWidgetMenu({

@@ -9,7 +9,7 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
     return <p className="text-sm text-muted">Indicator not found.</p>
   }
 
-  const { display_name, series_code, latest_value, previous_value, readings } = data
+  const { display_name, series_code, latest_value, previous_value, readings, notable } = data
   const delta =
     latest_value !== null && previous_value !== null ? latest_value - previous_value : null
   const deltaPct =
@@ -18,7 +18,7 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
   return (
     <div>
       <h3 className="text-sm font-medium text-foreground mb-1">{display_name ?? 'Indicator'}</h3>
-      <div className="flex items-baseline gap-2 mb-2">
+      <div className="flex items-baseline gap-2 mb-2 flex-wrap">
         <span className="text-2xl font-semibold">
           {latest_value !== null ? latest_value.toLocaleString() : '—'}
         </span>
@@ -32,6 +32,14 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
           >
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString()}
             {deltaPct !== null && ` (${Math.abs(deltaPct).toFixed(1)}%)`}
+          </span>
+        )}
+        {notable && (
+          <span
+            className="text-xs font-medium rounded-full bg-amber-50 text-amber-700 px-2 py-0.5"
+            title="This reading is a statistical outlier relative to its recent history"
+          >
+            Notable move
           </span>
         )}
       </div>

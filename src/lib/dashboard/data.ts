@@ -1,5 +1,6 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
+import { isNotableMove } from '@/lib/indicators/notable'
 import type { ArticleCuration } from '@/lib/articles/actions'
 
 export interface ArticleItem {
@@ -10,6 +11,8 @@ export interface ArticleItem {
   published_at: string | null
   feed_title: string | null
   state: ArticleCuration | null
+  note: string | null
+  tags: string[]
 }
 
 export interface FeedOption {
@@ -29,6 +32,16 @@ export interface IndicatorData {
   latest_value: number | null
   previous_value: number | null
   readings: { date: string; value: number }[]
+  notable: boolean
+}
+
+export interface WatchlistEntry {
+  id: string
+  display_name: string | null
+  series_code: string
+  latest_value: number | null
+  previous_value: number | null
+  notable: boolean
 }
 
 const HEADLINES_LIMIT = 20
@@ -65,22 +78,33 @@ async function attachFeedTitles<T extends { feed_id: string }>(
   return new Map((feeds ?? []).map((feed) => [feed.id, feed.title]))
 }
 
+interface ArticleStateInfo {
+  state: ArticleCuration
+  note: string | null
+  tags: string[]
+}
+
 // All of a user's curation state fits comfortably in one query at personal
 // scale — used both to exclude ignored items from the default views and to
 // annotate the ones that are saved.
 async function getArticleStatesMap(
   supabase: Awaited<ReturnType<typeof createClient>>
-): Promise<Map<string, ArticleCuration>> {
+): Promise<Map<string, ArticleStateInfo>> {
   const user = await getUser()
   if (!user) return new Map()
 
   const { data, error } = await supabase
     .from('article_states')
-    .select('feed_item_id, state')
+    .select('feed_item_id, state, note, tags')
     .eq('user_id', user.id)
   logQueryError('dashboard/getArticleStatesMap', error)
 
-  return new Map((data ?? []).map((row) => [row.feed_item_id, row.state as ArticleCuration]))
+  return new Map(
+    (data ?? []).map((row) => [
+      row.feed_item_id,
+      { state: row.state as ArticleCuration, note: row.note, tags: row.tags ?? [] },
+    ])
+  )
 }
 
 const ARTICLE_SELECT =
@@ -99,8 +123,9 @@ function toArticleItem(
     published_at: string | null
   },
   feedTitles: Map<string, string | null>,
-  states: Map<string, ArticleCuration>
+  states: Map<string, ArticleStateInfo>
 ): ArticleItem {
+  const info = states.get(item.id)
   return {
     id: item.id,
     title: bestTitle(item),
@@ -108,7 +133,9 @@ function toArticleItem(
     summary: bestSummary(item),
     published_at: item.published_at,
     feed_title: feedTitles.get(item.feed_id) ?? null,
-    state: states.get(item.id) ?? null,
+    state: info?.state ?? null,
+    note: info?.note ?? null,
+    tags: info?.tags ?? [],
   }
 }
 
@@ -116,7 +143,7 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
   const ignoredIds = [...states.entries()]
-    .filter(([, state]) => state === 'ignored')
+    .filter(([, info]) => info.state === 'ignored')
     .map(([id]) => id)
 
   let query = supabase
@@ -157,7 +184,7 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
 
   const states = await getArticleStatesMap(supabase)
   const ignoredIds = [...states.entries()]
-    .filter(([, state]) => state === 'ignored')
+    .filter(([, info]) => info.state === 'ignored')
     .map(([id]) => id)
 
   let query = supabase
@@ -196,7 +223,7 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
 
   const states = await getArticleStatesMap(supabase)
   const ignoredIds = [...states.entries()]
-    .filter(([, state]) => state === 'ignored')
+    .filter(([, info]) => info.state === 'ignored')
     .map(([id]) => id)
 
   const { data: feedsInCategory, error: feedsInCategoryError } = await supabase
@@ -229,7 +256,7 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
   const savedIds = [...states.entries()]
-    .filter(([, state]) => state === 'saved')
+    .filter(([, info]) => info.state === 'saved')
     .map(([id]) => id)
 
   if (savedIds.length === 0) return []
@@ -282,7 +309,57 @@ export async function getIndicatorsData(
     latest_value: ordered.at(-1)?.value ?? null,
     previous_value: ordered.at(-2)?.value ?? null,
     readings: ordered.map((r) => ({ date: r.reading_date, value: r.value })),
+    notable: isNotableMove(ordered.map((r) => r.value)),
   }
+}
+
+// Not shown in the UI (the watchlist only renders latest/previous/notable)
+// but isNotableMove wants a reasonable sample to compute a meaningful
+// z-score from, so this matches READINGS_LIMIT rather than the bare
+// minimum the flag needs.
+const WATCHLIST_READINGS_LIMIT = READINGS_LIMIT
+
+// One dense row per tracked indicator instead of one full widget each —
+// a "vitals check" glance across everything at once, flagging any reading
+// that's a real outlier via the same isNotableMove signal getIndicatorsData
+// uses for the single-indicator widget.
+export async function getWatchlistData(): Promise<WatchlistEntry[]> {
+  const supabase = await createClient()
+
+  const { data: indicators, error: indicatorsError } = await supabase
+    .from('indicators')
+    .select('id, display_name, series_code')
+    .order('display_name')
+  logQueryError('dashboard/getWatchlistData (indicators)', indicatorsError)
+  if (!indicators || indicators.length === 0) return []
+
+  // One bounded query per indicator (mirroring getIndicatorsData) rather
+  // than one unbounded query across all indicators capped in JS afterward
+  // — the latter pulled every reading for every indicator over the network
+  // (tens of thousands of rows at this app's actual data volume) on every
+  // single dashboard refresh, since this runs whenever *any* widget on the
+  // page mutates, not just the watchlist itself.
+  return Promise.all(
+    indicators.map(async (indicator) => {
+      const { data: readings, error: readingsError } = await supabase
+        .from('indicator_readings')
+        .select('value')
+        .eq('indicator_id', indicator.id)
+        .order('reading_date', { ascending: false })
+        .limit(WATCHLIST_READINGS_LIMIT)
+      logQueryError('dashboard/getWatchlistData (readings)', readingsError)
+
+      const ordered = (readings ?? []).map((r) => r.value).reverse()
+      return {
+        id: indicator.id,
+        display_name: indicator.display_name,
+        series_code: indicator.series_code,
+        latest_value: ordered.at(-1) ?? null,
+        previous_value: ordered.at(-2) ?? null,
+        notable: isNotableMove(ordered),
+      }
+    })
+  )
 }
 
 export async function listFeeds(): Promise<FeedOption[]> {
