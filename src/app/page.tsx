@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import { createClient, getUser } from '@/lib/supabase/server'
 import {
   getHeadlinesData,
@@ -13,10 +12,11 @@ import { listCategories } from '@/lib/categories/data'
 import { getDefaultLayout, type WidgetInstance } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import DashboardGrid from '@/components/dashboard/DashboardGrid'
+import LandingPage from '@/components/landing/LandingPage'
 
 export default async function Home() {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) return <LandingPage />
 
   const supabase = await createClient()
   const { data: savedWidgets } = await supabase
