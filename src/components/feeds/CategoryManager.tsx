@@ -51,7 +51,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
         <button
           type="submit"
           disabled={pending}
-          className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+          className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
         >
           Add category
         </button>
@@ -71,7 +71,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
                 type="button"
                 disabled={pending}
                 onClick={() => handleRemove(category)}
-                className="text-muted hover:text-red-600 disabled:opacity-50"
+                className="text-muted hover:text-red-600 transition-colors disabled:opacity-50"
                 aria-label={`Delete category ${category}`}
               >
                 ×

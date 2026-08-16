@@ -63,7 +63,7 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center text-sm font-semibold rounded-full border-2 border-accent px-3 py-1.5 hover:bg-accent/10"
+        className="flex items-center text-sm font-semibold rounded-full border-2 border-accent px-3 py-1.5 hover:bg-accent/10 transition-colors"
       >
         <Plus size={16} strokeWidth={2.5} className="-ms-1 me-2" aria-hidden="true" />
         Add widget
@@ -145,11 +145,15 @@ export default function AddWidgetMenu({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="rounded-full bg-accent text-accent-foreground px-3 py-1 disabled:opacity-50"
+        className="rounded-full bg-accent text-accent-foreground px-3 py-1 transition-colors hover:bg-accent/90 disabled:opacity-50"
       >
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-muted px-1">
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="text-muted hover:text-foreground transition-colors px-1"
+      >
         Cancel
       </button>
     </div>

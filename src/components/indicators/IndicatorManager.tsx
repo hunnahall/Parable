@@ -150,7 +150,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between pb-6 border-b border-border">
         <div>
           <h2 className="text-sm font-medium">Fetch latest readings now</h2>
           <p className="text-xs text-muted mt-0.5">
@@ -181,7 +181,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           type="button"
           onClick={handleRunFetch}
           disabled={fetching}
-          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
+          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
         >
           {fetching ? 'Running…' : 'Fetch now'}
         </button>
@@ -211,7 +211,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           <button
             type="submit"
             disabled={pending}
-            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
             Add indicator
           </button>
@@ -233,7 +233,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                   setSelectedIds(new Set())
                   setCompareSeries(null)
                 }}
-                className="text-sm text-muted"
+                className="text-sm text-muted hover:text-foreground transition-colors"
               >
                 Clear
               </button>
@@ -241,7 +241,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                 type="button"
                 onClick={handleCompare}
                 disabled={selectedIds.size < 2 || comparing}
-                className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+                className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
               >
                 {comparing ? 'Comparing…' : 'Compare selected'}
               </button>
@@ -279,14 +279,14 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(indicator.id)}
-                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
+                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingId(null)}
-                    className="text-sm text-muted"
+                    className="text-sm text-muted hover:text-foreground transition-colors"
                   >
                     Cancel
                   </button>
@@ -333,7 +333,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                     <button
                       type="button"
                       onClick={() => startEdit(indicator)}
-                      className="text-sm text-muted hover:text-foreground"
+                      className="text-sm text-muted hover:text-foreground transition-colors"
                     >
                       Edit
                     </button>
@@ -341,7 +341,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                       type="button"
                       disabled={pending}
                       onClick={() => handleRemove(indicator.id)}
-                      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+                      className="text-sm text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
                     >
                       Remove
                     </button>

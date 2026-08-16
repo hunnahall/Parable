@@ -28,13 +28,13 @@ export default async function RootLayout({
                   <ParableMark size={22} />
                 </Link>
                 <nav className="flex items-center gap-4 text-base font-semibold">
-                  <Link href="/" className="hover:underline">
+                  <Link href="/" className="hover:underline transition-colors">
                     Dashboard
                   </Link>
-                  <Link href="/feeds" className="hover:underline">
+                  <Link href="/feeds" className="hover:underline transition-colors">
                     Feeds
                   </Link>
-                  <Link href="/indicators" className="hover:underline">
+                  <Link href="/indicators" className="hover:underline transition-colors">
                     Indicators
                   </Link>
                 </nav>
@@ -42,7 +42,7 @@ export default async function RootLayout({
               <div className="flex items-center gap-4">
                 <span className="text-muted">{user.email}</span>
                 <form action={signOut}>
-                  <button type="submit" className="underline">
+                  <button type="submit" className="underline hover:text-muted transition-colors">
                     Sign out
                   </button>
                 </form>
@@ -53,7 +53,7 @@ export default async function RootLayout({
               <Link href="/" aria-label="Parable">
                 <ParableMark size={22} />
               </Link>
-              <Link href="/login" className="underline">
+              <Link href="/login" className="underline hover:text-muted transition-colors">
                 Sign in
               </Link>
             </>

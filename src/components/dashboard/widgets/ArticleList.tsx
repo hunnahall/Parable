@@ -90,7 +90,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => handleUnsave(item.id)}
-                className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
               >
                 Unsave
               </button>
@@ -99,7 +99,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => handleSave(item.id)}
-                className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
               >
                 Save
               </button>
@@ -108,7 +108,7 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
               type="button"
               disabled={pendingId === item.id}
               onClick={() => handleIgnore(item.id)}
-              className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+              className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
             >
               Ignore
             </button>

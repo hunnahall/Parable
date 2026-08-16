@@ -80,7 +80,8 @@ export default async function Home() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-[1600px] mx-auto">
+      <h1 className="sr-only">Dashboard</h1>
       <div className="mb-6">
         <ParableLogo height={64} />
       </div>

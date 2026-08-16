@@ -119,7 +119,7 @@ export default function FeedManager({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between pb-6 border-b border-border">
         <div>
           <h2 className="text-sm font-medium">Run ingest now</h2>
           <p className="text-xs text-muted mt-0.5">
@@ -150,7 +150,7 @@ export default function FeedManager({
           type="button"
           onClick={handleRunIngest}
           disabled={ingesting}
-          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 disabled:opacity-50 shrink-0"
+          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
         >
           {ingesting ? 'Running…' : 'Run ingest now'}
         </button>
@@ -189,7 +189,7 @@ export default function FeedManager({
           <button
             type="submit"
             disabled={pending}
-            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
             Add feed
           </button>
@@ -210,8 +210,8 @@ export default function FeedManager({
               onClick={() => setCategoryFilter(category)}
               className={
                 active
-                  ? 'shrink-0 rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs font-medium'
-                  : 'shrink-0 rounded-full border border-border text-muted px-3 py-1 text-xs font-medium hover:bg-foreground/5'
+                  ? 'shrink-0 rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs font-medium transition-colors'
+                  : 'shrink-0 rounded-full border border-border text-muted px-3 py-1 text-xs font-medium hover:bg-foreground/5 transition-colors'
               }
             >
               {category === 'all' ? 'All' : category}
@@ -250,14 +250,14 @@ export default function FeedManager({
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(feed.id)}
-                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm disabled:opacity-50"
+                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingId(null)}
-                    className="text-sm text-muted"
+                    className="text-sm text-muted hover:text-foreground transition-colors"
                   >
                     Cancel
                   </button>
@@ -287,7 +287,7 @@ export default function FeedManager({
                     <button
                       type="button"
                       onClick={() => startEdit(feed)}
-                      className="text-sm text-muted hover:text-foreground"
+                      className="text-sm text-muted hover:text-foreground transition-colors"
                     >
                       Edit
                     </button>
@@ -295,7 +295,7 @@ export default function FeedManager({
                       type="button"
                       disabled={pending}
                       onClick={() => handleRemove(feed.id)}
-                      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+                      className="text-sm text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
                     >
                       Remove
                     </button>

@@ -33,7 +33,7 @@ export default function WidgetCard({
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => onRemove(widget.id)}
-          className="flex items-center justify-center w-5 h-5 rounded-full text-muted hover:bg-foreground/5 hover:text-foreground text-sm leading-none"
+          className="flex items-center justify-center w-5 h-5 rounded-full text-muted hover:bg-foreground/5 hover:text-foreground text-sm leading-none transition-colors"
           aria-label="Remove widget"
         >
           ×
