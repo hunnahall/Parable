@@ -10,16 +10,28 @@ export default function CategoryManager({ categories }: { categories: string[] }
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Optimistic local copy — see ArticleList.tsx for why gating a visible
+  // add/remove on router.refresh() (which re-runs this whole page's server
+  // data) made this feel multi-second slow.
+  const [localCategories, setLocalCategories] = useState(categories)
+  const [syncedFrom, setSyncedFrom] = useState(categories)
+  if (categories !== syncedFrom) {
+    setSyncedFrom(categories)
+    setLocalCategories(categories)
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setPending(true)
     setError(null)
+    const trimmed = name.trim()
     const result = await addCategory(name)
     setPending(false)
     if (result.error) {
       setError(result.error)
       return
     }
+    setLocalCategories((prev) => [...prev, trimmed])
     setName('')
     router.refresh()
   }
@@ -27,6 +39,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
   async function handleRemove(category: string) {
     setPending(true)
     setError(null)
+    setLocalCategories((prev) => prev.filter((c) => c !== category))
     const result = await removeCategory(category)
     setPending(false)
     if (result.error) {
@@ -57,11 +70,11 @@ export default function CategoryManager({ categories }: { categories: string[] }
         </button>
       </form>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {categories.length === 0 ? (
+      {localCategories.length === 0 ? (
         <p className="text-sm text-muted">No categories yet.</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
-          {categories.map((category) => (
+          {localCategories.map((category) => (
             <li
               key={category}
               className="flex items-center gap-2 text-xs rounded-full bg-foreground/5 px-3 py-1"

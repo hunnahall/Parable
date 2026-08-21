@@ -30,10 +30,11 @@ export default function TodoWidget({ items }: { items: TaskRow[] }) {
     setError(null)
     const result = await addTask(title)
     setPending(false)
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error)
       return
     }
+    setLocalItems((prev) => [...prev, result.task])
     setTitle('')
     router.refresh()
   }

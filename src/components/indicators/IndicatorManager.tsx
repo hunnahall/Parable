@@ -51,6 +51,16 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
+  // Optimistic local copy — see ArticleList.tsx for why gating a visible
+  // add/edit/remove on router.refresh() (which re-runs this whole page's
+  // server data) made this feel multi-second slow.
+  const [localIndicators, setLocalIndicators] = useState(indicators)
+  const [syncedFrom, setSyncedFrom] = useState(indicators)
+  if (indicators !== syncedFrom) {
+    setSyncedFrom(indicators)
+    setLocalIndicators(indicators)
+  }
+
   const [newSeriesCode, setNewSeriesCode] = useState('')
   const [newDisplayName, setNewDisplayName] = useState('')
 
@@ -73,10 +83,11 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       display_name: newDisplayName,
     })
     setPending(false)
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error)
       return
     }
+    setLocalIndicators((prev) => [...prev, result.indicator])
     setNewSeriesCode('')
     setNewDisplayName('')
     router.refresh()
@@ -91,19 +102,24 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
   async function handleSaveEdit(id: string) {
     setPending(true)
     setError(null)
+    const display_name = editDisplayName.trim()
+    setLocalIndicators((prev) =>
+      prev.map((indicator) => (indicator.id === id ? { ...indicator, display_name } : indicator))
+    )
+    setEditingId(null)
     const result = await updateIndicator(id, { display_name: editDisplayName })
     setPending(false)
     if (result.error) {
       setError(result.error)
       return
     }
-    setEditingId(null)
     router.refresh()
   }
 
   async function handleRemove(id: string) {
     setPending(true)
     setError(null)
+    setLocalIndicators((prev) => prev.filter((indicator) => indicator.id !== id))
     const result = await removeIndicator(id)
     setPending(false)
     if (result.error) {
@@ -261,11 +277,11 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
         </div>
       )}
 
-      {indicators.length === 0 ? (
+      {localIndicators.length === 0 ? (
         <p className="text-sm text-muted">No indicators yet.</p>
       ) : (
         <ul className="divide-y divide-border border border-border rounded-lg">
-          {indicators.map((indicator) => (
+          {localIndicators.map((indicator) => (
             <li key={indicator.id} className="p-4">
               {editingId === indicator.id ? (
                 <div className="flex flex-wrap items-center gap-3">

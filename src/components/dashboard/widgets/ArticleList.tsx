@@ -3,13 +3,9 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ArticleItem } from '@/lib/dashboard/data'
-import {
-  saveArticle,
-  ignoreArticle,
-  clearArticleState,
-  setArticleNote,
-  setArticleTags,
-} from '@/lib/articles/actions'
+import { saveArticle, ignoreArticle, clearArticleState } from '@/lib/articles/actions'
+import ArticleNoteEditor from '@/components/articles/ArticleNoteEditor'
+import ArticleTagEditor from '@/components/articles/ArticleTagEditor'
 
 function formatDate(dateString: string | null): string | null {
   if (!dateString) return null
@@ -18,148 +14,61 @@ function formatDate(dateString: string | null): string | null {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function ArticleNote({ itemId, note }: { itemId: string; note: string | null }) {
-  const router = useRouter()
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(note ?? '')
-
-  async function commit() {
-    setEditing(false)
-    if (value.trim() === (note ?? '')) return
-    await setArticleNote(itemId, value)
-    router.refresh()
-  }
-
-  if (editing) {
-    return (
-      <input
-        type="text"
-        autoFocus
-        value={value}
-        placeholder="Add a note…"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') {
-            setValue(note ?? '')
-            setEditing(false)
-          }
-        }}
-        className="w-full border border-border rounded px-1.5 py-0.5 text-xs bg-background mt-1"
-      />
-    )
-  }
-
-  return note ? (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      className="block text-left text-xs italic text-muted hover:text-foreground transition-colors mt-1"
-    >
-      {note}
-    </button>
-  ) : (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      className="text-xs text-muted hover:text-foreground transition-colors mt-1"
-    >
-      + Note
-    </button>
-  )
-}
-
-function ArticleTags({ itemId, tags }: { itemId: string; tags: string[] }) {
-  const router = useRouter()
-  const [adding, setAdding] = useState(false)
-  const [value, setValue] = useState('')
-
-  async function addTag() {
-    const trimmed = value.trim()
-    setValue('')
-    setAdding(false)
-    if (!trimmed || tags.includes(trimmed)) return
-    await setArticleTags(itemId, [...tags, trimmed])
-    router.refresh()
-  }
-
-  async function removeTag(tag: string) {
-    await setArticleTags(
-      itemId,
-      tags.filter((t) => t !== tag)
-    )
-    router.refresh()
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-1 mt-1">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex items-center gap-1 text-xs rounded-full bg-foreground/5 text-muted px-2 py-0.5"
-        >
-          {tag}
-          <button
-            type="button"
-            onClick={() => removeTag(tag)}
-            className="hover:text-red-600 transition-colors"
-            aria-label={`Remove tag ${tag}`}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          type="text"
-          autoFocus
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={addTag}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-            if (e.key === 'Escape') {
-              setValue('')
-              setAdding(false)
-            }
-          }}
-          placeholder="tag…"
-          className="w-16 border border-border rounded-full px-2 py-0.5 text-xs bg-background"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="text-xs text-muted hover:text-foreground transition-colors"
-        >
-          + tag
-        </button>
-      )}
-    </div>
-  )
-}
-
-export default function ArticleList({ items }: { items: ArticleItem[] }) {
+export default function ArticleList({
+  items,
+  savedOnly = false,
+}: {
+  items: ArticleItem[]
+  // True for widgets whose underlying query already filters to state ===
+  // 'saved' (the "Saved articles" widget) — an unsave/ignore there means
+  // the item no longer belongs in this list at all, not just a state
+  // change, so it should disappear locally rather than stay with an
+  // updated badge.
+  savedOnly?: boolean
+}) {
   const router = useRouter()
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [errorId, setErrorId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
 
+  // Optimistic local copy so saving/ignoring/tagging an article feels
+  // instant. router.refresh() re-runs the *whole* page's server data —
+  // every widget, not just this one — so waiting on it before updating
+  // the UI made a single tag edit feel multi-second slow. See
+  // TodoWidget.tsx for the same "sync local state from a changed prop
+  // during render" pattern.
+  const [localItems, setLocalItems] = useState(items)
+  const [syncedFrom, setSyncedFrom] = useState(items)
+  if (items !== syncedFrom) {
+    setSyncedFrom(items)
+    setLocalItems(items)
+  }
+
   const allTags = useMemo(() => {
     const set = new Set<string>()
-    for (const item of items) {
+    for (const item of localItems) {
       for (const tag of item.tags) set.add(tag)
     }
     return [...set].sort()
-  }, [items])
+  }, [localItems])
 
-  const visibleItems = tagFilter ? items.filter((item) => item.tags.includes(tagFilter)) : items
+  const visibleItems = tagFilter
+    ? localItems.filter((item) => item.tags.includes(tagFilter))
+    : localItems
+
+  function updateItem(id: string, patch: Partial<ArticleItem>) {
+    setLocalItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  function removeItem(id: string) {
+    setLocalItems((prev) => prev.filter((item) => item.id !== id))
+  }
 
   async function handleSave(id: string) {
     setPendingId(id)
     setError(null)
+    updateItem(id, { state: 'saved' })
     const result = await saveArticle(id)
     setPendingId(null)
     if (result.error) {
@@ -173,6 +82,10 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
   async function handleIgnore(id: string) {
     setPendingId(id)
     setError(null)
+    // An ignored article can never satisfy any of this list's queries
+    // (headlines/feed/category exclude it, saved requires state ===
+    // 'saved'), so it's always safe to drop locally.
+    removeItem(id)
     const result = await ignoreArticle(id)
     setPendingId(null)
     if (result.error) {
@@ -186,6 +99,11 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
   async function handleUnsave(id: string) {
     setPendingId(id)
     setError(null)
+    if (savedOnly) {
+      removeItem(id)
+    } else {
+      updateItem(id, { state: null })
+    }
     const result = await clearArticleState(id)
     setPendingId(null)
     if (result.error) {
@@ -284,8 +202,16 @@ export default function ArticleList({ items }: { items: ArticleItem[] }) {
             </div>
             {item.state === 'saved' && (
               <>
-                <ArticleNote itemId={item.id} note={item.note} />
-                <ArticleTags itemId={item.id} tags={item.tags} />
+                <ArticleNoteEditor
+                  itemId={item.id}
+                  note={item.note}
+                  onChange={(note) => updateItem(item.id, { note })}
+                />
+                <ArticleTagEditor
+                  itemId={item.id}
+                  tags={item.tags}
+                  onChange={(tags) => updateItem(item.id, { tags })}
+                />
               </>
             )}
             {errorId === item.id && error && (

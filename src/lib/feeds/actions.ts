@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { runIngest, type IngestSummary } from './ingest'
+import type { FeedRow } from './data'
 
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
@@ -11,15 +12,15 @@ export async function addFeed(input: {
   url: string
   title: string
   category: string | null
-}): Promise<{ error: string | null }> {
+}): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
+  if (!user) return { feed: null, error: 'Not signed in' }
 
   const url = input.url.trim()
   let title = input.title.trim()
   const category = input.category?.trim() || null
 
-  if (!url) return { error: 'URL is required' }
+  if (!url) return { feed: null, error: 'URL is required' }
 
   if (!title) {
     // Title left blank — try to detect it from the feed itself rather
@@ -33,18 +34,23 @@ export async function addFeed(input: {
     }
     if (!title) {
       return {
+        feed: null,
         error: "Couldn't detect a title from that feed — please enter one manually.",
       }
     }
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('feeds').insert({ url, title, category })
+  const { data, error } = await supabase
+    .from('feeds')
+    .insert({ url, title, category })
+    .select('id, url, title, category, last_fetched_at, last_error')
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
 
   revalidatePath('/feeds')
-  return { error: null }
+  return { feed: data, error: null }
 }
 
 export async function runIngestNow(): Promise<

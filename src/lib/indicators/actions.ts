@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { runFetchIndicators, fetchSeriesMetadata, type FetchIndicatorsSummary } from './fetch'
 import { describeIndicator } from './describe'
-import { getComparisonData, type ComparisonSeries } from './data'
+import { getComparisonData, type ComparisonSeries, type IndicatorRow } from './data'
 
 // Only FRED is wired up in /api/cron/fetch-indicators today (see the
 // comment at the top of that file) — EIA's v2 API needs a real series to
@@ -13,15 +13,15 @@ import { getComparisonData, type ComparisonSeries } from './data'
 export async function addIndicator(input: {
   series_code: string
   display_name?: string
-}): Promise<{ error: string | null }> {
+}): Promise<{ indicator: IndicatorRow; error: null } | { indicator: null; error: string }> {
   const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
+  if (!user) return { indicator: null, error: 'Not signed in' }
 
   const series_code = input.series_code.trim()
   let display_name = input.display_name?.trim() || null
 
   if (!series_code) {
-    return { error: 'Series code is required' }
+    return { indicator: null, error: 'Series code is required' }
   }
 
   // Always look up FRED metadata: it fills in the display name when the
@@ -34,14 +34,18 @@ export async function addIndicator(input: {
   const description = await describeIndicator(display_name, metadata?.notes ?? null)
 
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('indicators')
     .insert({ source: 'FRED', series_code, display_name, description })
+    .select('id, source, series_code, display_name, description')
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !data) return { indicator: null, error: error?.message ?? 'Insert failed' }
 
   revalidatePath('/indicators')
-  return { error: null }
+  // No readings exist for a brand-new indicator yet — the cron job or a
+  // manual "Fetch now" populates them afterward.
+  return { indicator: { ...data, latest_reading_date: null, recent_readings: [] }, error: null }
 }
 
 export async function updateIndicator(

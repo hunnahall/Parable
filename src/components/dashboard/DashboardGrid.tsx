@@ -72,10 +72,14 @@ export default function DashboardGrid({
     ) => {
       setError(null)
       const result = await addWidget(widgetType, config, size)
-      if (result.error) {
+      if (result.error !== null) {
         setError(result.error)
         return
       }
+      // Append the row the insert returned instead of waiting on
+      // router.refresh() — see handleRemove below and ArticleList.tsx for
+      // why gating a visible change on that full-page refetch is slow.
+      setWidgets((prev) => [...prev, result.widget])
       router.refresh()
     },
     [router]

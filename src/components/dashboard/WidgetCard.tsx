@@ -49,7 +49,7 @@ export default function WidgetCard({
         {widget.widget_type === 'indicators' && (
           <IndicatorsWidget data={data.indicators[widget.config.indicator_id] ?? null} />
         )}
-        {widget.widget_type === 'saved' && <HeadlinesWidget items={data.saved} />}
+        {widget.widget_type === 'saved' && <HeadlinesWidget items={data.saved} savedOnly />}
         {widget.widget_type === 'feed-category' && (
           <FeedCategoryWidget items={data.feedCategories[widget.config.category] ?? null} />
         )}

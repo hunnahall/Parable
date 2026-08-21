@@ -35,6 +35,16 @@ export default function FeedManager({
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
+  // Optimistic local copy — router.refresh() re-runs this whole page's
+  // server data, so gating a visible add/edit/remove on it made the list
+  // feel multi-second slow. See ArticleList.tsx for the same reasoning.
+  const [localFeeds, setLocalFeeds] = useState(feeds)
+  const [syncedFrom, setSyncedFrom] = useState(feeds)
+  if (feeds !== syncedFrom) {
+    setSyncedFrom(feeds)
+    setLocalFeeds(feeds)
+  }
+
   const [newUrl, setNewUrl] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [newCategory, setNewCategory] = useState('')
@@ -47,11 +57,11 @@ export default function FeedManager({
   const [ingestError, setIngestError] = useState<string | null>(null)
 
   const filterOptions = useMemo(() => {
-    const set = new Set(feeds.map((feed) => feed.category || UNCATEGORIZED))
+    const set = new Set(localFeeds.map((feed) => feed.category || UNCATEGORIZED))
     return ['all', ...Array.from(set).sort()]
-  }, [feeds])
+  }, [localFeeds])
 
-  const visibleFeeds = feeds.filter((feed) => {
+  const visibleFeeds = localFeeds.filter((feed) => {
     if (categoryFilter === 'all') return true
     return (feed.category || UNCATEGORIZED) === categoryFilter
   })
@@ -62,10 +72,11 @@ export default function FeedManager({
     setError(null)
     const result = await addFeed({ url: newUrl, title: newTitle, category: newCategory || null })
     setPending(false)
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error)
       return
     }
+    setLocalFeeds((prev) => [...prev, result.feed])
     setNewUrl('')
     setNewTitle('')
     setNewCategory('')
@@ -82,19 +93,23 @@ export default function FeedManager({
   async function handleSaveEdit(id: string) {
     setPending(true)
     setError(null)
+    const title = editTitle.trim()
+    const category = editCategory.trim() || null
+    setLocalFeeds((prev) => prev.map((feed) => (feed.id === id ? { ...feed, title, category } : feed)))
+    setEditingId(null)
     const result = await updateFeed(id, { title: editTitle, category: editCategory || null })
     setPending(false)
     if (result.error) {
       setError(result.error)
       return
     }
-    setEditingId(null)
     router.refresh()
   }
 
   async function handleRemove(id: string) {
     setPending(true)
     setError(null)
+    setLocalFeeds((prev) => prev.filter((feed) => feed.id !== id))
     const result = await removeFeed(id)
     setPending(false)
     if (result.error) {

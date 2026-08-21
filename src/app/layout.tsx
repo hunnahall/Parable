@@ -31,6 +31,9 @@ export default async function RootLayout({
                   <Link href="/" className="hover:underline transition-colors">
                     Dashboard
                   </Link>
+                  <Link href="/articles" className="hover:underline transition-colors">
+                    Articles
+                  </Link>
                   <Link href="/feeds" className="hover:underline transition-colors">
                     Feeds
                   </Link>

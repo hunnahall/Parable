@@ -16,16 +16,28 @@ export default function WatchlistWidget({
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
-  const [pending, setPending] = useState(false)
   const [draftIds, setDraftIds] = useState<string[]>(selectedIds)
+
+  // Optimistic local copy of which indicators this widget shows — router.
+  // refresh() re-runs the whole dashboard's server data, so gating the
+  // filtered rows on it made "Save" look like it did nothing for a couple
+  // seconds. See ArticleList.tsx for the same reasoning.
+  const [localSelectedIds, setLocalSelectedIds] = useState(selectedIds)
+  const [syncedFrom, setSyncedFrom] = useState(selectedIds)
+  if (selectedIds !== syncedFrom) {
+    setSyncedFrom(selectedIds)
+    setLocalSelectedIds(selectedIds)
+  }
 
   // Empty selection means "show everything" — including indicators added
   // after this widget was configured, without needing a manual re-edit.
   const visibleItems =
-    selectedIds.length === 0 ? items : items.filter((entry) => selectedIds.includes(entry.id))
+    localSelectedIds.length === 0
+      ? items
+      : items.filter((entry) => localSelectedIds.includes(entry.id))
 
   function startEdit() {
-    setDraftIds(selectedIds.length === 0 ? items.map((entry) => entry.id) : selectedIds)
+    setDraftIds(localSelectedIds.length === 0 ? items.map((entry) => entry.id) : localSelectedIds)
     setEditing(true)
   }
 
@@ -34,13 +46,12 @@ export default function WatchlistWidget({
   }
 
   async function handleSave() {
-    setPending(true)
     // Selecting everything is stored the same as an empty filter, so newly
     // added indicators keep showing up automatically.
     const indicatorIds = draftIds.length === items.length ? '' : draftIds.join(',')
-    await updateWidgetConfig(widgetId, { indicator_ids: indicatorIds })
-    setPending(false)
+    setLocalSelectedIds(draftIds.length === items.length ? [] : draftIds)
     setEditing(false)
+    await updateWidgetConfig(widgetId, { indicator_ids: indicatorIds })
     router.refresh()
   }
 
@@ -71,8 +82,7 @@ export default function WatchlistWidget({
           <button
             type="button"
             onClick={handleSave}
-            disabled={pending}
-            className="rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs transition-colors hover:bg-accent/90 disabled:opacity-50"
+            className="rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs transition-colors hover:bg-accent/90"
           >
             Save
           </button>
