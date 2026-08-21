@@ -1,6 +1,6 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
-import { isNotableMove } from '@/lib/indicators/notable'
+import { isNotableMove, outlierFlags } from '@/lib/indicators/notable'
 import type { ArticleCuration } from '@/lib/articles/actions'
 
 export interface ArticleItem {
@@ -10,6 +10,7 @@ export interface ArticleItem {
   summary: string | null
   published_at: string | null
   feed_title: string | null
+  category: string | null
   state: ArticleCuration | null
   note: string | null
   tags: string[]
@@ -31,7 +32,7 @@ export interface IndicatorData {
   series_code: string
   latest_value: number | null
   previous_value: number | null
-  readings: { date: string; value: number }[]
+  readings: { date: string; value: number; notable: boolean }[]
   notable: boolean
 }
 
@@ -62,20 +63,27 @@ function bestSummary(item: {
   return item.summary_ai ?? item.summary_en ?? item.summary
 }
 
-async function attachFeedTitles<T extends { feed_id: string }>(
+interface FeedMeta {
+  title: string | null
+  category: string | null
+}
+
+async function attachFeedMeta<T extends { feed_id: string }>(
   supabase: Awaited<ReturnType<typeof createClient>>,
   items: T[]
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, FeedMeta>> {
   const feedIds = [...new Set(items.map((item) => item.feed_id))]
   if (feedIds.length === 0) return new Map()
 
   const { data: feeds, error } = await supabase
     .from('feeds')
-    .select('id, title')
+    .select('id, title, category')
     .in('id', feedIds)
-  logQueryError('dashboard/attachFeedTitles', error)
+  logQueryError('dashboard/attachFeedMeta', error)
 
-  return new Map((feeds ?? []).map((feed) => [feed.id, feed.title]))
+  return new Map(
+    (feeds ?? []).map((feed) => [feed.id, { title: feed.title, category: feed.category }])
+  )
 }
 
 interface ArticleStateInfo {
@@ -122,17 +130,19 @@ function toArticleItem(
     summary_ai: string | null
     published_at: string | null
   },
-  feedTitles: Map<string, string | null>,
+  feedMeta: Map<string, FeedMeta>,
   states: Map<string, ArticleStateInfo>
 ): ArticleItem {
   const info = states.get(item.id)
+  const meta = feedMeta.get(item.feed_id)
   return {
     id: item.id,
     title: bestTitle(item),
     link: item.link,
     summary: bestSummary(item),
     published_at: item.published_at,
-    feed_title: feedTitles.get(item.feed_id) ?? null,
+    feed_title: meta?.title ?? null,
+    category: meta?.category ?? null,
     state: info?.state ?? null,
     note: info?.note ?? null,
     tags: info?.tags ?? [],
@@ -159,8 +169,8 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
   logQueryError('dashboard/getHeadlinesData', error)
   if (!items) return []
 
-  const feedTitles = await attachFeedTitles(supabase, items)
-  return items.map((item) => toArticleItem(item, feedTitles, states))
+  const feedMeta = await attachFeedMeta(supabase, items)
+  return items.map((item) => toArticleItem(item, feedMeta, states))
 }
 
 export async function getFeedData(feedId: string): Promise<ArticleItem[] | null> {
@@ -201,8 +211,8 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
   logQueryError('dashboard/getFeedData', error)
   if (!items) return []
 
-  const feedTitles = await attachFeedTitles(supabase, items)
-  return items.map((item) => toArticleItem(item, feedTitles, states))
+  const feedMeta = await attachFeedMeta(supabase, items)
+  return items.map((item) => toArticleItem(item, feedMeta, states))
 }
 
 export async function getFeedCategoryData(category: string): Promise<ArticleItem[] | null> {
@@ -248,8 +258,8 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   logQueryError('dashboard/getFeedCategoryData', error)
   if (!items) return []
 
-  const feedTitles = await attachFeedTitles(supabase, items)
-  return items.map((item) => toArticleItem(item, feedTitles, states))
+  const feedMeta = await attachFeedMeta(supabase, items)
+  return items.map((item) => toArticleItem(item, feedMeta, states))
 }
 
 export async function getSavedArticlesData(): Promise<ArticleItem[]> {
@@ -270,8 +280,133 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
 
   if (!items) return []
 
-  const feedTitles = await attachFeedTitles(supabase, items)
-  return items.map((item) => toArticleItem(item, feedTitles, states))
+  const feedMeta = await attachFeedMeta(supabase, items)
+  return items.map((item) => toArticleItem(item, feedMeta, states))
+}
+
+export interface ArticlesPageFilters {
+  query?: string
+  category?: string | null
+  tag?: string | null
+  savedOnly?: boolean
+  cursor?: { publishedAt: string; id: string } | null
+  limit?: number
+}
+
+export interface ArticlesPageResult {
+  items: ArticleItem[]
+  nextCursor: { publishedAt: string; id: string } | null
+}
+
+const ARTICLES_PAGE_LIMIT = 30
+const UUID_RE = /^[0-9a-f-]{36}$/i
+
+// Cursor-based (keyset) pagination, not offset/limit: feed_items is
+// written to continuously by the ingest cron (every 30 min), so an offset
+// page requested after new rows land would skip or duplicate items as the
+// user pages — keyset pagination filters by value instead of position, so
+// it's immune to that. (published_at, id) as the cursor tuple because
+// published_at alone isn't unique; id is the tiebreaker for a total order.
+export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
+  const supabase = await createClient()
+  const states = await getArticleStatesMap(supabase)
+  const limit = filters.limit ?? ARTICLES_PAGE_LIMIT
+
+  let query = supabase.from('feed_items').select(ARTICLE_SELECT)
+
+  if (filters.query) {
+    query = query.textSearch('search_vector', filters.query, {
+      type: 'websearch',
+      config: 'simple',
+    })
+  }
+
+  if (filters.category) {
+    const { data: feedsInCategory, error } = await supabase
+      .from('feeds')
+      .select('id')
+      .eq('category', filters.category)
+    logQueryError('dashboard/getArticlesPage (category lookup)', error)
+    const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
+    if (feedIds.length === 0) return { items: [], nextCursor: null }
+    query = query.in('feed_id', feedIds)
+  }
+
+  // A tag filter implies saved (tags only exist on saved article_states
+  // rows) — the two are mutually exclusive by the confirmed requirement,
+  // not just coincidentally so.
+  if (filters.tag) {
+    const taggedIds = [...states.entries()]
+      .filter(([, info]) => info.state === 'saved' && info.tags.includes(filters.tag!))
+      .map(([id]) => id)
+    if (taggedIds.length === 0) return { items: [], nextCursor: null }
+    query = query.in('id', taggedIds)
+  } else if (filters.savedOnly) {
+    const savedIds = [...states.entries()]
+      .filter(([, info]) => info.state === 'saved')
+      .map(([id]) => id)
+    if (savedIds.length === 0) return { items: [], nextCursor: null }
+    query = query.in('id', savedIds)
+  } else {
+    const ignoredIds = [...states.entries()]
+      .filter(([, info]) => info.state === 'ignored')
+      .map(([id]) => id)
+    if (ignoredIds.length > 0) {
+      query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+    }
+  }
+
+  query = query.order('published_at', { ascending: false }).order('id', { ascending: false })
+
+  // Cursor values round-trip through the client (URL/form state) between
+  // requests, so they're validated before being interpolated into a raw
+  // PostgREST .or() filter string — an invalid cursor is treated as no
+  // cursor (first page) rather than risking a malformed filter expression.
+  const cursor = filters.cursor
+  if (cursor && UUID_RE.test(cursor.id) && !Number.isNaN(Date.parse(cursor.publishedAt))) {
+    query = query.or(
+      `published_at.lt.${cursor.publishedAt},and(published_at.eq.${cursor.publishedAt},id.lt.${cursor.id})`
+    )
+  }
+
+  query = query.limit(limit + 1)
+
+  const { data: rows, error } = await query
+  logQueryError('dashboard/getArticlesPage', error)
+  if (!rows) return { items: [], nextCursor: null }
+
+  const hasMore = rows.length > limit
+  const pageRows = hasMore ? rows.slice(0, limit) : rows
+
+  const feedMeta = await attachFeedMeta(supabase, pageRows)
+  const items = pageRows.map((item) => toArticleItem(item, feedMeta, states))
+
+  const last = pageRows.at(-1)
+  const nextCursor = hasMore && last?.published_at ? { publishedAt: last.published_at, id: last.id } : null
+
+  return { items, nextCursor }
+}
+
+// Distinct personal tags across saved articles, for the Articles page's
+// tag filter — a small per-user set, same "fetch and dedupe in JS" scale
+// reasoning as getArticleStatesMap.
+export async function listSavedTags(): Promise<string[]> {
+  const user = await getUser()
+  if (!user) return []
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('article_states')
+    .select('tags')
+    .eq('user_id', user.id)
+    .eq('state', 'saved')
+  logQueryError('dashboard/listSavedTags', error)
+
+  const set = new Set<string>()
+  for (const row of data ?? []) {
+    for (const tag of row.tags ?? []) set.add(tag)
+  }
+  return [...set].sort()
 }
 
 export async function getIndicatorsData(
@@ -301,6 +436,7 @@ export async function getIndicatorsData(
   // Fetched newest-first (for a cheap "limit to most recent N" query) but
   // charted/reported oldest-first.
   const ordered = (readings ?? []).slice().reverse()
+  const flags = outlierFlags(ordered.map((r) => r.value))
 
   return {
     id: indicator.id,
@@ -308,8 +444,8 @@ export async function getIndicatorsData(
     series_code: indicator.series_code,
     latest_value: ordered.at(-1)?.value ?? null,
     previous_value: ordered.at(-2)?.value ?? null,
-    readings: ordered.map((r) => ({ date: r.reading_date, value: r.value })),
-    notable: isNotableMove(ordered.map((r) => r.value)),
+    readings: ordered.map((r, i) => ({ date: r.reading_date, value: r.value, notable: flags[i] })),
+    notable: flags.at(-1) ?? false,
   }
 }
 

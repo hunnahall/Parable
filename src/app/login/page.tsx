@@ -26,7 +26,7 @@ export default async function LoginPage({
             name="email"
             type="email"
             required
-            className="w-full border border-border rounded px-3 py-2 bg-background"
+            className="w-full border border-border px-3 py-2 bg-background"
           />
         </div>
         <div className="space-y-1">
@@ -39,19 +39,19 @@ export default async function LoginPage({
             type="password"
             required
             minLength={6}
-            className="w-full border border-border rounded px-3 py-2 bg-background"
+            className="w-full border border-border px-3 py-2 bg-background"
           />
         </div>
         <div className="flex gap-3 pt-2">
           <button
             formAction={login}
-            className="flex-1 rounded-full bg-accent text-accent-foreground py-2 transition-colors hover:bg-accent/90"
+            className="flex-1 bg-foreground text-background py-2 transition-colors hover:opacity-90"
           >
             Sign in
           </button>
           <button
             formAction={signup}
-            className="flex-1 rounded-full border border-border py-2 transition-colors hover:bg-foreground/5"
+            className="flex-1 border border-border py-2 transition-colors hover:bg-foreground/5"
           >
             Sign up
           </button>

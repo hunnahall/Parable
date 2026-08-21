@@ -5,6 +5,20 @@ import { DayPicker } from 'react-day-picker'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import 'react-day-picker/style.css'
 
+// react-day-picker is a month-grid date picker with no native week view —
+// rather than building a separate 7-day layout, the current week's row is
+// always highlighted within the month grid instead. This used to be a
+// user-facing week/month toggle; it's now a permanent feature of the
+// widget, not a preference.
+function currentWeekRange(): { from: Date; to: Date } {
+  const today = new Date()
+  const from = new Date(today)
+  from.setDate(today.getDate() - today.getDay())
+  const to = new Date(from)
+  to.setDate(from.getDate() + 6)
+  return { from, to }
+}
+
 export default function CalendarWidget() {
   const outerRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
@@ -58,7 +72,8 @@ export default function CalendarWidget() {
         <DayPicker
           showOutsideDays
           navLayout="around"
-          modifiersClassNames={{ today: 'font-bold' }}
+          modifiers={{ currentWeek: currentWeekRange() }}
+          modifiersClassNames={{ today: 'font-bold', currentWeek: 'bg-accent/10' }}
           components={{
             Chevron: ({ orientation, ...props }) =>
               orientation === 'left' ? (

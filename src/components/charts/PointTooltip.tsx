@@ -23,7 +23,7 @@ export default function PointTooltip({
   const dateLabel = formatDateLabel(label)
 
   return (
-    <div className="rounded border border-border bg-background px-2 py-1 text-xs shadow-sm space-y-0.5">
+    <div className="border border-border bg-background px-2 py-1 text-xs space-y-0.5">
       {payload.map((entry, i) => (
         <div key={i} className="flex items-center gap-1" style={{ color: entry.color }}>
           {payload.length > 1 && entry.name && (

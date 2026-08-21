@@ -15,6 +15,7 @@ const WIDGET_TYPES: WidgetType[] = [
   'calendar',
   'todo',
   'watchlist',
+  'key-dates',
 ]
 
 export default function AddWidgetMenu({
@@ -65,7 +66,7 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center text-sm font-semibold rounded-full border-2 border-accent px-3 py-1.5 hover:bg-accent/10 transition-colors"
+        className="flex items-center min-h-[52px] text-sm font-semibold border-2 border-accent px-4 py-2 hover:bg-accent/10 transition-colors"
       >
         <Plus size={16} strokeWidth={2.5} className="-ms-1 me-2" aria-hidden="true" />
         Add widget
@@ -74,11 +75,11 @@ export default function AddWidgetMenu({
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm border border-border rounded px-3 py-2 bg-background shadow-sm">
+    <div className="flex items-center min-h-[52px] gap-2 text-sm border-2 border-accent px-4 py-2 bg-background">
       <select
         value={widgetType}
         onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-        className="border border-border rounded px-2 py-1 bg-background"
+        className="border border-border px-2 py-1 bg-background"
       >
         {WIDGET_TYPES.map((type) => (
           <option key={type} value={type}>
@@ -92,7 +93,7 @@ export default function AddWidgetMenu({
           <select
             value={feedId}
             onChange={(e) => setFeedId(e.target.value)}
-            className="border border-border rounded px-2 py-1 bg-background"
+            className="border border-border px-2 py-1 bg-background"
           >
             {feedOptions.map((feed) => (
               <option key={feed.id} value={feed.id}>
@@ -110,7 +111,7 @@ export default function AddWidgetMenu({
           <select
             value={indicatorId}
             onChange={(e) => setIndicatorId(e.target.value)}
-            className="border border-border rounded px-2 py-1 bg-background"
+            className="border border-border px-2 py-1 bg-background"
           >
             {indicatorOptions.map((indicator) => (
               <option key={indicator.id} value={indicator.id}>
@@ -130,7 +131,7 @@ export default function AddWidgetMenu({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="border border-border rounded px-2 py-1 bg-background"
+            className="border border-border px-2 py-1 bg-background"
           >
             {categoryOptions.map((cat) => (
               <option key={cat} value={cat}>
@@ -147,14 +148,14 @@ export default function AddWidgetMenu({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="rounded-full bg-accent text-accent-foreground px-3 py-1 transition-colors hover:bg-accent/90 disabled:opacity-50"
+        className="bg-foreground text-background px-3 py-1 transition-colors hover:opacity-90 disabled:opacity-50"
       >
         Add
       </button>
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="text-muted hover:text-foreground transition-colors px-1"
+        className="text-muted hover:text-accent transition-colors px-1"
       >
         Cancel
       </button>

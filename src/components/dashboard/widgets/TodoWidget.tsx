@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { X } from 'lucide-react'
 import type { TaskRow } from '@/lib/tasks/data'
 import { addTask, toggleTask, removeTask } from '@/lib/tasks/actions'
 
@@ -59,12 +60,12 @@ export default function TodoWidget({ items }: { items: TaskRow[] }) {
           placeholder="Add a task…"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="flex-1 min-w-0 border border-border rounded px-2 py-1 text-sm bg-background"
+          className="flex-1 min-w-0 border border-border px-2 py-1 text-sm bg-background"
         />
         <button
           type="submit"
           disabled={pending}
-          className="shrink-0 rounded-full bg-accent text-accent-foreground px-3 py-1 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
+          className="shrink-0 bg-foreground text-background px-3 py-1 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
         >
           Add
         </button>
@@ -92,7 +93,7 @@ export default function TodoWidget({ items }: { items: TaskRow[] }) {
                 className="shrink-0 text-muted hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 text-xs"
                 aria-label={`Delete task "${task.title}"`}
               >
-                ×
+                <X size={12} />
               </button>
             </li>
           ))}

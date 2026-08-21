@@ -1,8 +1,10 @@
 'use client'
 
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, Tooltip } from 'recharts'
+import { ArrowUp, ArrowDown, TriangleAlert } from 'lucide-react'
 import type { IndicatorData } from '@/lib/dashboard/data'
 import PointTooltip from '@/components/charts/PointTooltip'
+import OutlierDot from '@/components/charts/OutlierDot'
 
 export default function IndicatorsWidget({ data }: { data: IndicatorData | null }) {
   if (!data) {
@@ -26,19 +28,21 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
           <span
             className={
               delta >= 0
-                ? 'text-xs font-medium rounded-full bg-green-50 text-green-700 px-2 py-0.5'
-                : 'text-xs font-medium rounded-full bg-red-50 text-red-700 px-2 py-0.5'
+                ? 'inline-flex items-center gap-0.5 text-xs font-medium bg-green-50 text-green-700 px-2 py-0.5'
+                : 'inline-flex items-center gap-0.5 text-xs font-medium bg-red-50 text-red-700 px-2 py-0.5'
             }
           >
-            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString()}
+            {delta >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+            {Math.abs(delta).toLocaleString()}
             {deltaPct !== null && ` (${Math.abs(deltaPct).toFixed(1)}%)`}
           </span>
         )}
         {notable && (
           <span
-            className="text-xs font-medium rounded-full bg-amber-50 text-amber-700 px-2 py-0.5"
+            className="inline-flex items-center gap-1 text-xs font-medium bg-amber-50 text-amber-700 px-2 py-0.5"
             title="This reading is a statistical outlier relative to its recent history"
           >
+            <TriangleAlert size={12} />
             Notable move
           </span>
         )}
@@ -56,7 +60,7 @@ export default function IndicatorsWidget({ data }: { data: IndicatorData | null 
                 stroke="currentColor"
                 className="text-foreground"
                 strokeWidth={2}
-                dot={false}
+                dot={<OutlierDot />}
               />
             </LineChart>
           </ResponsiveContainer>

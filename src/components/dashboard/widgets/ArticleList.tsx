@@ -127,8 +127,8 @@ export default function ArticleList({
             onClick={() => setTagFilter(null)}
             className={
               tagFilter === null
-                ? 'shrink-0 rounded-full bg-accent text-accent-foreground px-2.5 py-0.5 transition-colors'
-                : 'shrink-0 rounded-full border border-border text-muted px-2.5 py-0.5 hover:bg-foreground/5 transition-colors'
+                ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-0.5 transition-colors'
+                : 'shrink-0 border border-border text-muted px-2.5 py-0.5 hover:border-accent hover:text-accent transition-colors'
             }
           >
             All
@@ -140,8 +140,8 @@ export default function ArticleList({
               onClick={() => setTagFilter(tag)}
               className={
                 tagFilter === tag
-                  ? 'shrink-0 rounded-full bg-accent text-accent-foreground px-2.5 py-0.5 transition-colors'
-                  : 'shrink-0 rounded-full border border-border text-muted px-2.5 py-0.5 hover:bg-foreground/5 transition-colors'
+                  ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-0.5 transition-colors'
+                  : 'shrink-0 border border-border text-muted px-2.5 py-0.5 hover:border-accent hover:text-accent transition-colors'
               }
             >
               {tag}
@@ -161,7 +161,7 @@ export default function ArticleList({
                 href={item.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium hover:underline"
+                className="text-sm font-medium hover:text-accent hover:underline"
               >
                 {item.title}
               </a>
@@ -177,7 +177,7 @@ export default function ArticleList({
                   type="button"
                   disabled={pendingId === item.id}
                   onClick={() => handleUnsave(item.id)}
-                  className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
+                  className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
                 >
                   Unsave
                 </button>
@@ -186,7 +186,7 @@ export default function ArticleList({
                   type="button"
                   disabled={pendingId === item.id}
                   onClick={() => handleSave(item.id)}
-                  className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
+                  className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
                 >
                   Save
                 </button>
@@ -195,7 +195,7 @@ export default function ArticleList({
                 type="button"
                 disabled={pendingId === item.id}
                 onClick={() => handleIgnore(item.id)}
-                className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
+                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
               >
                 Ignore
               </button>

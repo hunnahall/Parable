@@ -11,6 +11,7 @@ import {
 } from '@/lib/dashboard/data'
 import { listCategories } from '@/lib/categories/data'
 import { listTasks } from '@/lib/tasks/data'
+import { listKeyDates } from '@/lib/keydates/data'
 import { getDefaultLayout, type WidgetInstance } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import DashboardGrid from '@/components/dashboard/DashboardGrid'
@@ -52,6 +53,7 @@ export default async function Home() {
   const needsSaved = widgets.some((w) => w.widget_type === 'saved')
   const needsTasks = widgets.some((w) => w.widget_type === 'todo')
   const needsWatchlist = widgets.some((w) => w.widget_type === 'watchlist')
+  const needsKeyDates = widgets.some((w) => w.widget_type === 'key-dates')
 
   const [
     headlines,
@@ -64,6 +66,7 @@ export default async function Home() {
     categoryOptions,
     tasks,
     watchlist,
+    keyDates,
   ] = await Promise.all([
     needsHeadlines ? getHeadlinesData() : Promise.resolve([]),
     Promise.all(feedIds.map(async (id) => [id, await getFeedData(id)] as const)),
@@ -77,6 +80,7 @@ export default async function Home() {
     listCategories(),
     needsTasks ? listTasks() : Promise.resolve([]),
     needsWatchlist ? getWatchlistData() : Promise.resolve([]),
+    needsKeyDates ? listKeyDates() : Promise.resolve([]),
   ])
 
   const widgetData: DashboardWidgetData = {
@@ -87,6 +91,7 @@ export default async function Home() {
     feedCategories: Object.fromEntries(categoryEntries),
     tasks,
     watchlist,
+    keyDates,
   }
 
   return (

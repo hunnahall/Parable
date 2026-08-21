@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ArrowUp, ArrowDown, TriangleAlert } from 'lucide-react'
 import type { WatchlistEntry } from '@/lib/dashboard/data'
 import { updateWidgetConfig } from '@/lib/dashboard/actions'
 
@@ -82,14 +83,14 @@ export default function WatchlistWidget({
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-full bg-accent text-accent-foreground px-3 py-1 text-xs transition-colors hover:bg-accent/90"
+            className="bg-foreground text-background px-3 py-1 text-xs transition-colors hover:opacity-90"
           >
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-muted hover:text-foreground transition-colors"
+            className="text-xs text-muted hover:text-accent transition-colors"
           >
             Cancel
           </button>
@@ -104,7 +105,7 @@ export default function WatchlistWidget({
         <button
           type="button"
           onClick={startEdit}
-          className="text-xs text-muted hover:text-foreground transition-colors mb-1"
+          className="text-xs text-muted hover:text-accent transition-colors mb-1"
         >
           Edit
         </button>
@@ -136,7 +137,7 @@ export default function WatchlistWidget({
                           className="shrink-0 text-amber-600"
                           title="Notable move — a statistical outlier relative to recent history"
                         >
-                          ●
+                          <TriangleAlert size={12} />
                         </span>
                       )}
                     </div>
@@ -146,8 +147,15 @@ export default function WatchlistWidget({
                   </td>
                   <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
                     {delta !== null ? (
-                      <span className={delta >= 0 ? 'text-green-700' : 'text-red-700'}>
-                        {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString()}
+                      <span
+                        className={
+                          delta >= 0
+                            ? 'inline-flex items-center gap-0.5 text-green-700'
+                            : 'inline-flex items-center gap-0.5 text-red-700'
+                        }
+                      >
+                        {delta >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+                        {Math.abs(delta).toLocaleString()}
                       </span>
                     ) : (
                       <span className="text-muted">—</span>

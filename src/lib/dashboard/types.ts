@@ -1,5 +1,6 @@
 import type { ArticleItem, IndicatorData, WatchlistEntry } from './data'
 import type { TaskRow } from '@/lib/tasks/data'
+import type { KeyDateRow } from '@/lib/keydates/data'
 
 export interface DashboardWidgetData {
   headlines: ArticleItem[]
@@ -9,4 +10,5 @@ export interface DashboardWidgetData {
   feedCategories: Record<string, ArticleItem[] | null>
   tasks: TaskRow[]
   watchlist: WatchlistEntry[]
+  keyDates: KeyDateRow[]
 }

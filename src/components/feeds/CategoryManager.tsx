@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { X } from 'lucide-react'
 import { addCategory, removeCategory } from '@/lib/categories/actions'
 
 export default function CategoryManager({ categories }: { categories: string[] }) {
@@ -50,7 +51,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
   }
 
   return (
-    <div className="border border-border rounded-lg p-4 space-y-3">
+    <div className="border border-border p-4 space-y-3">
       <h2 className="text-sm font-medium">Manage categories</h2>
       <form onSubmit={handleAdd} className="flex flex-wrap gap-3">
         <input
@@ -59,12 +60,12 @@ export default function CategoryManager({ categories }: { categories: string[] }
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="flex-1 min-w-[12rem] border border-border rounded px-3 py-2 text-sm bg-background"
+          className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-sm bg-background"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
+          className="bg-foreground text-background px-4 py-2 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
         >
           Add category
         </button>
@@ -77,7 +78,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
           {localCategories.map((category) => (
             <li
               key={category}
-              className="flex items-center gap-2 text-xs rounded-full bg-foreground/5 px-3 py-1"
+              className="flex items-center gap-2 text-xs bg-foreground/5 px-3 py-1"
             >
               {category}
               <button
@@ -87,7 +88,7 @@ export default function CategoryManager({ categories }: { categories: string[] }
                 className="text-muted hover:text-red-600 transition-colors disabled:opacity-50"
                 aria-label={`Delete category ${category}`}
               >
-                ×
+                <X size={12} />
               </button>
             </li>
           ))}

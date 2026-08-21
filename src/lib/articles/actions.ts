@@ -2,8 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/dashboard/data'
 
 export type ArticleCuration = 'saved' | 'ignored'
+
+// Thin server-action wrapper around getArticlesPage — the Articles page's
+// client component (for "Load more") can't call data.ts functions
+// directly, since createClient() there needs a Server Component/Route
+// Handler/Server Action context.
+export async function fetchArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
+  return getArticlesPage(filters)
+}
 
 async function setState(
   feedItemId: string,

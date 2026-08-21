@@ -3,32 +3,114 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-brand: var(--brand);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+
+  --font-heading: var(--font-hanken-grotesk);
+  --font-label: var(--font-instrument-sans);
+  --font-data: var(--font-lato);
+  /* --font-sans is Tailwind's own default-body namespace — mapping it to
+     the active body font variable (set per-request in layout.tsx from
+     data-font on <html>, see the [data-font] rules below) means plain
+     text without an explicit font-* class already gets the right font. */
+  --font-sans: var(--font-body-active);
 }
 
+/* Covenant Works design system: ink on paper, hairline rules, zero
+   radius, one functional accent per surface — see
+   ~/Downloads/Design System/covenant-works-design-system_updated.html.
+   Dark palette below is this app's own extrapolation (the source system
+   is light-only) following the same ink/paper-inversion + hairline +
+   single-accent discipline. */
 :root {
-  --background: #fafafa;
+  --background: #ffffff;
   --foreground: #131418;
+  --foreground-muted: #4a4d59;
+  --border: #d8d9de;
+  --border-subtle: #ebecef;
+
   /* Action blue: same hue as the Parable mark's brand blue, darkened for
-     AA-contrast solid fills (the mark's own #92afd7 is a pastel meant for
-     line art — at ~2.2:1 contrast it fails as a white-text button fill). */
+     AA-contrast text/icons/focus rings on white. Reserved as a true
+     accent (links, focus, active nav, a single chart series, primary
+     button borders) — never a decorative fill; see the button-styling
+     convention below. */
   --accent: #2f6fb8;
   --accent-foreground: #ffffff;
-  /* Exact brand blue from the Parable mark — used only where the mark
-     itself appears or as a light-touch decorative accent, never as a
-     solid button fill. */
   --brand: #92afd7;
-  --muted: #6b7280;
-  --border: #e5e7eb;
+  /* "Label gray" from the design system's core neutrals — the app's
+     existing secondary/de-emphasized text color, most call sites already
+     use it via text-muted. */
+  --muted: #7c7f8c;
+
+  /* Body font default (Inter) — the [data-font="..."] rules below
+     override this. Defined on :root, not body, since Tailwind's preflight
+     resolves the page's default font-family on <html> itself (:root),
+     which has no ancestor to inherit a body-scoped custom property from. */
+  --font-body-active: var(--font-inter);
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #131418;
+    --foreground: #f4f5f7;
+    --foreground-muted: #b3b6c0;
+    --border: #33353d;
+    --border-subtle: #26272c;
+    --accent: #92afd7;
+    --accent-foreground: #131418;
+    --brand: #92afd7;
+    --muted: #9a9daa;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #131418;
+  --foreground: #f4f5f7;
+  --foreground-muted: #b3b6c0;
+  --border: #33353d;
+  --border-subtle: #26272c;
+  --accent: #92afd7;
+  --accent-foreground: #131418;
+  --brand: #92afd7;
+  --muted: #9a9daa;
+}
+
+/* Body font choice (Settings page) — Inter is the unset/default case, so
+   it needs no rule of its own. Headings stay Hanken Grotesk regardless of
+   this setting (see h1-h4 below) — the font preference only ever affects
+   body/UI text, not the brand's heading identity. */
+[data-font="hanken-grotesk"] { --font-body-active: var(--font-hanken-grotesk); }
+[data-font="work-sans"] { --font-body-active: var(--font-work-sans); }
+[data-font="instrument-sans"] { --font-body-active: var(--font-instrument-sans); }
+[data-font="lato"] { --font-body-active: var(--font-lato); }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
+  /* Explicit rather than relying solely on Tailwind preflight's
+     `--default-font-family` -> `--font-sans` chain — this is the one
+     property the whole font-switching setting hinges on, so it's set
+     directly and unambiguously here rather than through an indirect,
+     harder-to-verify path. */
+  font-family: var(--font-body-active);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Native checkboxes/radios (to-do items, indicator compare picks, watchlist
+   config, settings) otherwise render in the browser's default blue rather
+   than the brand accent. */
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--accent);
 }
 
 .bg-dot-grid {

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePreferences } from '@/components/preferences/PreferencesProvider'
+import { formatTime } from '@/lib/formatting'
 
 const CENTER = 50
 const RADIUS = 46
@@ -11,7 +13,25 @@ const TICKS = Array.from({ length: 60 }, (_, index) => ({
   cardinal: index % 15 === 0,
 }))
 
+// getHours()/getMinutes()/getSeconds() always read the browser's local
+// time — for the hands to reflect a timezone override (not just the
+// digital readout below, which formatTime already handles via the
+// timeZone option) the wall-clock components need to come from
+// Intl.DateTimeFormat instead.
+function wallClockParts(date: Date, timezone: string): { hours: number; minutes: number; seconds: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+    ...(timezone ? { timeZone: timezone } : {}),
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0)
+  return { hours: get('hour'), minutes: get('minute'), seconds: get('second') }
+}
+
 export default function ClockWidget() {
+  const { timezone, clockFormat } = usePreferences()
   const [now, setNow] = useState<Date | null>(null)
 
   useEffect(() => {
@@ -26,9 +46,10 @@ export default function ClockWidget() {
 
   if (!now) return <div className="w-full h-full" />
 
-  const seconds = now.getSeconds()
-  const minutes = now.getMinutes()
-  const hours = now.getHours() % 12
+  const wall = wallClockParts(now, timezone)
+  const seconds = wall.seconds
+  const minutes = wall.minutes
+  const hours = wall.hours % 12
 
   const secondAngle = seconds * 6
   const minuteAngle = minutes * 6 + seconds * 0.1
@@ -40,8 +61,8 @@ export default function ClockWidget() {
     // so we fill it exactly and let the SVG's own viewBox + default
     // preserveAspectRatio letterbox the round face inside it — that fits
     // any box without clipping or stretching, unlike CSS aspect-ratio.
-    <div className="w-full h-full text-foreground">
-      <svg viewBox="0 0 100 100" className="w-full h-full">
+    <div className="w-full h-full flex flex-col items-center justify-center text-foreground">
+      <svg viewBox="0 0 100 100" className="w-full flex-1 min-h-0">
         <circle
           cx={CENTER}
           cy={CENTER}
@@ -97,6 +118,9 @@ export default function ClockWidget() {
         />
         <circle cx={CENTER} cy={CENTER} r={1.8} fill="currentColor" />
       </svg>
+      <span className="text-xs font-data tabular-nums text-muted shrink-0 mt-1">
+        {formatTime(now, { timezone, clockFormat })}
+      </span>
     </div>
   )
 }

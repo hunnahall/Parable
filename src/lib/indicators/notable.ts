@@ -22,3 +22,12 @@ export function isNotableMove(valuesOldestFirst: number[]): boolean {
   const zScore = Math.abs(latest - mean) / stddev
   return zScore > Z_SCORE_THRESHOLD
 }
+
+// Same signal as isNotableMove, but for every point in the series instead
+// of only the latest one — each index i is evaluated against the history
+// before it, i.e. what isNotableMove would have said had that point been
+// "latest" at the time. Early points (before MIN_READINGS_FOR_SIGNAL) are
+// never flagged, same minimum-sample-size guard as isNotableMove.
+export function outlierFlags(valuesOldestFirst: number[]): boolean[] {
+  return valuesOldestFirst.map((_, i) => isNotableMove(valuesOldestFirst.slice(0, i + 1)))
+}

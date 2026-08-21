@@ -13,6 +13,7 @@ import {
 import type { IndicatorRow, ComparisonSeries } from '@/lib/indicators/data'
 import type { FetchIndicatorsSummary } from '@/lib/indicators/fetch'
 import PointTooltip from '@/components/charts/PointTooltip'
+import OutlierDot from '@/components/charts/OutlierDot'
 import CompareChart from './CompareChart'
 
 function formatDate(dateString: string | null): string {
@@ -22,7 +23,11 @@ function formatDate(dateString: string | null): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-function Sparkline({ readings }: { readings: { date: string; value: number }[] }) {
+function Sparkline({
+  readings,
+}: {
+  readings: { date: string; value: number; notable: boolean }[]
+}) {
   if (readings.length < 2) return null
   return (
     <div className="h-8 w-24">
@@ -37,7 +42,7 @@ function Sparkline({ readings }: { readings: { date: string; value: number }[] }
             stroke="currentColor"
             className="text-muted"
             strokeWidth={1.5}
-            dot={false}
+            dot={<OutlierDot />}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -197,13 +202,13 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
           type="button"
           onClick={handleRunFetch}
           disabled={fetching}
-          className="rounded-full border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
+          className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
         >
           {fetching ? 'Running…' : 'Fetch now'}
         </button>
       </div>
 
-      <form onSubmit={handleAdd} className="border border-border rounded-lg p-4 space-y-3">
+      <form onSubmit={handleAdd} className="border border-border p-4 space-y-3">
         <h2 className="text-sm font-medium">Add an indicator (FRED)</h2>
         <p className="text-xs text-muted">
           Only FRED is supported right now — find series codes at fred.stlouisfed.org.
@@ -215,19 +220,19 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
             required
             value={newSeriesCode}
             onChange={(e) => setNewSeriesCode(e.target.value)}
-            className="flex-1 min-w-[12rem] border border-border rounded px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-sm bg-background"
           />
           <input
             type="text"
             placeholder="Display name (optional)"
             value={newDisplayName}
             onChange={(e) => setNewDisplayName(e.target.value)}
-            className="flex-1 min-w-[12rem] border border-border rounded px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-sm bg-background"
           />
           <button
             type="submit"
             disabled={pending}
-            className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
+            className="bg-foreground text-background px-4 py-2 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
           >
             Add indicator
           </button>
@@ -237,7 +242,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {selectedIds.size > 0 && (
-        <div className="border border-border rounded-lg p-4 space-y-3">
+        <div className="border border-border p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm">
               {selectedIds.size} indicator{selectedIds.size === 1 ? '' : 's'} selected
@@ -249,7 +254,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                   setSelectedIds(new Set())
                   setCompareSeries(null)
                 }}
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="text-sm text-muted hover:text-accent transition-colors"
               >
                 Clear
               </button>
@@ -257,7 +262,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                 type="button"
                 onClick={handleCompare}
                 disabled={selectedIds.size < 2 || comparing}
-                className="rounded-full bg-accent text-accent-foreground px-4 py-2 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
+                className="bg-foreground text-background px-4 py-2 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
               >
                 {comparing ? 'Comparing…' : 'Compare selected'}
               </button>
@@ -280,7 +285,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       {localIndicators.length === 0 ? (
         <p className="text-sm text-muted">No indicators yet.</p>
       ) : (
-        <ul className="divide-y divide-border border border-border rounded-lg">
+        <ul className="divide-y divide-border border border-border">
           {localIndicators.map((indicator) => (
             <li key={indicator.id} className="p-4">
               {editingId === indicator.id ? (
@@ -289,20 +294,20 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                     type="text"
                     value={editDisplayName}
                     onChange={(e) => setEditDisplayName(e.target.value)}
-                    className="flex-1 min-w-[12rem] border border-border rounded px-3 py-1.5 text-sm bg-background"
+                    className="flex-1 min-w-[12rem] border border-border px-3 py-1.5 text-sm bg-background"
                   />
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => handleSaveEdit(indicator.id)}
-                    className="rounded-full bg-accent text-accent-foreground px-3 py-1.5 text-sm transition-colors hover:bg-accent/90 disabled:opacity-50"
+                    className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingId(null)}
-                    className="text-sm text-muted hover:text-foreground transition-colors"
+                    className="text-sm text-muted hover:text-accent transition-colors"
                   >
                     Cancel
                   </button>
@@ -322,7 +327,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                         <span className="font-medium text-sm">
                           {indicator.display_name ?? indicator.series_code}
                         </span>
-                        <span className="text-xs rounded-full bg-foreground/5 text-muted px-2 py-0.5">
+                        <span className="text-xs bg-foreground/5 text-muted px-2 py-0.5">
                           {indicator.source} · {indicator.series_code}
                         </span>
                       </div>
@@ -349,7 +354,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
                     <button
                       type="button"
                       onClick={() => startEdit(indicator)}
-                      className="text-sm text-muted hover:text-foreground transition-colors"
+                      className="text-sm text-muted hover:text-accent transition-colors"
                     >
                       Edit
                     </button>

@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import type { ComparisonSeries } from '@/lib/indicators/data'
 import PointTooltip from '@/components/charts/PointTooltip'
+import OutlierDot from '@/components/charts/OutlierDot'
 
 const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2']
 
@@ -31,6 +32,15 @@ export default function CompareChart({ series }: { series: ComparisonSeries[] })
 
   const pointsById = new Map(
     series.map((s) => [s.id, new Map(s.points.map((p) => [p.date, p.changePct]))])
+  )
+  // Kept as a per-series (date -> notable) lookup rather than folded into
+  // chartData's rows: outlier flags are computed per series over its own
+  // raw reading sequence (before this file's date-union reshaping, which
+  // would corrupt the z-score across gaps where series don't share dates)
+  // — see getComparisonData. A custom `dot` renderer below reads from this
+  // closure per point instead.
+  const notableById = new Map(
+    series.map((s) => [s.id, new Map(s.points.map((p) => [p.date, p.notable]))])
   )
 
   const chartData = dates.map((date) => {
@@ -52,18 +62,31 @@ export default function CompareChart({ series }: { series: ComparisonSeries[] })
             content={<PointTooltip formatValue={(value) => `${value.toFixed(1)}%`} />}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          {series.map((s, i) => (
-            <Line
-              key={s.id}
-              type="monotone"
-              dataKey={s.id}
-              name={s.display_name ?? s.series_code}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-            />
-          ))}
+          {series.map((s, i) => {
+            const notableByDate = notableById.get(s.id)
+            // recharts instantiates `dot` with its own loosely-typed
+            // DotItemDotProps (payload is `any` in recharts' own types) —
+            // matched loosely here rather than fighting that typing.
+            const seriesDot = (dotProps: { cx?: number; cy?: number; payload?: { date: string } }) => (
+              <OutlierDot
+                cx={dotProps.cx}
+                cy={dotProps.cy}
+                payload={{ notable: notableByDate?.get(dotProps.payload?.date ?? '') }}
+              />
+            )
+            return (
+              <Line
+                key={s.id}
+                type="monotone"
+                dataKey={s.id}
+                name={s.display_name ?? s.series_code}
+                stroke={COLORS[i % COLORS.length]}
+                strokeWidth={2}
+                dot={seriesDot}
+                connectNulls
+              />
+            )
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

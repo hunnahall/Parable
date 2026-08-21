@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
+import { outlierFlags } from './notable'
 
 export interface IndicatorRow {
   id: string
@@ -8,7 +9,7 @@ export interface IndicatorRow {
   display_name: string | null
   description: string | null
   latest_reading_date: string | null
-  recent_readings: { date: string; value: number }[]
+  recent_readings: { date: string; value: number; notable: boolean }[]
 }
 
 const RECENT_READINGS_PER_INDICATOR = 20
@@ -45,10 +46,11 @@ export async function listIndicatorsDetailed(): Promise<IndicatorRow[]> {
 
   return indicators.map((indicator) => {
     const recent = (readingsByIndicator.get(indicator.id) ?? []).slice().reverse()
+    const flags = outlierFlags(recent.map((r) => r.value))
     return {
       ...indicator,
       latest_reading_date: recent.at(-1)?.date ?? null,
-      recent_readings: recent,
+      recent_readings: recent.map((r, i) => ({ ...r, notable: flags[i] })),
     }
   })
 }
@@ -60,7 +62,7 @@ export interface ComparisonSeries {
   // % change from this series' own first fetched reading — puts series
   // with wildly different units/scales (a %, an index, a dollar figure)
   // on one comparable axis.
-  points: { date: string; changePct: number }[]
+  points: { date: string; changePct: number; notable: boolean }[]
 }
 
 export async function getComparisonData(indicatorIds: string[]): Promise<ComparisonSeries[]> {
@@ -87,12 +89,18 @@ export async function getComparisonData(indicatorIds: string[]): Promise<Compari
 
     const ordered = (readings ?? []).slice().reverse()
     const base = ordered[0]?.value
+    // Computed on the raw readings, not the rebased % change below — a
+    // z-score over already-normalized percentages would answer "is this %
+    // change unusual relative to other % changes" instead of the intended
+    // "is this raw reading unusual relative to its own history."
+    const flags = outlierFlags(ordered.map((r) => r.value))
 
     const points =
       base !== undefined && base !== 0
-        ? ordered.map((r) => ({
+        ? ordered.map((r, i) => ({
             date: r.reading_date,
             changePct: ((r.value - base) / Math.abs(base)) * 100,
+            notable: flags[i],
           }))
         : []
 

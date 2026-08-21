@@ -1,5 +1,6 @@
 'use client'
 
+import { X } from 'lucide-react'
 import { WIDGET_LABELS, type WidgetInstance } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import HeadlinesWidget from './widgets/HeadlinesWidget'
@@ -10,6 +11,7 @@ import ClockWidget from './widgets/ClockWidget'
 import CalendarWidget from './widgets/CalendarWidget'
 import TodoWidget from './widgets/TodoWidget'
 import WatchlistWidget from './widgets/WatchlistWidget'
+import KeyDatesWidget from './widgets/KeyDatesWidget'
 
 export default function WidgetCard({
   widget,
@@ -26,7 +28,7 @@ export default function WidgetCard({
       : WIDGET_LABELS[widget.widget_type]
 
   return (
-    <div className="h-full flex flex-col rounded-lg border border-border bg-background shadow-sm overflow-hidden">
+    <div className="h-full flex flex-col border border-border bg-background overflow-hidden">
       <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-border cursor-move shrink-0">
         <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
           {label}
@@ -35,10 +37,10 @@ export default function WidgetCard({
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => onRemove(widget.id)}
-          className="flex items-center justify-center w-5 h-5 rounded-full text-muted hover:bg-foreground/5 hover:text-foreground text-sm leading-none transition-colors"
+          className="flex items-center justify-center w-5 h-5 text-muted hover:bg-foreground/5 hover:text-foreground text-sm leading-none transition-colors"
           aria-label="Remove widget"
         >
-          ×
+          <X size={14} />
         </button>
       </div>
       <div className="p-3 overflow-auto grow">
@@ -65,6 +67,7 @@ export default function WidgetCard({
             }
           />
         )}
+        {widget.widget_type === 'key-dates' && <KeyDatesWidget items={data.keyDates} />}
       </div>
     </div>
   )
