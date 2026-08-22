@@ -196,7 +196,7 @@ export default function FeedManager({
         </button>
       </div>
 
-      <form onSubmit={handleAdd} className="border border-border p-4 space-y-3">
+      <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">Add a feed</h2>
           <OpmlImport />
@@ -271,7 +271,7 @@ export default function FeedManager({
       {visibleFeeds.length === 0 ? (
         <p className="text-sm text-muted">No feeds yet.</p>
       ) : (
-        <ul className="divide-y divide-border border border-border">
+        <ul className="card-elevated divide-y divide-border">
           {visibleFeeds.map((feed) => (
             <li key={feed.id} className="p-4">
               {editingId === feed.id ? (

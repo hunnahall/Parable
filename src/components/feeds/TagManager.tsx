@@ -45,7 +45,7 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
   }
 
   return (
-    <div className="border border-border p-4 space-y-3">
+    <div className="card-elevated p-4 space-y-3">
       <h2 className="text-sm font-medium">Manage tags</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {tags.length === 0 ? (

@@ -11,7 +11,7 @@ export default async function LoginPage({
   return (
     <div className="p-8 max-w-sm mx-auto space-y-6">
       <ParableLogo height={32} />
-      <h1 className="text-3xl font-bold">Sign in</h1>
+      <h1>Sign in</h1>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {message && <p className="text-green-600 text-sm">{message}</p>}

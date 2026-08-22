@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
+import ExportFeedsButton from './ExportFeedsButton'
 
 const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
   { value: 'inter', label: 'Inter (default)' },
@@ -58,7 +59,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
 
   return (
     <div className="space-y-6">
-      <div className="border border-border p-4 space-y-2">
+      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Font</h2>
         <p className="text-xs text-muted">
           Applies to body text throughout the app — headings stay Hanken Grotesk.
@@ -76,7 +77,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
         </select>
       </div>
 
-      <div className="border border-border p-4 space-y-2">
+      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Timezone</h2>
         <p className="text-xs text-muted">
           Auto-detect uses your browser&rsquo;s timezone ({detectedZone}) without needing to pick one.
@@ -95,7 +96,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
         </select>
       </div>
 
-      <div className="border border-border p-4 space-y-2">
+      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Clock</h2>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-1.5">
@@ -119,7 +120,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
         </div>
       </div>
 
-      <div className="border border-border p-4 space-y-2">
+      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Theme</h2>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-1.5">
@@ -151,6 +152,8 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
           </label>
         </div>
       </div>
+
+      <ExportFeedsButton />
 
       <div className="text-sm text-muted" role="status">
         {status === 'saving' && 'Saving…'}

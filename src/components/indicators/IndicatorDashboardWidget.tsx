@@ -18,7 +18,7 @@ export default function IndicatorDashboardWidget({
   const deltaPct = delta !== null && previousValue ? (delta / Math.abs(previousValue)) * 100 : null
 
   return (
-    <div className="h-full flex flex-col border border-border bg-background overflow-hidden">
+    <div className="card-elevated card-elevated-interactive h-full flex flex-col overflow-hidden">
       <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-border cursor-move shrink-0">
         <span className="text-sm font-semibold text-foreground truncate">
           {displayName ?? seriesCode}

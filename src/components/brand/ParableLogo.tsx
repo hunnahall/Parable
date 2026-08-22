@@ -8,7 +8,7 @@ export default function ParableLogo({ height = 32 }: { height?: number }) {
   return (
     <div
       className="inline-flex items-center"
-      style={{ gap: height * 0.07 }}
+      style={{ gap: height * 0.12 }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

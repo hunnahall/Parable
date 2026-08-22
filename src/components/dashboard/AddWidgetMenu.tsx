@@ -66,16 +66,16 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center min-h-[52px] text-sm font-semibold border-2 border-accent px-4 py-2 hover:bg-accent/10 transition-colors"
+        className="flex items-center text-xs font-medium border border-accent text-accent px-2.5 py-1.5 hover:bg-accent/10 transition-colors"
       >
-        <Plus size={16} strokeWidth={2.5} className="-ms-1 me-2" aria-hidden="true" />
+        <Plus size={13} strokeWidth={2.5} className="-ms-0.5 me-1.5" aria-hidden="true" />
         Add widget
       </button>
     )
   }
 
   return (
-    <div className="flex items-center min-h-[52px] gap-2 text-sm border-2 border-accent px-4 py-2 bg-background">
+    <div className="flex items-center gap-2 text-xs border border-accent px-2.5 py-1.5 bg-background">
       <select
         value={widgetType}
         onChange={(e) => setWidgetType(e.target.value as WidgetType)}

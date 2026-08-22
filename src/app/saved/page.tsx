@@ -48,7 +48,7 @@ export default async function SavedPage({
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-4">Saved</h1>
+      <h1 className="mb-4">Saved</h1>
       <ArticlesView
         basePath="/saved"
         items={page.items}

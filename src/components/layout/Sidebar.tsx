@@ -36,9 +36,15 @@ export default function Sidebar({
         (collapsed ? 'w-16' : 'w-56')
       }
     >
-      <div className="flex items-center justify-between gap-2 p-4">
+      <div
+        className={
+          collapsed
+            ? 'flex items-center justify-center p-4'
+            : 'flex items-center justify-between gap-2 p-4'
+        }
+      >
         <Link href="/" aria-label="Parable" className="min-w-0">
-          {collapsed ? <ParableMark size={22} /> : <ParableLogo height={22} />}
+          {collapsed ? <ParableMark size={24} /> : <ParableLogo height={44} />}
         </Link>
         {!collapsed && (
           <button

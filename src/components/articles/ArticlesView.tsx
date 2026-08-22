@@ -211,11 +211,17 @@ export default function ArticlesView({
       )}
 
       {localItems.length === 0 ? (
-        <p className="text-sm text-muted">
-          {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
-        </p>
+        <div className="relative py-16 text-center">
+          <div className="empty-state-watermark" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/parable-mark.svg" alt="" className="w-40 h-40" />
+          </div>
+          <p className="relative text-sm text-muted">
+            {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
+          </p>
+        </div>
       ) : (
-        <ul className="divide-y divide-border border border-border">
+        <ul className="card-elevated divide-y divide-border">
           {localItems.map((item) => (
             <ArticleCard
               key={item.id}

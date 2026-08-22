@@ -110,7 +110,7 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
   }
 
   return (
-    <div className="border border-border p-4 space-y-3">
+    <div className="card-elevated p-4 space-y-3">
       <h2 className="text-sm font-medium">Manage folders</h2>
       <form onSubmit={handleAdd} className="flex flex-wrap gap-3">
         <input

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { runIngest, type IngestSummary } from './ingest'
+import { generateFeedsOpml } from './opmlExport'
 import type { FeedRow } from './data'
 
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
@@ -109,4 +110,12 @@ export async function removeFeed(id: string): Promise<{ error: string | null }> 
   revalidatePath('/feeds')
   revalidatePath('/')
   return { error: null }
+}
+
+export async function exportFeedsOpml(): Promise<{ opml: string | null; error: string | null }> {
+  const user = await getUser()
+  if (!user) return { opml: null, error: 'Not signed in' }
+
+  const opml = await generateFeedsOpml()
+  return { opml, error: null }
 }

@@ -208,7 +208,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
         </button>
       </div>
 
-      <form onSubmit={handleAdd} className="border border-border p-4 space-y-3">
+      <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
         <h2 className="text-sm font-medium">Add an indicator (FRED)</h2>
         <p className="text-xs text-muted">
           Only FRED is supported right now — find series codes at fred.stlouisfed.org.
@@ -242,7 +242,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {selectedIds.size > 0 && (
-        <div className="border border-border p-4 space-y-3">
+        <div className="card-elevated p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm">
               {selectedIds.size} indicator{selectedIds.size === 1 ? '' : 's'} selected
@@ -285,7 +285,7 @@ export default function IndicatorManager({ indicators }: { indicators: Indicator
       {localIndicators.length === 0 ? (
         <p className="text-sm text-muted">No indicators yet.</p>
       ) : (
-        <ul className="divide-y divide-border border border-border">
+        <ul className="card-elevated divide-y divide-border">
           {localIndicators.map((indicator) => (
             <li key={indicator.id} className="p-4">
               {editingId === indicator.id ? (

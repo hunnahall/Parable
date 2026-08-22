@@ -21,7 +21,7 @@ export default async function FeedsPage() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold">Manage Feeds</h1>
+      <h1>Manage Feeds</h1>
       <FeedManager
         feeds={feeds}
         folders={folderOptions}

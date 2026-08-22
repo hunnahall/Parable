@@ -27,18 +27,18 @@ export default function MobileSidebarDrawer({
 
   return (
     <>
-      <header className="md:hidden flex items-center justify-between gap-4 p-4 border-b border-border">
-        <Link href="/" aria-label="Parable">
-          <ParableLogo height={22} />
-        </Link>
+      <header className="md:hidden flex items-center gap-4 p-4 border-b border-border">
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
-          className="text-muted hover:text-foreground transition-colors"
+          className="text-muted hover:text-foreground transition-colors shrink-0"
         >
           <Menu size={20} aria-hidden="true" />
         </button>
+        <Link href="/" aria-label="Parable">
+          <ParableLogo height={24} />
+        </Link>
       </header>
 
       {open && (
@@ -52,10 +52,10 @@ export default function MobileSidebarDrawer({
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"
-            className="absolute inset-y-0 left-0 w-64 bg-background border-r border-border flex flex-col transition-transform duration-[var(--motion-standard)] ease-out"
+            className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border flex flex-col shadow-[var(--shadow-modal)] transition-transform duration-[var(--motion-standard)] ease-out"
           >
             <div className="flex items-center justify-between gap-2 p-4">
-              <ParableLogo height={22} />
+              <ParableLogo height={44} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}

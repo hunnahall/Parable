@@ -62,7 +62,7 @@ export default function ExportDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Export article"
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-background border border-border p-5"
+        className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-5"
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">Export article</h2>

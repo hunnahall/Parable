@@ -119,7 +119,13 @@ export default function DashboardGrid({
         />
       </div>
       {widgets.length === 0 ? (
-        <p className="text-sm text-muted">No widgets yet — add one to get started.</p>
+        <div className="relative py-24 text-center">
+          <div className="empty-state-watermark" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/parable-mark.svg" alt="" className="w-56 h-56" />
+          </div>
+          <p className="relative text-sm text-muted">No widgets yet — add one to get started.</p>
+        </div>
       ) : (
         <GridLayout
           layout={layout}
@@ -130,9 +136,14 @@ export default function DashboardGrid({
           onDragStop={handleLayoutSettled}
           onResizeStop={handleLayoutSettled}
         >
-          {widgets.map((widget) => (
+          {widgets.map((widget, i) => (
             <div key={widget.id}>
-              <WidgetCard widget={widget} data={widgetData} onRemove={handleRemove} />
+              <WidgetCard
+                widget={widget}
+                data={widgetData}
+                onRemove={handleRemove}
+                revealDelayMs={Math.min(i, 10) * 40}
+              />
             </div>
           ))}
         </GridLayout>
