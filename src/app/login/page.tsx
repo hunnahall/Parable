@@ -45,7 +45,7 @@ export default async function LoginPage({
         <div className="flex gap-3 pt-2">
           <button
             formAction={login}
-            className="flex-1 bg-foreground text-background py-2 transition-colors hover:opacity-90"
+            className="flex-1 border border-brand bg-brand text-brand-foreground py-2 transition-colors hover:opacity-90"
           >
             Sign in
           </button>
