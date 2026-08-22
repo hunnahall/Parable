@@ -7,6 +7,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
@@ -42,6 +43,11 @@
   --accent: #2f6fb8;
   --accent-foreground: #ffffff;
   --brand: #92afd7;
+  /* Brand blue is the same hue in both themes (it's the Parable mark's
+     own color, not a theme-adaptive accent), so unlike accent-foreground
+     this doesn't flip per theme — #92afd7 is light enough to need dark
+     ink text in light AND dark mode alike. */
+  --brand-foreground: #131418;
   /* "Label gray" from the design system's core neutrals — the app's
      existing secondary/de-emphasized text color, most call sites already
      use it via text-muted. */
@@ -52,6 +58,13 @@
      resolves the page's default font-family on <html> itself (:root),
      which has no ancestor to inherit a body-scoped custom property from. */
   --font-body-active: var(--font-inter);
+
+  /* Motion tokens per the design system's Motion table — a state
+     changing, not a flourish. Fast: hover/focus/press. Standard: panel,
+     tab, section transitions. Slow: page-level reveals, modal in/out. */
+  --motion-fast: 120ms;
+  --motion-standard: 200ms;
+  --motion-slow: 360ms;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -116,6 +129,21 @@ input[type="checkbox"], input[type="radio"] {
 .bg-dot-grid {
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 20px 20px;
+}
+
+@keyframes landing-reveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-landing-reveal {
+  animation: landing-reveal var(--motion-slow) ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-landing-reveal {
+    animation: none;
+  }
 }
 
 a, button, input, select, [tabindex] {
