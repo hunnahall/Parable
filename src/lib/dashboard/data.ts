@@ -14,6 +14,8 @@ export interface ArticleItem {
   state: ArticleCuration | null
   note: string | null
   tags: string[]
+  archivedAt: string | null
+  folderId: string | null
 }
 
 export interface FeedOption {
@@ -90,11 +92,12 @@ interface ArticleStateInfo {
   state: ArticleCuration
   note: string | null
   tags: string[]
+  archivedAt: string | null
 }
 
 // All of a user's curation state fits comfortably in one query at personal
-// scale — used both to exclude ignored items from the default views and to
-// annotate the ones that are saved.
+// scale — used both to exclude archived items from the default views and to
+// annotate the ones that are saved/archived.
 async function getArticleStatesMap(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<Map<string, ArticleStateInfo>> {
@@ -103,16 +106,39 @@ async function getArticleStatesMap(
 
   const { data, error } = await supabase
     .from('article_states')
-    .select('feed_item_id, state, note, tags')
+    .select('feed_item_id, state, note, tags, archived_at')
     .eq('user_id', user.id)
   logQueryError('dashboard/getArticleStatesMap', error)
 
   return new Map(
     (data ?? []).map((row) => [
       row.feed_item_id,
-      { state: row.state as ArticleCuration, note: row.note, tags: row.tags ?? [] },
+      {
+        state: row.state as ArticleCuration,
+        note: row.note,
+        tags: row.tags ?? [],
+        archivedAt: row.archived_at,
+      },
     ])
   )
+}
+
+// A user's per-article folder filing (Saved-page organization) — separate
+// from feed_folders (subscription organization), though both read from the
+// same folders table. One row per (user, article) by article_folders' PK.
+async function getArticleFoldersMap(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<Map<string, string>> {
+  const user = await getUser()
+  if (!user) return new Map()
+
+  const { data, error } = await supabase
+    .from('article_folders')
+    .select('feed_item_id, folder_id')
+    .eq('user_id', user.id)
+  logQueryError('dashboard/getArticleFoldersMap', error)
+
+  return new Map((data ?? []).map((row) => [row.feed_item_id, row.folder_id]))
 }
 
 const ARTICLE_SELECT =
@@ -131,7 +157,8 @@ function toArticleItem(
     published_at: string | null
   },
   feedMeta: Map<string, FeedMeta>,
-  states: Map<string, ArticleStateInfo>
+  states: Map<string, ArticleStateInfo>,
+  folders: Map<string, string> = new Map()
 ): ArticleItem {
   const info = states.get(item.id)
   const meta = feedMeta.get(item.feed_id)
@@ -146,14 +173,42 @@ function toArticleItem(
     state: info?.state ?? null,
     note: info?.note ?? null,
     tags: info?.tags ?? [],
+    archivedAt: info?.archivedAt ?? null,
+    folderId: folders.get(item.id) ?? null,
   }
 }
 
+// Single-article lookup for the reading view (src/app/articles/[id]/page.tsx)
+// — same toArticleItem shape as the list views, plus original_language
+// (needed there to decide whether translate-on-open should run).
+export async function getArticleById(
+  id: string
+): Promise<(ArticleItem & { originalLanguage: string | null }) | null> {
+  const supabase = await createClient()
+  const { data: item, error } = await supabase
+    .from('feed_items')
+    .select(`${ARTICLE_SELECT}, original_language`)
+    .eq('id', id)
+    .maybeSingle()
+  logQueryError('dashboard/getArticleById', error)
+  if (!item) return null
+
+  const states = await getArticleStatesMap(supabase)
+  const folders = await getArticleFoldersMap(supabase)
+  const feedMeta = await attachFeedMeta(supabase, [item])
+
+  return { ...toArticleItem(item, feedMeta, states, folders), originalLanguage: item.original_language }
+}
+
+// Dashboard-widget reads (headlines/feed/category widgets on the home page)
+// exclude archived articles but still show saved ones inline — the same
+// "hide what the user dismissed" behavior the old ignored-exclusion gave,
+// with archived as the new dismissal signal.
 export async function getHeadlinesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
-  const ignoredIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'ignored')
+  const archivedIds = [...states.entries()]
+    .filter(([, info]) => info.state === 'archived')
     .map(([id]) => id)
 
   let query = supabase
@@ -161,8 +216,8 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
     .select(ARTICLE_SELECT)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (ignoredIds.length > 0) {
-    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  if (archivedIds.length > 0) {
+    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
   }
 
   const { data: items, error } = await query
@@ -193,8 +248,8 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
   if (!feed) return null
 
   const states = await getArticleStatesMap(supabase)
-  const ignoredIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'ignored')
+  const archivedIds = [...states.entries()]
+    .filter(([, info]) => info.state === 'archived')
     .map(([id]) => id)
 
   let query = supabase
@@ -203,8 +258,8 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
     .eq('feed_id', feedId)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (ignoredIds.length > 0) {
-    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  if (archivedIds.length > 0) {
+    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
   }
 
   const { data: items, error } = await query
@@ -220,7 +275,10 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
 
   // Same "deleted vs. genuinely empty" distinction as getFeedData — a
   // widget pointing at a deleted category shouldn't look identical to a
-  // real category with no feeds in it yet.
+  // real category with no feeds in it yet. (This widget still reads the
+  // legacy categories/feeds.category columns, kept read-only alongside
+  // folders until the home dashboard's category widget is migrated too —
+  // out of scope for the folders/tags rework.)
   const { data: categoryRow, error: categoryError } = await supabase
     .from('categories')
     .select('name')
@@ -232,8 +290,8 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   if (!categoryRow) return null
 
   const states = await getArticleStatesMap(supabase)
-  const ignoredIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'ignored')
+  const archivedIds = [...states.entries()]
+    .filter(([, info]) => info.state === 'archived')
     .map(([id]) => id)
 
   const { data: feedsInCategory, error: feedsInCategoryError } = await supabase
@@ -250,8 +308,8 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
     .in('feed_id', feedIds)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (ignoredIds.length > 0) {
-    query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  if (archivedIds.length > 0) {
+    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
   }
 
   const { data: items, error } = await query
@@ -262,6 +320,9 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   return items.map((item) => toArticleItem(item, feedMeta, states))
 }
 
+// Home dashboard's "Saved articles" widget — unbounded (no pagination),
+// unlike the Saved page's getArticlesPage({view:'saved'}), which supports
+// filters/cursor pagination.
 export async function getSavedArticlesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
@@ -284,11 +345,37 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
   return items.map((item) => toArticleItem(item, feedMeta, states))
 }
 
+// Sidebar badge count: articles with no curation row at all (not saved,
+// not archived) — same "unfiled" predicate the Articles page uses as its
+// default view. Counted via ids-to-exclude rather than a DB-side NOT IN
+// subquery since article_states has no FK-joinable relationship exposed
+// through PostgREST for an anti-join here, matching this file's existing
+// "fetch states, filter in JS" convention.
+export async function getArticlesUnfiledCount(): Promise<number> {
+  const supabase = await createClient()
+  const user = await getUser()
+  if (!user) return 0
+
+  const states = await getArticleStatesMap(supabase)
+  const filedIds = [...states.keys()]
+
+  let query = supabase.from('feed_items').select('id', { count: 'exact', head: true })
+  if (filedIds.length > 0) {
+    query = query.not('id', 'in', `(${filedIds.join(',')})`)
+  }
+  const { count, error } = await query
+  logQueryError('dashboard/getArticlesUnfiledCount', error)
+  return count ?? 0
+}
+
 export interface ArticlesPageFilters {
   query?: string
-  category?: string | null
+  view?: 'unfiled' | 'saved' | 'archived'
+  folderId?: string | null
+  sourceFeedId?: string | null
   tag?: string | null
-  savedOnly?: boolean
+  dateFrom?: string | null
+  dateTo?: string | null
   cursor?: { publishedAt: string; id: string } | null
   limit?: number
 }
@@ -307,10 +394,38 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 // user pages — keyset pagination filters by value instead of position, so
 // it's immune to that. (published_at, id) as the cursor tuple because
 // published_at alone isn't unique; id is the tiebreaker for a total order.
+//
+// Powers all three lifecycle pages (Articles/Saved/Archive) via `view`:
+// 'unfiled' = no article_states row yet (default, the Articles page),
+// 'saved'/'archived' = state matches exactly (the Saved/Archive pages).
 export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
+  const folders = await getArticleFoldersMap(supabase)
   const limit = filters.limit ?? ARTICLES_PAGE_LIMIT
+  const view = filters.view ?? 'unfiled'
+
+  // Unfiled articles never have a curation row, so they can never carry
+  // tags — a tag filter combined with the unfiled view is definitionally
+  // empty rather than a query worth running.
+  if (filters.tag && view === 'unfiled') {
+    return { items: [], nextCursor: null }
+  }
+
+  let includeIds: string[] | null = null
+  let excludeIds: string[] = []
+  if (view === 'unfiled') {
+    excludeIds = [...states.keys()]
+  } else {
+    includeIds = [...states.entries()].filter(([, info]) => info.state === view).map(([id]) => id)
+  }
+
+  if (filters.tag) {
+    const taggedIds = new Set(
+      [...states.entries()].filter(([, info]) => info.tags.includes(filters.tag!)).map(([id]) => id)
+    )
+    includeIds = (includeIds ?? []).filter((id) => taggedIds.has(id))
+  }
 
   let query = supabase.from('feed_items').select(ARTICLE_SELECT)
 
@@ -321,39 +436,47 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     })
   }
 
-  if (filters.category) {
-    const { data: feedsInCategory, error } = await supabase
-      .from('feeds')
-      .select('id')
-      .eq('category', filters.category)
-    logQueryError('dashboard/getArticlesPage (category lookup)', error)
-    const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
-    if (feedIds.length === 0) return { items: [], nextCursor: null }
-    query = query.in('feed_id', feedIds)
+  if (filters.sourceFeedId) {
+    query = query.eq('feed_id', filters.sourceFeedId)
   }
 
-  // A tag filter implies saved (tags only exist on saved article_states
-  // rows) — the two are mutually exclusive by the confirmed requirement,
-  // not just coincidentally so.
-  if (filters.tag) {
-    const taggedIds = [...states.entries()]
-      .filter(([, info]) => info.state === 'saved' && info.tags.includes(filters.tag!))
-      .map(([id]) => id)
-    if (taggedIds.length === 0) return { items: [], nextCursor: null }
-    query = query.in('id', taggedIds)
-  } else if (filters.savedOnly) {
-    const savedIds = [...states.entries()]
-      .filter(([, info]) => info.state === 'saved')
-      .map(([id]) => id)
-    if (savedIds.length === 0) return { items: [], nextCursor: null }
-    query = query.in('id', savedIds)
-  } else {
-    const ignoredIds = [...states.entries()]
-      .filter(([, info]) => info.state === 'ignored')
-      .map(([id]) => id)
-    if (ignoredIds.length > 0) {
-      query = query.not('id', 'in', `(${ignoredIds.join(',')})`)
+  if (filters.dateFrom) {
+    query = query.gte('published_at', filters.dateFrom)
+  }
+  if (filters.dateTo) {
+    query = query.lte('published_at', filters.dateTo)
+  }
+
+  // A folder can hold feeds (subscription organization) and/or saved
+  // articles filed directly into it — matching either satisfies the
+  // filter, since both mean "this article belongs to that folder" from
+  // the user's point of view.
+  if (filters.folderId) {
+    const [{ data: feedFolderRows, error: feedFolderError }, { data: articleFolderRows, error: articleFolderError }] =
+      await Promise.all([
+        supabase.from('feed_folders').select('feed_id').eq('folder_id', filters.folderId),
+        supabase.from('article_folders').select('feed_item_id').eq('folder_id', filters.folderId),
+      ])
+    logQueryError('dashboard/getArticlesPage (folder feed lookup)', feedFolderError)
+    logQueryError('dashboard/getArticlesPage (folder article lookup)', articleFolderError)
+
+    const folderFeedIds = (feedFolderRows ?? []).map((row) => row.feed_id)
+    const folderArticleIds = (articleFolderRows ?? []).map((row) => row.feed_item_id)
+    if (folderFeedIds.length === 0 && folderArticleIds.length === 0) {
+      return { items: [], nextCursor: null }
     }
+
+    const orParts: string[] = []
+    if (folderFeedIds.length > 0) orParts.push(`feed_id.in.(${folderFeedIds.join(',')})`)
+    if (folderArticleIds.length > 0) orParts.push(`id.in.(${folderArticleIds.join(',')})`)
+    query = query.or(orParts.join(','))
+  }
+
+  if (includeIds !== null) {
+    if (includeIds.length === 0) return { items: [], nextCursor: null }
+    query = query.in('id', includeIds)
+  } else if (excludeIds.length > 0) {
+    query = query.not('id', 'in', `(${excludeIds.join(',')})`)
   }
 
   query = query.order('published_at', { ascending: false }).order('id', { ascending: false })
@@ -379,34 +502,12 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   const pageRows = hasMore ? rows.slice(0, limit) : rows
 
   const feedMeta = await attachFeedMeta(supabase, pageRows)
-  const items = pageRows.map((item) => toArticleItem(item, feedMeta, states))
+  const items = pageRows.map((item) => toArticleItem(item, feedMeta, states, folders))
 
   const last = pageRows.at(-1)
   const nextCursor = hasMore && last?.published_at ? { publishedAt: last.published_at, id: last.id } : null
 
   return { items, nextCursor }
-}
-
-// Distinct personal tags across saved articles, for the Articles page's
-// tag filter — a small per-user set, same "fetch and dedupe in JS" scale
-// reasoning as getArticleStatesMap.
-export async function listSavedTags(): Promise<string[]> {
-  const user = await getUser()
-  if (!user) return []
-
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('article_states')
-    .select('tags')
-    .eq('user_id', user.id)
-    .eq('state', 'saved')
-  logQueryError('dashboard/listSavedTags', error)
-
-  const set = new Set<string>()
-  for (const row of data ?? []) {
-    for (const tag of row.tags ?? []) set.add(tag)
-  }
-  return [...set].sort()
 }
 
 export async function getIndicatorsData(

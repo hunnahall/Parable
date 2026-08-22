@@ -1,28 +1,52 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { addFeed, updateFeed, removeFeed, runIngestNow } from '@/lib/feeds/actions'
+import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
+import type { EngagementRate } from '@/lib/feeds/engagement'
 import { usePreferences } from '@/components/preferences/PreferencesProvider'
 import { formatDateTime } from '@/lib/formatting'
-import CategoryManager from './CategoryManager'
+import FolderManager from './FolderManager'
+import type { FolderRow } from '@/lib/folders/data'
 import OpmlImport from './OpmlImport'
 
-const UNCATEGORIZED = 'Uncategorized'
+const NO_FOLDER = 'No folder'
+
+function folderLabelsFor(folderIds: string[], folders: { id: string; label: string }[]): string {
+  if (folderIds.length === 0) return NO_FOLDER
+  const byId = new Map(folders.map((f) => [f.id, f.label]))
+  return folderIds.map((id) => byId.get(id) ?? id).join(', ')
+}
+
+function formatRate(rate: EngagementRate | undefined): string {
+  if (!rate || rate.rate === null) return '—'
+  return `${Math.round(rate.rate * 100)}%`
+}
+
+function selectedOptionIds(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
+  return Array.from(options)
+    .filter((o) => o.selected)
+    .map((o) => o.value)
+}
 
 export default function FeedManager({
   feeds,
-  categories,
+  folders,
+  folderRows,
+  engagement,
 }: {
   feeds: FeedRow[]
-  categories: string[]
+  folders: { id: string; label: string }[]
+  folderRows: FolderRow[]
+  engagement: Record<string, EngagementRate>
 }) {
   const router = useRouter()
   const { timezone, clockFormat } = usePreferences()
   const formatDate = (dateString: string | null) => formatDateTime(dateString, { timezone, clockFormat }) ?? 'never'
-  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [folderFilter, setFolderFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -39,46 +63,46 @@ export default function FeedManager({
 
   const [newUrl, setNewUrl] = useState('')
   const [newTitle, setNewTitle] = useState('')
-  const [newCategory, setNewCategory] = useState('')
+  const [newFolderIds, setNewFolderIds] = useState<string[]>([])
 
   const [editTitle, setEditTitle] = useState('')
-  const [editCategory, setEditCategory] = useState('')
+  const [editFolderIds, setEditFolderIds] = useState<string[]>([])
 
   const [ingesting, setIngesting] = useState(false)
   const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null)
   const [ingestError, setIngestError] = useState<string | null>(null)
 
-  const filterOptions = useMemo(() => {
-    const set = new Set(localFeeds.map((feed) => feed.category || UNCATEGORIZED))
-    return ['all', ...Array.from(set).sort()]
-  }, [localFeeds])
-
   const visibleFeeds = localFeeds.filter((feed) => {
-    if (categoryFilter === 'all') return true
-    return (feed.category || UNCATEGORIZED) === categoryFilter
+    if (folderFilter === 'all') return true
+    if (folderFilter === 'uncategorized') return feed.folderIds.length === 0
+    return feed.folderIds.includes(folderFilter)
   })
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setPending(true)
     setError(null)
-    const result = await addFeed({ url: newUrl, title: newTitle, category: newCategory || null })
-    setPending(false)
+    const result = await addFeed({ url: newUrl, title: newTitle, category: null })
     if (result.error !== null) {
+      setPending(false)
       setError(result.error)
       return
     }
-    setLocalFeeds((prev) => [...prev, result.feed])
+    if (newFolderIds.length > 0) {
+      await assignFeedToFolders(result.feed.id, newFolderIds)
+    }
+    setPending(false)
+    setLocalFeeds((prev) => [...prev, { ...result.feed, folderIds: newFolderIds }])
     setNewUrl('')
     setNewTitle('')
-    setNewCategory('')
+    setNewFolderIds([])
     router.refresh()
   }
 
   function startEdit(feed: FeedRow) {
     setEditingId(feed.id)
     setEditTitle(feed.title)
-    setEditCategory(feed.category ?? '')
+    setEditFolderIds(feed.folderIds)
     setError(null)
   }
 
@@ -86,13 +110,21 @@ export default function FeedManager({
     setPending(true)
     setError(null)
     const title = editTitle.trim()
-    const category = editCategory.trim() || null
-    setLocalFeeds((prev) => prev.map((feed) => (feed.id === id ? { ...feed, title, category } : feed)))
+    setLocalFeeds((prev) =>
+      prev.map((feed) => (feed.id === id ? { ...feed, title, folderIds: editFolderIds } : feed))
+    )
     setEditingId(null)
-    const result = await updateFeed(id, { title: editTitle, category: editCategory || null })
+    const [titleResult, folderResult] = await Promise.all([
+      updateFeed(id, { title: editTitle, category: null }),
+      assignFeedToFolders(id, editFolderIds),
+    ])
     setPending(false)
-    if (result.error) {
-      setError(result.error)
+    if (titleResult.error) {
+      setError(titleResult.error)
+      return
+    }
+    if (folderResult.error) {
+      setError(folderResult.error)
       return
     }
     router.refresh()
@@ -186,14 +218,15 @@ export default function FeedManager({
             className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
           />
           <select
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
+            multiple
+            value={newFolderIds}
+            onChange={(e) => setNewFolderIds(selectedOptionIds(e.target.options))}
             className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
+            size={Math.min(4, Math.max(2, folders.length))}
           >
-            <option value="">{UNCATEGORIZED}</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.label}
               </option>
             ))}
           </select>
@@ -209,23 +242,27 @@ export default function FeedManager({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <CategoryManager categories={categories} />
+      <FolderManager folders={folderRows} />
 
       <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1">
-        {filterOptions.map((category) => {
-          const active = categoryFilter === category
+        {[
+          { id: 'all', label: 'All' },
+          { id: 'uncategorized', label: NO_FOLDER },
+          ...folders,
+        ].map((option) => {
+          const active = folderFilter === option.id
           return (
             <button
-              key={category}
+              key={option.id}
               type="button"
-              onClick={() => setCategoryFilter(category)}
+              onClick={() => setFolderFilter(option.id)}
               className={
                 active
                   ? 'shrink-0 border border-accent text-accent bg-accent/10 px-3 py-1 text-xs font-medium transition-colors'
                   : 'shrink-0 border border-border text-muted px-3 py-1 text-xs font-medium hover:border-accent hover:text-accent transition-colors'
               }
             >
-              {category === 'all' ? 'All' : category}
+              {option.label}
             </button>
           )
         })}
@@ -246,14 +283,15 @@ export default function FeedManager({
                     className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
                   />
                   <select
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
+                    multiple
+                    value={editFolderIds}
+                    onChange={(e) => setEditFolderIds(selectedOptionIds(e.target.options))}
                     className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
+                    size={Math.min(4, Math.max(2, folders.length))}
                   >
-                    <option value="">{UNCATEGORIZED}</option>
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.label}
                       </option>
                     ))}
                   </select>
@@ -279,7 +317,13 @@ export default function FeedManager({
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{feed.title}</span>
                       <span className="text-xs bg-foreground/5 text-muted px-2 py-0.5">
-                        {feed.category || UNCATEGORIZED}
+                        {folderLabelsFor(feed.folderIds, folders)}
+                      </span>
+                      <span
+                        className="text-xs text-muted"
+                        title="Rolling 7-day read rate: articles you've read from this feed ÷ articles it produced"
+                      >
+                        Engagement: {formatRate(engagement[feed.id])}
                       </span>
                     </div>
                     <a

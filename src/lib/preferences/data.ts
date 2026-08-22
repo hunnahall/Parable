@@ -12,6 +12,7 @@ export interface UserPreferences {
   timezone: string
   clockFormat: ClockFormat
   theme: ThemeChoice
+  sidebarCollapsed: boolean
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -19,6 +20,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   timezone: '',
   clockFormat: '24h',
   theme: 'system',
+  sidebarCollapsed: false,
 }
 
 // No row is created for a user until they first change a setting — every
@@ -31,7 +33,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('font, timezone, clock_format, theme')
+    .select('font, timezone, clock_format, theme, sidebar_collapsed')
     .eq('user_id', user.id)
     .maybeSingle()
   logQueryError('preferences/getUserPreferences', error)
@@ -42,5 +44,6 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     timezone: data.timezone,
     clockFormat: data.clock_format as ClockFormat,
     theme: data.theme as ThemeChoice,
+    sidebarCollapsed: data.sidebar_collapsed,
   }
 }

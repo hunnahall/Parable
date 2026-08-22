@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/dashboard/data'
 
-export type ArticleCuration = 'saved' | 'ignored'
+export type ArticleCuration = 'saved' | 'archived'
 
 // Thin server-action wrapper around getArticlesPage — the Articles page's
 // client component (for "Load more") can't call data.ts functions
@@ -22,12 +22,15 @@ async function setState(
   if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
-  const { error } = await supabase
-    .from('article_states')
-    .upsert(
-      { user_id: user.id, feed_item_id: feedItemId, state },
-      { onConflict: 'user_id,feed_item_id' }
-    )
+  const { error } = await supabase.from('article_states').upsert(
+    {
+      user_id: user.id,
+      feed_item_id: feedItemId,
+      state,
+      archived_at: state === 'archived' ? new Date().toISOString() : null,
+    },
+    { onConflict: 'user_id,feed_item_id' }
+  )
 
   if (error) return { error: error.message }
 
@@ -39,11 +42,16 @@ export async function saveArticle(feedItemId: string) {
   return setState(feedItemId, 'saved')
 }
 
-export async function ignoreArticle(feedItemId: string) {
-  return setState(feedItemId, 'ignored')
+// Manual archive — replaces the old "Ignore" action. Same effect as the
+// 48h auto-archive cron sweep (see src/lib/feeds/retention.ts), just
+// triggered immediately by the user instead of by elapsed time.
+export async function archiveArticle(feedItemId: string) {
+  return setState(feedItemId, 'archived')
 }
 
-// Returns an article to its neutral state — neither saved nor ignored.
+// Returns an article to its neutral/unfiled state — neither saved nor
+// archived, so it reappears on the Articles page (or, if 48h have already
+// passed since publish, gets swept back into Archive by the next cron run).
 export async function clearArticleState(feedItemId: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -58,6 +66,33 @@ export async function clearArticleState(feedItemId: string): Promise<{ error: st
   if (error) return { error: error.message }
 
   revalidatePath('/')
+  return { error: null }
+}
+
+// Permanently deletes an article's curation row (used from the Saved page's
+// "Delete" action) — same underlying delete as clearArticleState, exposed
+// under a name that matches what it means from Saved (removing it from
+// your library entirely), not "un-saving back to Articles."
+export async function deleteArticle(feedItemId: string): Promise<{ error: string | null }> {
+  return clearArticleState(feedItemId)
+}
+
+// Display-only read tracking (see src/app/articles/[id]/page.tsx) — must
+// never touch article_states/archived_at, since read state is explicitly
+// independent of the 48h auto-archive timer.
+export async function markArticleRead(feedItemId: string): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('read_items')
+    .upsert(
+      { user_id: user.id, feed_item_id: feedItemId },
+      { onConflict: 'user_id,feed_item_id', ignoreDuplicates: true }
+    )
+
+  if (error) return { error: error.message }
   return { error: null }
 }
 

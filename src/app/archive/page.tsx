@@ -5,7 +5,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { listAllTags } from '@/lib/tags/data'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
-export default async function ArticlesPage({
+export default async function ArchivePage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -23,7 +23,7 @@ export default async function ArticlesPage({
   const params = await searchParams
   const filters: ArticlesFilters = {
     query: params.q ?? '',
-    view: 'unfiled',
+    view: 'archived',
     folderId: params.folder ?? null,
     sourceFeedId: params.source ?? null,
     tag: params.tag ?? null,
@@ -48,16 +48,15 @@ export default async function ArticlesPage({
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-4">Articles</h1>
+      <h1 className="text-3xl font-bold mb-4">Archive</h1>
       <ArticlesView
-        basePath="/articles"
+        basePath="/archive"
         items={page.items}
         nextCursor={page.nextCursor}
         folders={folders}
         feedOptions={feedOptions}
         allTags={allTags.map((t) => t.tag)}
         filters={filters}
-        showFolderPicker
       />
     </div>
   )

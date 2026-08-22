@@ -50,7 +50,7 @@ export async function addFeed(input: {
   if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
 
   revalidatePath('/feeds')
-  return { feed: data, error: null }
+  return { feed: { ...data, folderIds: [] }, error: null }
 }
 
 export async function runIngestNow(): Promise<

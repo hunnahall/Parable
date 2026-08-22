@@ -8,6 +8,7 @@ export interface FeedRow {
   category: string | null
   last_fetched_at: string | null
   last_error: string | null
+  folderIds: string[]
 }
 
 export async function listFeedsDetailed(): Promise<FeedRow[]> {
@@ -17,5 +18,24 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
     .select('id, url, title, category, last_fetched_at, last_error')
     .order('title')
   logQueryError('feeds/listFeedsDetailed', error)
-  return data ?? []
+  const feeds = data ?? []
+  if (feeds.length === 0) return []
+
+  const { data: feedFolders, error: feedFoldersError } = await supabase
+    .from('feed_folders')
+    .select('feed_id, folder_id')
+    .in(
+      'feed_id',
+      feeds.map((f) => f.id)
+    )
+  logQueryError('feeds/listFeedsDetailed (folders)', feedFoldersError)
+
+  const foldersByFeed = new Map<string, string[]>()
+  for (const row of feedFolders ?? []) {
+    const list = foldersByFeed.get(row.feed_id) ?? []
+    list.push(row.folder_id)
+    foldersByFeed.set(row.feed_id, list)
+  }
+
+  return feeds.map((feed) => ({ ...feed, folderIds: foldersByFeed.get(feed.id) ?? [] }))
 }
