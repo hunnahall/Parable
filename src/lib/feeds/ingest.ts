@@ -4,6 +4,12 @@ import { stripHtml, translateArticle } from '@/lib/translate'
 import { summarizeArticle } from '@/lib/summarize'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
+// Some feeds put the full article body in <content:encoded>/<description>
+// instead of a short snippet. This column is meant to hold a summary, not
+// an unbounded copy of the article — the full body already gets cached
+// separately (and purged) in article_content. Cap what we store here so a
+// handful of such feeds can't quietly balloon feed_items forever.
+const STORED_SUMMARY_MAX_LENGTH = 1500
 
 export interface FeedFailure {
   feedId: string
@@ -122,7 +128,7 @@ export async function runIngest(): Promise<IngestSummary> {
               guid,
               title: stripHtml(rawTitle),
               link: item.link ?? null,
-              summary: stripHtml(rawSummary),
+              summary: stripHtml(rawSummary).slice(0, STORED_SUMMARY_MAX_LENGTH),
               published_at: item.isoDate ?? null,
               original_language,
               title_en,

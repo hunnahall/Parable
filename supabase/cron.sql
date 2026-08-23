@@ -95,6 +95,30 @@ select cron.schedule(
   $$
 );
 
+-- Hard-deletes feed_items rows published 45+ days ago that were never
+-- saved, foldered, read, or tagged/noted — see purge_unengaged_feed_items()
+-- and src/lib/feeds/retention.ts::runPurgeUnengagedFeedItems. Saved or
+-- foldered articles are kept forever; read/tagged-but-not-saved-or-
+-- foldered articles are also excluded and keep following the
+-- auto-archive-articles / purge-article-content rules above indefinitely.
+-- This is the one job that bounds feed_items' long-term storage growth.
+-- Daily is plenty since the 45-day window moves slowly; scheduled clear
+-- of the other jobs.
+select cron.schedule(
+  'purge-unengaged-articles',
+  '30 5 * * *',
+  $$
+  select net.http_post(
+    url := '<YOUR_DEPLOYED_URL>/api/cron/purge-unengaged-articles',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
+    )
+  );
+  $$
+);
+
 -- To change a schedule later: re-run the matching cron.schedule() call
 -- above with a new cron expression (same job name updates it in place).
 -- To remove a job: select cron.unschedule('ingest-feeds');

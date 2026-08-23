@@ -10,6 +10,11 @@ export interface PurgeContentSummary {
   purgedCount: number
 }
 
+export interface PurgeUnengagedSummary {
+  dryRun: boolean
+  purgedCount: number
+}
+
 function adminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,6 +61,34 @@ export async function runPurgeArticleContent(
     .single()
 
   if (error) throw new Error(`purge_expired_article_content failed: ${error.message}`)
+
+  return {
+    dryRun,
+    purgedCount: Number((data as { purged_count: number }).purged_count),
+  }
+}
+
+// Hard-deletes feed_items rows published 45+ days ago that were never
+// engaged with: not saved, not foldered, not read, and not tagged/noted.
+// Saved or foldered articles are never touched by this — they're kept
+// forever, full stop. Read/tagged-but-not-saved-or-foldered articles are
+// also excluded here; those instead follow the existing archive/content-
+// purge rules above (auto-archived after 48h, content cache purged 7
+// days later) with their feed_items row kept indefinitely. This is a
+// deliberate carve-out from the "metadata kept forever" rule, scoped to
+// only the population nobody ever looked at — see
+// purge_unengaged_feed_items() in the database.
+export async function runPurgeUnengagedFeedItems(
+  opts: { dryRun?: boolean } = {}
+): Promise<PurgeUnengagedSummary> {
+  const dryRun = opts.dryRun ?? false
+
+  const supabase = adminClient()
+  const { data, error } = await supabase
+    .rpc('purge_unengaged_feed_items', { dry_run: dryRun })
+    .single()
+
+  if (error) throw new Error(`purge_unengaged_feed_items failed: ${error.message}`)
 
   return {
     dryRun,
