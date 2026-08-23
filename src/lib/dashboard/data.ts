@@ -155,7 +155,7 @@ const ARTICLE_SELECT =
 // against the REST API — see the migration that added these functions);
 // this isolates the necessary `any` escape hatch to one place instead of
 // casting at every call site.
-function feedItemsRpc(
+export function feedItemsRpc(
   supabase: Awaited<ReturnType<typeof createClient>>,
   fn: 'feed_items_excluding_states' | 'feed_items_with_state',
   args: Record<string, unknown>

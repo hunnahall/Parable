@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { feedItemsRpc } from '@/lib/dashboard/data'
+import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
 // Wipes every feed, article, and piece of per-article curation (saved,
 // archived, tags, notes, read state, folder placement) plus every other
@@ -118,4 +120,57 @@ export async function performPartialReset(): Promise<{
 
   revalidatePath('/')
   return { error: null, archivedCount: unfiledIds.length }
+}
+
+// Retroactively applies the Auto-delete by keyword list (see
+// SettingsForm's Auto-delete section) to whatever's currently in the
+// Articles inbox — runIngest's ingest-time check (src/lib/feeds/ingest.ts)
+// only ever applies to an item as it's first fetched, so a keyword added
+// after an article was already ingested would otherwise never touch it.
+// Scoped to the same "unfiled" predicate as the Articles page and its
+// sidebar badge (see getArticlesUnfiledCount in src/lib/dashboard/data.ts):
+// saved/archived articles reflect a user's explicit curation, which this
+// blocklist — a pre-triage junk filter, not an override — shouldn't touch.
+export async function runAutoDeleteRulesNow(): Promise<{
+  error: string | null
+  deletedCount: number
+}> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in', deletedCount: 0 }
+
+  const supabase = await createClient()
+
+  const { data: prefsRow, error: prefsError } = await supabase
+    .from('user_preferences')
+    .select('auto_delete_keywords')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (prefsError) return { error: prefsError.message, deletedCount: 0 }
+
+  const keywords: string[] = prefsRow?.auto_delete_keywords ?? []
+  if (keywords.length === 0) return { error: null, deletedCount: 0 }
+
+  const { data: items, error: itemsError } = await feedItemsRpc(
+    supabase,
+    'feed_items_excluding_states',
+    { p_user_id: user.id, p_exclude_states: ['saved', 'archived'] }
+  ).select('id, title, title_en')
+  if (itemsError) return { error: itemsError.message, deletedCount: 0 }
+
+  const matchedIds = ((items ?? []) as { id: string; title: string; title_en: string | null }[])
+    .filter((item) => matchedAutoDeleteKeyword(item.title_en ?? item.title, keywords))
+    .map((item) => item.id)
+
+  if (matchedIds.length === 0) return { error: null, deletedCount: 0 }
+
+  // Hard delete, same as purgeArticles (src/lib/articles/actions.ts) — the
+  // shared feed_items row, cascading to article_states/read_items/etc. for
+  // every user. Safe here because matchedIds only ever came from the
+  // unfiled set above, so none of them have a saved/archived state to lose.
+  const { error: deleteError } = await supabase.from('feed_items').delete().in('id', matchedIds)
+  if (deleteError) return { error: deleteError.message, deletedCount: 0 }
+
+  revalidatePath('/articles')
+  revalidatePath('/', 'layout')
+  return { error: null, deletedCount: matchedIds.length }
 }

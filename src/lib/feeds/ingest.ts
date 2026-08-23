@@ -3,6 +3,7 @@ import Parser from 'rss-parser'
 import { stripHtml, translateArticle } from '@/lib/translate'
 import { summarizeArticle } from '@/lib/summarize'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
+import { matchedAutoDeleteKeyword } from './autoDelete'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
 // Some feeds put the full article body in <content:encoded>/<description>
@@ -131,18 +132,6 @@ async function loadIngestPreferences(
     targetLanguage: data?.language ?? DEFAULT_LANGUAGE,
     autoDeleteKeywords: data?.auto_delete_enabled ? (data.auto_delete_keywords ?? []) : [],
   }
-}
-
-// Case-insensitive substring match — deliberately simple (no word-boundary
-// handling) so "soccer" also catches "soccer-related", matching how a user
-// thinks about a blocklist.
-function matchedAutoDeleteKeyword(title: string, keywords: string[]): string | null {
-  const lowerTitle = title.toLowerCase()
-  for (const keyword of keywords) {
-    const needle = keyword.trim().toLowerCase()
-    if (needle && lowerTitle.includes(needle)) return keyword
-  }
-  return null
 }
 
 type FeedRow = { id: string; url: string; title: string | null }

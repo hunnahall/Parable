@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
+import { runAutoDeleteRulesNow } from '@/lib/settings/actions'
 import { SUPPORTED_LANGUAGES } from '@/lib/languages'
 import ExportFeedsButton from './ExportFeedsButton'
 import CleanSlateSection from './CleanSlateSection'
@@ -33,6 +34,8 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [keywordInput, setKeywordInput] = useState('')
+  const [runningRules, setRunningRules] = useState(false)
+  const [rulesRunResult, setRulesRunResult] = useState<string | null>(null)
 
   // Computed only after mount, not during render — Intl.supportedValuesOf's
   // zone list and the resolved default zone both come from the runtime's own
@@ -88,6 +91,26 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
 
   function removeKeyword(word: string) {
     applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
+  }
+
+  async function handleRunRulesNow() {
+    setRunningRules(true)
+    setRulesRunResult(null)
+    const result = await runAutoDeleteRulesNow()
+    setRunningRules(false)
+    if (result.error !== null) {
+      setRulesRunResult(result.error)
+      return
+    }
+    setRulesRunResult(
+      result.deletedCount === 0
+        ? 'No matching articles found.'
+        : `Deleted ${result.deletedCount} article${result.deletedCount === 1 ? '' : 's'}.`
+    )
+    // Removed articles affect the Articles list and the sidebar's unread
+    // count, both server-rendered — a client-only state update can't reach
+    // either.
+    router.refresh()
   }
 
   return (
@@ -254,6 +277,21 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
             ))}
           </ul>
         )}
+        <div>
+          <button
+            type="button"
+            onClick={handleRunRulesNow}
+            disabled={runningRules || prefs.autoDeleteKeywords.length === 0}
+            className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+          >
+            {runningRules ? 'Running…' : 'Run rules now'}
+          </button>
+          <p className="text-xs text-muted mt-1">
+            Deletes any article currently in your Articles inbox whose title matches one of these
+            keywords. Saved and archived articles are left alone.
+          </p>
+          {rulesRunResult && <p className="text-xs text-muted mt-1">{rulesRunResult}</p>}
+        </div>
       </div>
 
       <ExportFeedsButton />
