@@ -77,6 +77,56 @@ export async function deleteArticle(feedItemId: string): Promise<{ error: string
   return clearArticleState(feedItemId)
 }
 
+// Bulk version of archiveArticle — one upsert instead of N sequential
+// ones, for the Articles/Saved pages' multi-select toolbar (not shown on
+// Archive, where every item is already archived — see ArticlesView).
+export async function archiveArticlesBulk(
+  feedItemIds: string[]
+): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (feedItemIds.length === 0) return { error: null }
+
+  const supabase = await createClient()
+  const now = new Date().toISOString()
+  const { error } = await supabase.from('article_states').upsert(
+    feedItemIds.map((feedItemId) => ({
+      user_id: user.id,
+      feed_item_id: feedItemId,
+      state: 'archived' as const,
+      archived_at: now,
+    })),
+    { onConflict: 'user_id,feed_item_id' }
+  )
+  if (error) return { error: error.message }
+
+  revalidatePath('/')
+  return { error: null }
+}
+
+// Unlike deleteArticle/clearArticleState above (which only remove *your*
+// curation row), this permanently deletes the feed_items rows themselves —
+// the shared article record, cascading to every user's article_states,
+// read_items, article_folders, and article_content for these ids.
+// Reachable from the Articles/Saved/Archive bulk toolbar alike — this can
+// delete an article someone explicitly saved, by design (see
+// ArticlesView's confirm-to-delete step, the only guard against a stray
+// click). feedItemIds only ever comes from a user's on-screen selection,
+// not a derived "everything matching X" set, so unlike the dashboard
+// queries this fixed, there's no id-list-size scaling concern here.
+export async function purgeArticles(feedItemIds: string[]): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (feedItemIds.length === 0) return { error: null }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('feed_items').delete().in('id', feedItemIds)
+  if (error) return { error: error.message }
+
+  revalidatePath('/')
+  return { error: null }
+}
+
 // Display-only read tracking (see src/app/articles/[id]/page.tsx) — must
 // never touch article_states/archived_at, since read state is explicitly
 // independent of the 48h auto-archive timer.

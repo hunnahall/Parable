@@ -57,6 +57,7 @@ export default async function ArchivePage({
         feedOptions={feedOptions}
         allTags={allTags.map((t) => t.tag)}
         filters={filters}
+        enableBulkActions
       />
     </div>
   )

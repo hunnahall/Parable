@@ -58,6 +58,7 @@ export default async function ArticlesPage({
         allTags={allTags.map((t) => t.tag)}
         filters={filters}
         showFolderPicker
+        enableBulkActions
       />
     </div>
   )

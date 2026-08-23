@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/dashboard/data'
-import { fetchArticlesPage } from '@/lib/articles/actions'
+import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
 import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
 
@@ -46,6 +46,7 @@ export default function ArticlesView({
   filters,
   showFolderPicker = false,
   showDelete = false,
+  enableBulkActions = false,
 }: {
   basePath: string
   items: ArticleItem[]
@@ -56,10 +57,21 @@ export default function ArticlesView({
   filters: ArticlesFilters
   showFolderPicker?: boolean
   showDelete?: boolean
+  // Multi-select toolbar (select all, bulk archive, bulk delete) —
+  // Articles/Saved/Archive all opt in. "Archive selected" is hidden on
+  // the archived view (nothing to do there); "Delete selected" is a full
+  // purge (see purgeArticles) on every view it's shown on, including
+  // Saved and Archive — this can permanently delete an article someone
+  // explicitly saved, by design, per the caller's request.
+  enableBulkActions?: boolean
 }) {
   const router = useRouter()
   const [queryDraft, setQueryDraft] = useState(filters.query)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkPending, setBulkPending] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Folders created inline from a card (see ArticleCard's "+ Add folder")
   // need to show up in every card's dropdown immediately, not just the one
@@ -85,6 +97,10 @@ export default function ArticlesView({
   if (items !== syncedCursorFrom) {
     setSyncedCursorFrom(items)
     setCursor(nextCursor)
+    // A new filter/page load replaces the list wholesale — stale
+    // selection referring to ids that may no longer even be on screen.
+    setSelectedIds(new Set())
+    setConfirmingDelete(false)
   }
 
   function navigate(patch: Partial<ArticlesFilters>) {
@@ -93,6 +109,60 @@ export default function ArticlesView({
 
   function commitSearch() {
     if (queryDraft.trim() !== filters.query) navigate({ query: queryDraft.trim() })
+  }
+
+  function toggleSelect(id: string) {
+    setConfirmingDelete(false)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setConfirmingDelete(false)
+    setSelectedIds((prev) =>
+      prev.size === localItems.length ? new Set() : new Set(localItems.map((item) => item.id))
+    )
+  }
+
+  async function handleBulkArchive() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setBulkPending(true)
+    setBulkError(null)
+    for (const id of ids) updateItem(id, { state: 'archived', archivedAt: new Date().toISOString() })
+    const result = await archiveArticlesBulk(ids)
+    setBulkPending(false)
+    setSelectedIds(new Set())
+    if (result.error) {
+      setBulkError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setBulkPending(true)
+    setBulkError(null)
+    for (const id of ids) removeItem(id)
+    const result = await purgeArticles(ids)
+    setBulkPending(false)
+    setSelectedIds(new Set())
+    setConfirmingDelete(false)
+    if (result.error) {
+      setBulkError(result.error)
+      return
+    }
+    router.refresh()
   }
 
   async function handleLoadMore() {
@@ -210,6 +280,62 @@ export default function ArticlesView({
         </div>
       )}
 
+      {enableBulkActions && localItems.length > 0 && (
+        <div className="flex items-center gap-3 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={selectedIds.size > 0 && selectedIds.size === localItems.length}
+              ref={(el) => {
+                if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < localItems.length
+              }}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-muted">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+            </span>
+          </label>
+          {selectedIds.size > 0 && (
+            <>
+              {filters.view !== 'archived' && (
+                <button
+                  type="button"
+                  disabled={bulkPending}
+                  onClick={handleBulkArchive}
+                  className="border border-border px-3 py-1.5 text-xs hover:bg-foreground/5 transition-colors disabled:opacity-50"
+                >
+                  Archive selected
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={bulkPending}
+                onClick={handleBulkDelete}
+                className={
+                  confirmingDelete
+                    ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-xs transition-colors disabled:opacity-50'
+                    : 'border border-danger text-danger px-3 py-1.5 text-xs hover:bg-danger/10 transition-colors disabled:opacity-50'
+                }
+              >
+                {confirmingDelete
+                  ? `Really delete ${selectedIds.size}? Click to confirm`
+                  : 'Delete selected'}
+              </button>
+              {confirmingDelete && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-xs text-muted hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {bulkError && <p className="text-xs text-red-600">{bulkError}</p>}
+
       {localItems.length === 0 ? (
         <div className="relative py-16 text-center">
           <div className="empty-state-watermark" aria-hidden="true">
@@ -232,6 +358,8 @@ export default function ArticlesView({
               onFolderCreated={handleFolderCreated}
               showFolderPicker={showFolderPicker}
               showDelete={showDelete}
+              selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
+              onToggleSelect={enableBulkActions ? toggleSelect : undefined}
             />
           ))}
         </ul>

@@ -9,6 +9,8 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
   --color-surface: var(--surface);
@@ -78,6 +80,19 @@
      this doesn't flip per theme — #92afd7 is light enough to need dark
      ink text in light AND dark mode alike. */
   --brand-foreground: #131418;
+  /* Danger red: the design system's actual red family (see
+     ~/Downloads/Design System/covenant-works-design-system_updated.html),
+     not an invented one — Brick (#885A5A, listed "Red — dark") for
+     AA-contrast white text in light mode, flipping to Rose (#CC8B8C) with
+     dark ink text in dark mode (see the dark-mode block below), the same
+     dark-hue/light-hue split every other family in that palette follows
+     (e.g. Fern vs. Eucalyptus for green). Dusty rose pairs deliberately
+     with Slate Blue (#92afd7 below) — the same "muted, coordinated
+     candidates" pairing the system's own palette is built from, and
+     exactly the brand's accent hue. Contrast checked: Brick+white
+     5.74:1, Rose+ink 6.70:1 — both comfortably pass AA. */
+  --danger: #885a5a;
+  --danger-foreground: #ffffff;
   /* "Label gray" from the design system's core neutrals — the app's
      existing secondary/de-emphasized text color, most call sites already
      use it via text-muted. */
@@ -116,6 +131,8 @@
     --accent-foreground: #131418;
     --brand: #92afd7;
     --muted: #9a9daa;
+    --danger: #cc8b8c;
+    --danger-foreground: #131418;
 
     --surface: #17181c;
     --surface-border: rgba(255, 255, 255, 0.09);
@@ -135,6 +152,8 @@
   --accent-foreground: #131418;
   --brand: #92afd7;
   --muted: #9a9daa;
+  --danger: #cc8b8c;
+  --danger-foreground: #131418;
 
   --surface: #17181c;
   --surface-border: rgba(255, 255, 255, 0.09);

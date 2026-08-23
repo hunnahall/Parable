@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
 import ExportFeedsButton from './ExportFeedsButton'
+import CleanSlateSection from './CleanSlateSection'
 
 const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
   { value: 'inter', label: 'Inter (default)' },
@@ -154,6 +155,8 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <ExportFeedsButton />
+
+      <CleanSlateSection />
 
       <div className="text-sm text-muted" role="status">
         {status === 'saving' && 'Saving…'}

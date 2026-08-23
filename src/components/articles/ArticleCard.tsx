@@ -37,6 +37,8 @@ export default function ArticleCard({
   showFolderPicker = false,
   showDelete = false,
   compact = false,
+  selected,
+  onToggleSelect,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -46,6 +48,11 @@ export default function ArticleCard({
   showFolderPicker?: boolean
   showDelete?: boolean
   compact?: boolean
+  // Only the Articles page's bulk toolbar passes these — undefined
+  // elsewhere (Saved/Archive/dashboard widgets), which just skips
+  // rendering the checkbox column.
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }) {
   const router = useRouter()
   const [pending, setPending] = useState(false)
@@ -145,127 +152,140 @@ export default function ArticleCard({
 
   return (
     <li className={compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'p-4'}>
-      <div className="flex items-center gap-2 text-xs text-muted mb-0.5">
-        {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
-        {!compact && item.category && <span>{item.category}</span>}
-        {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
-      </div>
-      <Link
-        href={`/articles/${item.id}`}
-        className="text-sm font-medium hover:text-accent hover:underline"
-      >
-        {item.title}
-      </Link>
-      {item.summary && <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.summary}</p>}
-      <div className="flex items-center gap-3 mt-1">
-        {item.state === 'saved' ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleUnfile}
-            className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-          >
-            Unsave
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleSave}
-            className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-          >
-            Save
-          </button>
+      <div className="flex items-start gap-2">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={() => onToggleSelect(item.id)}
+            aria-label={`Select ${item.title}`}
+            className="mt-1 shrink-0"
+          />
         )}
-        {item.state === 'archived' ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleUnfile}
-            className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs text-muted mb-0.5">
+            {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
+            {!compact && item.category && <span>{item.category}</span>}
+            {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
+          </div>
+          <Link
+            href={`/articles/${item.id}`}
+            className="text-sm font-medium hover:text-accent hover:underline"
           >
-            Unarchive
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleArchive}
-            className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-          >
-            Archive
-          </button>
-        )}
-        {showDelete && item.state === 'saved' && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleDelete}
-            className="text-xs text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
-          >
-            Delete
-          </button>
-        )}
-      </div>
-      {showFolderPicker && folders && (
-        <div className="flex items-center gap-1 mt-1">
-          <select
-            value={item.folderId ?? ''}
-            onChange={(e) => handleFolderChange(e.target.value || null)}
-            className="border border-border px-2 py-1 text-xs bg-background"
-          >
-            <option value="">No folder</option>
-            {folders.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-          {addingFolder ? (
-            <input
-              type="text"
-              autoFocus
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onBlur={handleCreateFolder}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-                if (e.key === 'Escape') {
-                  setNewFolderName('')
-                  setAddingFolder(false)
-                }
-              }}
-              placeholder="New folder…"
-              className="w-28 border border-border px-2 py-1 text-xs bg-background"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAddingFolder(true)}
-              aria-label="Add folder"
-              title="Add folder"
-              className="text-muted hover:text-accent transition-colors"
-            >
-              <Plus size={14} />
-            </button>
+            {item.title}
+          </Link>
+          {item.summary && <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.summary}</p>}
+          <div className="flex items-center gap-3 mt-1">
+            {item.state === 'saved' ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleUnfile}
+                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+              >
+                Unsave
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleSave}
+                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+              >
+                Save
+              </button>
+            )}
+            {item.state === 'archived' ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleUnfile}
+                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+              >
+                Unarchive
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleArchive}
+                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+              >
+                Archive
+              </button>
+            )}
+            {showDelete && item.state === 'saved' && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleDelete}
+                className="text-xs text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+          {showFolderPicker && folders && (
+            <div className="flex items-center gap-1 mt-1">
+              <select
+                value={item.folderId ?? ''}
+                onChange={(e) => handleFolderChange(e.target.value || null)}
+                className="border border-border px-2 py-1 text-xs bg-background"
+              >
+                <option value="">No folder</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              {addingFolder ? (
+                <input
+                  type="text"
+                  autoFocus
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onBlur={handleCreateFolder}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') {
+                      setNewFolderName('')
+                      setAddingFolder(false)
+                    }
+                  }}
+                  placeholder="New folder…"
+                  className="w-28 border border-border px-2 py-1 text-xs bg-background"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAddingFolder(true)}
+                  aria-label="Add folder"
+                  title="Add folder"
+                  className="text-muted hover:text-accent transition-colors"
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+            </div>
           )}
+          {showEditors && (
+            <>
+              <ArticleNoteEditor
+                itemId={item.id}
+                note={item.note}
+                onChange={(note) => onUpdate(item.id, { note })}
+              />
+              <ArticleTagEditor
+                itemId={item.id}
+                tags={item.tags}
+                onChange={(tags) => onUpdate(item.id, { tags })}
+              />
+            </>
+          )}
+          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
         </div>
-      )}
-      {showEditors && (
-        <>
-          <ArticleNoteEditor
-            itemId={item.id}
-            note={item.note}
-            onChange={(note) => onUpdate(item.id, { note })}
-          />
-          <ArticleTagEditor
-            itemId={item.id}
-            tags={item.tags}
-            onChange={(tags) => onUpdate(item.id, { tags })}
-          />
-        </>
-      )}
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      </div>
     </li>
   )
 }

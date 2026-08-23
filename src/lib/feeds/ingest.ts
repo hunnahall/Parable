@@ -33,10 +33,14 @@ function adminClient() {
 
 // Shared by the cron-triggered /api/ingest-feeds route and the "Run ingest
 // now" button in the feeds management UI (src/lib/feeds/actions.ts), so
-// both paths run the exact same logic instead of drifting apart.
-export async function runIngest(): Promise<IngestSummary> {
+// both paths run the exact same logic instead of drifting apart. The cron
+// route calls this with no options (unbounded — same as always); only
+// runIngestNow passes maxAgeHours, so a manual run doesn't backfill a
+// feed's entire history the first time it's triggered.
+export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<IngestSummary> {
   const supabase = adminClient()
   const parser = new Parser({ timeout: FEED_FETCH_TIMEOUT_MS })
+  const cutoffMs = opts.maxAgeHours != null ? Date.now() - opts.maxAgeHours * 60 * 60 * 1000 : null
 
   const { data: feeds, error: feedsError } = await supabase
     .from('feeds')
@@ -65,6 +69,15 @@ export async function runIngest(): Promise<IngestSummary> {
           (entry): entry is { item: (typeof parsed.items)[number]; guid: string } =>
             entry.guid !== null
         )
+        // When a max age is set, an item with no parseable publish date
+        // can't be confirmed to fall inside it — exclude rather than
+        // guess, so "last 24 hours" doesn't silently let through whatever
+        // a feed leaves undated.
+        .filter((entry) => {
+          if (cutoffMs === null) return true
+          const publishedMs = entry.item.isoDate ? new Date(entry.item.isoDate).getTime() : NaN
+          return !Number.isNaN(publishedMs) && publishedMs >= cutoffMs
+        })
 
       let existingGuids = new Set<string>()
       if (items.length > 0) {

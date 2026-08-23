@@ -144,18 +144,41 @@ async function getArticleFoldersMap(
 const ARTICLE_SELECT =
   'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at'
 
+// There's no generated Database type in this project (createClient() has
+// no Schema generic), so postgrest-js can infer a `.from('feed_items')
+// .select(ARTICLE_SELECT)` chain's row shape by parsing the select string
+// against its generic fallback, but the same inference doesn't carry
+// through an `.rpc(...)` chain (its generic Functions lookup has nothing
+// to resolve without a real Schema) — argument count and the resulting
+// row type both fall back to overloads that don't fit a SETOF-returning
+// function. Runtime behavior is correct either way (validated directly
+// against the REST API — see the migration that added these functions);
+// this isolates the necessary `any` escape hatch to one place instead of
+// casting at every call site.
+function feedItemsRpc(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  fn: 'feed_items_excluding_states' | 'feed_items_with_state',
+  args: Record<string, unknown>
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see comment above
+  return (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => any)(fn, args)
+}
+
+// Row shape ARTICLE_SELECT resolves to.
+type ArticleRow = {
+  id: string
+  feed_id: string
+  title: string
+  title_en: string | null
+  link: string | null
+  summary: string
+  summary_en: string | null
+  summary_ai: string | null
+  published_at: string | null
+}
+
 function toArticleItem(
-  item: {
-    id: string
-    feed_id: string
-    title: string
-    title_en: string | null
-    link: string | null
-    summary: string
-    summary_en: string | null
-    summary_ai: string | null
-    published_at: string | null
-  },
+  item: ArticleRow,
   feedMeta: Map<string, FeedMeta>,
   states: Map<string, ArticleStateInfo>,
   folders: Map<string, string> = new Map()
@@ -206,26 +229,27 @@ export async function getArticleById(
 // with archived as the new dismissal signal.
 export async function getHeadlinesData(): Promise<ArticleItem[]> {
   const supabase = await createClient()
+  const user = await getUser()
+  if (!user) return []
   const states = await getArticleStatesMap(supabase)
-  const archivedIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'archived')
-    .map(([id]) => id)
 
-  let query = supabase
-    .from('feed_items')
+  // feed_items_excluding_states does the "not archived" membership test as
+  // a real SQL join instead of a `.not('id', 'in', archivedIds)` filter —
+  // that pattern interpolates every excluded id into the request URL,
+  // which breaks once article_states grows past a few hundred rows. See
+  // the migration that added this function for the full story.
+  const { data: items, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
+    p_user_id: user.id,
+    p_exclude_states: ['archived'],
+  })
     .select(ARTICLE_SELECT)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (archivedIds.length > 0) {
-    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
-  }
-
-  const { data: items, error } = await query
   logQueryError('dashboard/getHeadlinesData', error)
   if (!items) return []
 
   const feedMeta = await attachFeedMeta(supabase, items)
-  return items.map((item) => toArticleItem(item, feedMeta, states))
+  return items.map((item: ArticleRow) => toArticleItem(item, feedMeta, states))
 }
 
 export async function getFeedData(feedId: string): Promise<ArticleItem[] | null> {
@@ -247,27 +271,23 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
   }
   if (!feed) return null
 
+  const user = await getUser()
+  if (!user) return []
   const states = await getArticleStatesMap(supabase)
-  const archivedIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'archived')
-    .map(([id]) => id)
 
-  let query = supabase
-    .from('feed_items')
+  const { data: items, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
+    p_user_id: user.id,
+    p_exclude_states: ['archived'],
+  })
     .select(ARTICLE_SELECT)
     .eq('feed_id', feedId)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (archivedIds.length > 0) {
-    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
-  }
-
-  const { data: items, error } = await query
   logQueryError('dashboard/getFeedData', error)
   if (!items) return []
 
   const feedMeta = await attachFeedMeta(supabase, items)
-  return items.map((item) => toArticleItem(item, feedMeta, states))
+  return items.map((item: ArticleRow) => toArticleItem(item, feedMeta, states))
 }
 
 export async function getFeedCategoryData(category: string): Promise<ArticleItem[] | null> {
@@ -289,10 +309,9 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   }
   if (!categoryRow) return null
 
+  const user = await getUser()
+  if (!user) return []
   const states = await getArticleStatesMap(supabase)
-  const archivedIds = [...states.entries()]
-    .filter(([, info]) => info.state === 'archived')
-    .map(([id]) => id)
 
   const { data: feedsInCategory, error: feedsInCategoryError } = await supabase
     .from('feeds')
@@ -302,22 +321,19 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
   if (feedIds.length === 0) return []
 
-  let query = supabase
-    .from('feed_items')
+  const { data: items, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
+    p_user_id: user.id,
+    p_exclude_states: ['archived'],
+  })
     .select(ARTICLE_SELECT)
     .in('feed_id', feedIds)
     .order('published_at', { ascending: false })
     .limit(HEADLINES_LIMIT)
-  if (archivedIds.length > 0) {
-    query = query.not('id', 'in', `(${archivedIds.join(',')})`)
-  }
-
-  const { data: items, error } = await query
   logQueryError('dashboard/getFeedCategoryData', error)
   if (!items) return []
 
   const feedMeta = await attachFeedMeta(supabase, items)
-  return items.map((item) => toArticleItem(item, feedMeta, states))
+  return items.map((item: ArticleRow) => toArticleItem(item, feedMeta, states))
 }
 
 // Home dashboard's "Saved articles" widget — unbounded (no pagination),
@@ -347,23 +363,19 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
 
 // Sidebar badge count: articles with no curation row at all (not saved,
 // not archived) — same "unfiled" predicate the Articles page uses as its
-// default view. Counted via ids-to-exclude rather than a DB-side NOT IN
-// subquery since article_states has no FK-joinable relationship exposed
-// through PostgREST for an anti-join here, matching this file's existing
-// "fetch states, filter in JS" convention.
+// default view. feed_items_excluding_states does the anti-join in SQL
+// (see the migration that added it) rather than fetching every filed id
+// and building a `.not('id', 'in', ...)` filter, which broke once
+// article_states grew past a few hundred rows.
 export async function getArticlesUnfiledCount(): Promise<number> {
-  const supabase = await createClient()
   const user = await getUser()
   if (!user) return 0
 
-  const states = await getArticleStatesMap(supabase)
-  const filedIds = [...states.keys()]
-
-  let query = supabase.from('feed_items').select('id', { count: 'exact', head: true })
-  if (filedIds.length > 0) {
-    query = query.not('id', 'in', `(${filedIds.join(',')})`)
-  }
-  const { count, error } = await query
+  const supabase = await createClient()
+  const { count, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
+    p_user_id: user.id,
+    p_exclude_states: ['saved', 'archived'],
+  }).select('id', { count: 'exact', head: true })
   logQueryError('dashboard/getArticlesUnfiledCount', error)
   return count ?? 0
 }
@@ -399,6 +411,9 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 // 'unfiled' = no article_states row yet (default, the Articles page),
 // 'saved'/'archived' = state matches exactly (the Saved/Archive pages).
 export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
+  const user = await getUser()
+  if (!user) return { items: [], nextCursor: null }
+
   const supabase = await createClient()
   const states = await getArticleStatesMap(supabase)
   const folders = await getArticleFoldersMap(supabase)
@@ -412,22 +427,35 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     return { items: [], nextCursor: null }
   }
 
+  // A tag filter needs the specific (state, tag) intersection, which stays
+  // small in practice (a tag narrows things down) — kept as an id list.
+  // Everything else routes through feed_items_excluding_states/with_state,
+  // which do the state membership test as a real SQL join instead of
+  // interpolating every matching id into the request URL — that's what
+  // broke once article_states grew past a few hundred rows (see the
+  // migration that added those functions).
   let includeIds: string[] | null = null
-  let excludeIds: string[] = []
-  if (view === 'unfiled') {
-    excludeIds = [...states.keys()]
-  } else {
-    includeIds = [...states.entries()].filter(([, info]) => info.state === view).map(([id]) => id)
-  }
-
   if (filters.tag) {
-    const taggedIds = new Set(
-      [...states.entries()].filter(([, info]) => info.tags.includes(filters.tag!)).map(([id]) => id)
-    )
-    includeIds = (includeIds ?? []).filter((id) => taggedIds.has(id))
+    includeIds = [...states.entries()]
+      .filter(([, info]) => info.state === view && info.tags.includes(filters.tag!))
+      .map(([id]) => id)
   }
 
-  let query = supabase.from('feed_items').select(ARTICLE_SELECT)
+  let query
+  if (includeIds !== null) {
+    if (includeIds.length === 0) return { items: [], nextCursor: null }
+    query = supabase.from('feed_items').select(ARTICLE_SELECT).in('id', includeIds)
+  } else if (view === 'unfiled') {
+    query = feedItemsRpc(supabase, 'feed_items_excluding_states', {
+      p_user_id: user.id,
+      p_exclude_states: ['saved', 'archived'],
+    }).select(ARTICLE_SELECT)
+  } else {
+    query = feedItemsRpc(supabase, 'feed_items_with_state', {
+      p_user_id: user.id,
+      p_state: view,
+    }).select(ARTICLE_SELECT)
+  }
 
   if (filters.query) {
     query = query.textSearch('search_vector', filters.query, {
@@ -472,13 +500,6 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     query = query.or(orParts.join(','))
   }
 
-  if (includeIds !== null) {
-    if (includeIds.length === 0) return { items: [], nextCursor: null }
-    query = query.in('id', includeIds)
-  } else if (excludeIds.length > 0) {
-    query = query.not('id', 'in', `(${excludeIds.join(',')})`)
-  }
-
   query = query.order('published_at', { ascending: false }).order('id', { ascending: false })
 
   // Cursor values round-trip through the client (URL/form state) between
@@ -502,7 +523,7 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   const pageRows = hasMore ? rows.slice(0, limit) : rows
 
   const feedMeta = await attachFeedMeta(supabase, pageRows)
-  const items = pageRows.map((item) => toArticleItem(item, feedMeta, states, folders))
+  const items = pageRows.map((item: ArticleRow) => toArticleItem(item, feedMeta, states, folders))
 
   const last = pageRows.at(-1)
   const nextCursor = hasMore && last?.published_at ? { publishedAt: last.published_at, id: last.id } : null

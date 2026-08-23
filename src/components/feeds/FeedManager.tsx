@@ -163,7 +163,8 @@ export default function FeedManager({
         <div>
           <h2 className="text-sm font-medium">Run ingest now</h2>
           <p className="text-xs text-muted mt-0.5">
-            Fetches new items for every feed instead of waiting for the cron job.
+            Fetches new items published in the last 24 hours for every feed, instead of waiting
+            for the cron job.
           </p>
           {ingestSummary && (
             <div className="text-xs text-muted mt-1">

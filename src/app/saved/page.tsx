@@ -59,6 +59,7 @@ export default async function SavedPage({
         filters={filters}
         showFolderPicker
         showDelete
+        enableBulkActions
       />
     </div>
   )
