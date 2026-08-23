@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { previewBuiltFeed, createBuiltFeed } from '@/lib/feeds/actions'
 import type { BuildFeedPreview } from '@/lib/feeds/buildFeed'
@@ -30,7 +30,7 @@ export default function BuildFeedSection({
 
   const busy = detecting || saving
 
-  function close() {
+  const close = useCallback(() => {
     if (busy) return
     setOpen(false)
     setStep('url')
@@ -39,7 +39,16 @@ export default function BuildFeedSection({
     setTitle('')
     setFolderId('')
     setError(null)
-  }
+  }, [busy])
+
+  useEffect(() => {
+    if (!open) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') close()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, close])
 
   async function handleDetect(e: React.FormEvent) {
     e.preventDefault()

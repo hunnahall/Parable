@@ -177,12 +177,15 @@ function buildCandidateGroups(anchors: HTMLAnchorElement[]): Map<string, Candida
 
   for (const anchor of anchors) {
     if (!looksLikeHeadlineAnchor(anchor)) continue
+    // No need to re-check SKIP_ANCESTOR_SELECTOR while climbing: it's an
+    // ancestor test, and looksLikeHeadlineAnchor() already confirmed none
+    // of `anchor`'s ancestors match it — every node climbed to below is
+    // one of those same already-cleared ancestors.
     let node: Element = anchor
     for (let level = 0; level < MAX_CLIMB_LEVELS; level++) {
       const parent = node.parentElement
       if (!parent) break
       node = parent
-      if (node.closest(SKIP_ANCESTOR_SELECTOR)) break
 
       for (const cls of Array.from(node.classList)) {
         register(`class:${cls}`, node, anchor)

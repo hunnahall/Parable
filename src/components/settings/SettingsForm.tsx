@@ -86,10 +86,12 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
     if (!trimmed) return
     setKeywordInput('')
     if (prefs.autoDeleteKeywords.some((word) => word.toLowerCase() === trimmed.toLowerCase())) return
+    setRulesRunResult(null)
     applyChange({ autoDeleteKeywords: [...prefs.autoDeleteKeywords, trimmed] })
   }
 
   function removeKeyword(word: string) {
+    setRulesRunResult(null)
     applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
   }
 

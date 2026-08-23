@@ -5,6 +5,12 @@ import { createClient, getUser } from '@/lib/supabase/server'
 import { feedItemsRpc } from '@/lib/dashboard/data'
 import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
+// Matches EXISTING_GUID_CHECK_BATCH_SIZE in src/lib/feeds/ingest.ts — the
+// same root cause (a `.in()` filter's id list blowing past a PostgREST URL
+// length limit once it gets into the hundreds) applies to any `.in('id',
+// ...)` call built from an unbounded id list, not just that one.
+const DELETE_BATCH_SIZE = 200
+
 // Wipes every feed, article, and piece of per-article curation (saved,
 // archived, tags, notes, read state, folder placement) plus every other
 // per-user setting (preferences, dashboard/indicator widget layout, key
@@ -167,8 +173,11 @@ export async function runAutoDeleteRulesNow(): Promise<{
   // shared feed_items row, cascading to article_states/read_items/etc. for
   // every user. Safe here because matchedIds only ever came from the
   // unfiled set above, so none of them have a saved/archived state to lose.
-  const { error: deleteError } = await supabase.from('feed_items').delete().in('id', matchedIds)
-  if (deleteError) return { error: deleteError.message, deletedCount: 0 }
+  for (let i = 0; i < matchedIds.length; i += DELETE_BATCH_SIZE) {
+    const batch = matchedIds.slice(i, i + DELETE_BATCH_SIZE)
+    const { error: deleteError } = await supabase.from('feed_items').delete().in('id', batch)
+    if (deleteError) return { error: deleteError.message, deletedCount: 0 }
+  }
 
   revalidatePath('/articles')
   revalidatePath('/', 'layout')
