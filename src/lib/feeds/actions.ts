@@ -135,7 +135,7 @@ export async function runIngestNow(): Promise<
 
 export async function updateFeed(
   id: string,
-  input: { title: string; category: string | null; summarizeArticles: boolean }
+  input: { title: string; category: string | null }
 ): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -146,9 +146,29 @@ export async function updateFeed(
   if (!title) return { error: 'Title is required' }
 
   const supabase = await createClient()
+  const { error } = await supabase.from('feeds').update({ title, category }).eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/feeds')
+  return { error: null }
+}
+
+// Toggled directly from the feed list (see FeedManager.tsx) — deliberately
+// its own action rather than folded into updateFeed, since it fires on a
+// single click with no Edit-mode round trip and shouldn't need the
+// title/category validation that comes with a full feed edit.
+export async function setFeedSummarizeArticles(
+  id: string,
+  enabled: boolean
+): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  const supabase = await createClient()
   const { error } = await supabase
     .from('feeds')
-    .update({ title, category, summarize_articles: input.summarizeArticles })
+    .update({ summarize_articles: enabled })
     .eq('id', id)
 
   if (error) return { error: error.message }

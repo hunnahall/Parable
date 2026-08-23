@@ -2,7 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { addFeed, updateFeed, removeFeed, runIngestNow } from '@/lib/feeds/actions'
+import {
+  addFeed,
+  updateFeed,
+  removeFeed,
+  runIngestNow,
+  setFeedSummarizeArticles,
+} from '@/lib/feeds/actions'
 import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
@@ -63,7 +69,6 @@ export default function FeedManager({
 
   const [editTitle, setEditTitle] = useState('')
   const [editFolderIds, setEditFolderIds] = useState<string[]>([])
-  const [editSummarizeArticles, setEditSummarizeArticles] = useState(false)
 
   const [ingesting, setIngesting] = useState(false)
   const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null)
@@ -114,7 +119,6 @@ export default function FeedManager({
     setEditingId(feed.id)
     setEditTitle(feed.title)
     setEditFolderIds(feed.folderIds)
-    setEditSummarizeArticles(feed.summarize_articles)
     setError(null)
   }
 
@@ -123,15 +127,11 @@ export default function FeedManager({
     setError(null)
     const title = editTitle.trim()
     setLocalFeeds((prev) =>
-      prev.map((feed) =>
-        feed.id === id
-          ? { ...feed, title, folderIds: editFolderIds, summarize_articles: editSummarizeArticles }
-          : feed
-      )
+      prev.map((feed) => (feed.id === id ? { ...feed, title, folderIds: editFolderIds } : feed))
     )
     setEditingId(null)
     const [titleResult, folderResult] = await Promise.all([
-      updateFeed(id, { title: editTitle, category: null, summarizeArticles: editSummarizeArticles }),
+      updateFeed(id, { title: editTitle, category: null }),
       assignFeedToFolders(id, editFolderIds),
     ])
     setPending(false)
@@ -141,6 +141,25 @@ export default function FeedManager({
     }
     if (folderResult.error) {
       setError(folderResult.error)
+      return
+    }
+    router.refresh()
+  }
+
+  // Toggled directly from the list — no Edit-mode round trip needed, since
+  // this is the one setting worth flipping per-article-cost-consciously on
+  // its own (see setFeedSummarizeArticles in src/lib/feeds/actions.ts).
+  async function handleToggleSummarize(feed: FeedRow) {
+    const next = !feed.summarize_articles
+    setLocalFeeds((prev) =>
+      prev.map((f) => (f.id === feed.id ? { ...f, summarize_articles: next } : f))
+    )
+    const result = await setFeedSummarizeArticles(feed.id, next)
+    if (result.error) {
+      setError(result.error)
+      setLocalFeeds((prev) =>
+        prev.map((f) => (f.id === feed.id ? { ...f, summarize_articles: feed.summarize_articles } : f))
+      )
       return
     }
     router.refresh()
@@ -308,50 +327,40 @@ export default function FeedManager({
           {visibleFeeds.map((feed) => (
             <li key={feed.id} className="p-4">
               {editingId === feed.id ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
-                    />
-                    <select
-                      value={editFolderIds[0] ?? ''}
-                      onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
-                      className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
-                    >
-                      <option value="">{NO_FOLDER}</option>
-                      {folders.map((folder) => (
-                        <option key={folder.id} value={folder.id}>
-                          {folder.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => handleSaveEdit(feed.id)}
-                      className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      className="text-sm text-muted hover:text-accent transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <label className="flex items-center gap-1.5 text-xs text-muted">
-                    <input
-                      type="checkbox"
-                      checked={editSummarizeArticles}
-                      onChange={(e) => setEditSummarizeArticles(e.target.checked)}
-                    />
-                    Generate AI summaries for this feed
-                  </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
+                  />
+                  <select
+                    value={editFolderIds[0] ?? ''}
+                    onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
+                    className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">{NO_FOLDER}</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => handleSaveEdit(feed.id)}
+                    className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className="text-sm text-muted hover:text-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-4">
@@ -364,14 +373,6 @@ export default function FeedManager({
                           title="Built from a page with no RSS feed of its own — re-scraped on every ingest"
                         >
                           Built
-                        </span>
-                      )}
-                      {feed.summarize_articles && (
-                        <span
-                          className="text-xs bg-accent/10 text-accent px-2 py-0.5"
-                          title="Each new article from this feed gets an AI-generated summary"
-                        >
-                          AI summary
                         </span>
                       )}
                       <span className="text-xs bg-foreground/5 text-muted px-2 py-0.5">
@@ -402,6 +403,17 @@ export default function FeedManager({
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    <label
+                      className="flex items-center gap-1.5 text-sm text-muted"
+                      title="Generate an AI summary for each new article from this feed"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={feed.summarize_articles}
+                        onChange={() => handleToggleSummarize(feed)}
+                      />
+                      AI summary
+                    </label>
                     <button
                       type="button"
                       onClick={() => startEdit(feed)}
