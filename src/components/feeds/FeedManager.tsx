@@ -12,6 +12,7 @@ import { formatDateTime } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import OpmlImport from './OpmlImport'
+import BuildFeedSection from './BuildFeedSection'
 
 const NO_FOLDER = 'No folder'
 
@@ -90,6 +91,14 @@ export default function FeedManager({
     setNewUrl('')
     setNewTitle('')
     setNewFolderIds([])
+    router.refresh()
+  }
+
+  async function handleFeedBuilt(feed: FeedRow, folderIds: string[]) {
+    if (folderIds.length > 0) {
+      await assignFeedToFolders(feed.id, folderIds)
+    }
+    setLocalFeeds((prev) => [...prev, { ...feed, folderIds }])
     router.refresh()
   }
 
@@ -243,6 +252,8 @@ export default function FeedManager({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
+
       <FolderManager folders={folderRows} />
 
       <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1">
@@ -316,6 +327,14 @@ export default function FeedManager({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{feed.title}</span>
+                      {feed.is_scraped && (
+                        <span
+                          className="text-xs bg-accent/10 text-accent px-2 py-0.5"
+                          title="Built from a page with no RSS feed of its own — re-scraped on every ingest"
+                        >
+                          Built
+                        </span>
+                      )}
                       <span className="text-xs bg-foreground/5 text-muted px-2 py-0.5">
                         {folderLabelsFor(feed.folderIds, folders)}
                       </span>

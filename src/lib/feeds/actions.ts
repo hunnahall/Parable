@@ -5,6 +5,7 @@ import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { runIngest, type IngestSummary } from './ingest'
 import { generateFeedsOpml } from './opmlExport'
+import { detectArticles, type BuildFeedPreview } from './buildFeed'
 import type { FeedRow } from './data'
 
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
@@ -45,7 +46,55 @@ export async function addFeed(input: {
   const { data, error } = await supabase
     .from('feeds')
     .insert({ url, title, category })
-    .select('id, url, title, category, last_fetched_at, last_error')
+    .select('id, url, title, category, last_fetched_at, last_error, is_scraped')
+    .single()
+
+  if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
+
+  revalidatePath('/feeds')
+  return { feed: { ...data, folderIds: [] }, error: null }
+}
+
+// Step 1 of "Build a Feed" (see BuildFeedSection.tsx): fetches and
+// heuristically parses `url`'s repeating article pattern (see
+// src/lib/feeds/buildFeed.ts) without saving anything, so the UI can show
+// what was found and let the user back out before committing to it.
+export async function previewBuiltFeed(
+  url: string
+): Promise<{ preview: BuildFeedPreview; error: null } | { preview: null; error: string }> {
+  const user = await getUser()
+  if (!user) return { preview: null, error: 'Not signed in' }
+
+  const trimmed = url.trim()
+  if (!trimmed) return { preview: null, error: 'URL is required' }
+
+  return detectArticles(trimmed)
+}
+
+// Step 2: saves a feed whose "url" is the page to be re-scraped on every
+// ingest, not an RSS/Atom URL — is_scraped is what tells runIngest (see
+// src/lib/feeds/ingest.ts) to route it through detectArticles instead of
+// rss-parser.
+export async function createBuiltFeed(input: {
+  sourceUrl: string
+  title: string
+  category: string | null
+}): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
+  const user = await getUser()
+  if (!user) return { feed: null, error: 'Not signed in' }
+
+  const url = input.sourceUrl.trim()
+  const title = input.title.trim()
+  const category = input.category?.trim() || null
+
+  if (!url) return { feed: null, error: 'URL is required' }
+  if (!title) return { feed: null, error: 'Title is required' }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('feeds')
+    .insert({ url, title, category, is_scraped: true })
+    .select('id, url, title, category, last_fetched_at, last_error, is_scraped')
     .single()
 
   if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }

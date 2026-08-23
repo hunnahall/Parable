@@ -4,6 +4,7 @@ import { stripHtml, translateArticle } from '@/lib/translate'
 import { summarizeArticle } from '@/lib/summarize'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
+import { detectArticles } from './buildFeed'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
 // Some feeds put the full article body in <content:encoded>/<description>
@@ -134,13 +135,26 @@ async function loadIngestPreferences(
   }
 }
 
-type FeedRow = { id: string; url: string; title: string | null }
-type RssItem = Awaited<ReturnType<Parser['parseURL']>>['items'][number]
+type FeedRow = { id: string; url: string; title: string | null; is_scraped: boolean }
+// Deliberately a small structural subset rather than rss-parser's own Item
+// type: real feed items satisfy this shape as-is, and the entries
+// synthesized from detectArticles() (see the is_scraped branch in
+// processFeed below) only need to fill in exactly these fields to flow
+// through the same translate/auto-delete/summarize/insert pipeline.
+interface FeedEntryItem {
+  title?: string
+  link?: string
+  guid?: string
+  content?: string
+  summary?: string
+  contentSnippet?: string
+  isoDate?: string
+}
 
 async function processItem(
   supabase: AdminClient,
   feed: FeedRow,
-  item: RssItem,
+  item: FeedEntryItem,
   guid: string,
   targetLanguage: string,
   autoDeleteKeywords: string[]
@@ -217,13 +231,23 @@ type FeedResult =
   | { ok: true; itemsInserted: number; itemsAutoDeleted: number }
   | { ok: false; failure: FeedFailure }
 
-async function processFeed(
-  supabase: AdminClient,
-  feed: FeedRow,
-  cutoffMs: number | null,
-  targetLanguage: string,
-  autoDeleteKeywords: string[]
-): Promise<FeedResult> {
+// Fetches+parses the feed's raw item list, before dedup/cutoff filtering.
+// Two sources: a real RSS/Atom URL via rss-parser, or (for a "Build a
+// Feed" entry — see src/lib/feeds/buildFeed.ts) a fresh re-scrape of the
+// tracked page's current HTML, re-run every ingest rather than cached so
+// it keeps working if the page's markup drifts slightly.
+async function fetchFeedItems(feed: FeedRow): Promise<FeedEntryItem[]> {
+  if (feed.is_scraped) {
+    const result = await detectArticles(feed.url)
+    if (result.error !== null) throw new Error(result.error)
+    return result.preview.articles.map((a) => ({
+      title: a.title,
+      link: a.link,
+      content: a.snippet ?? undefined,
+      isoDate: a.publishedAt ?? undefined,
+    }))
+  }
+
   // One Parser (and its internal xml2js instance) per feed rather than one
   // shared across all concurrent processFeed calls — cheap to construct,
   // and avoids relying on xml2js's string-parse callback happening to run
@@ -233,30 +257,41 @@ async function processFeed(
     timeout: FEED_FETCH_TIMEOUT_MS,
     headers: { 'User-Agent': FEED_USER_AGENT },
   })
+  const parsed = await parser.parseURL(feed.url).catch((err) => {
+    if (!isXmlParseError(err)) throw err
+    return parseAndRepairFeed(parser, feed.url)
+  })
+  return parsed.items ?? []
+}
 
+async function processFeed(
+  supabase: AdminClient,
+  feed: FeedRow,
+  cutoffMs: number | null,
+  targetLanguage: string,
+  autoDeleteKeywords: string[]
+): Promise<FeedResult> {
   try {
-    const parsed = await parser.parseURL(feed.url).catch((err) => {
-      if (!isXmlParseError(err)) throw err
-      return parseAndRepairFeed(parser, feed.url)
-    })
+    const rawItems = await fetchFeedItems(feed)
 
-    // Each RSS item needs a stable identifier to dedupe against. Most
-    // feeds set <guid>; a handful only set <link>. If neither is present
+    // Each item needs a stable identifier to dedupe against. Most RSS
+    // feeds set <guid>; a handful only set <link>; a scraped page has
+    // nothing but its article links. If neither guid nor link is present
     // there's nothing to key the unique (feed_id, guid) constraint on, so
     // that item is unprocessable — skip it rather than risk a
     // null/duplicate guid.
-    const items = (parsed.items ?? [])
+    const items = rawItems
       .map((item) => ({ item, guid: item.guid ?? item.link ?? null }))
-      .filter(
-        (entry): entry is { item: (typeof parsed.items)[number]; guid: string } =>
-          entry.guid !== null
-      )
+      .filter((entry): entry is { item: FeedEntryItem; guid: string } => entry.guid !== null)
       // When a max age is set, an item with no parseable publish date
       // can't be confirmed to fall inside it — exclude rather than guess,
       // so "last 24 hours" doesn't silently let through whatever a feed
-      // leaves undated.
+      // leaves undated. Skipped entirely for scraped feeds: detectArticles
+      // rarely finds a reliable date, so age-filtering them would just
+      // drop everything on every manual run — dedup-by-link below already
+      // keeps re-ingesting the same articles from being a problem.
       .filter((entry) => {
-        if (cutoffMs === null) return true
+        if (cutoffMs === null || feed.is_scraped) return true
         const publishedMs = entry.item.isoDate ? new Date(entry.item.isoDate).getTime() : NaN
         return !Number.isNaN(publishedMs) && publishedMs >= cutoffMs
       })
@@ -339,7 +374,10 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
   // Independent of each other — run together instead of paying for two
   // sequential round trips before any feed work can start.
   const [{ data: feeds, error: feedsError }, { targetLanguage, autoDeleteKeywords }] =
-    await Promise.all([supabase.from('feeds').select('id, url, title'), loadIngestPreferences(supabase)])
+    await Promise.all([
+      supabase.from('feeds').select('id, url, title, is_scraped'),
+      loadIngestPreferences(supabase),
+    ])
 
   if (feedsError) {
     throw new Error(`Failed to load feeds: ${feedsError.message}`)
