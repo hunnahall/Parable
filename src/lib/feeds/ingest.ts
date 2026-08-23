@@ -10,6 +10,22 @@ const FEED_FETCH_TIMEOUT_MS = 15_000
 // separately (and purged) in article_content. Cap what we store here so a
 // handful of such feeds can't quietly balloon feed_items forever.
 const STORED_SUMMARY_MAX_LENGTH = 1500
+// Some feeds (e.g. huggingface.co/blog, openai.com/news) publish their
+// entire history in one unpaginated RSS file — 1000+ items. Checking
+// which of those already exist by passing every guid into one `.in()`
+// filter builds a request URL that blows past a length limit somewhere
+// in the chain (same root cause as the dashboard query bug fixed
+// earlier), which is what "Failed to check existing items: Bad Request"
+// / "fetch failed" actually were. Batching keeps each request small
+// regardless of how large a feed's guid list is.
+const EXISTING_GUID_CHECK_BATCH_SIZE = 200
+// rss-parser's default User-Agent is the literal string "rss-parser" — a
+// giveaway that gets it trivially blocked by bot-detection WAFs (this is
+// very likely why IMF's feed 403s: server: AkamaiGHost, no other signal
+// distinguishing this request from a browser's). Identifying honestly as
+// a feed reader, the same convention Feedly/NewsBlur/etc. use, is enough
+// to get past naive UA blocklists without pretending to be a browser.
+const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https://github.com/hunnahall/Parable)'
 
 export interface FeedFailure {
   feedId: string
@@ -39,7 +55,10 @@ function adminClient() {
 // feed's entire history the first time it's triggered.
 export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<IngestSummary> {
   const supabase = adminClient()
-  const parser = new Parser({ timeout: FEED_FETCH_TIMEOUT_MS })
+  const parser = new Parser({
+    timeout: FEED_FETCH_TIMEOUT_MS,
+    headers: { 'User-Agent': FEED_USER_AGENT },
+  })
   const cutoffMs = opts.maxAgeHours != null ? Date.now() - opts.maxAgeHours * 60 * 60 * 1000 : null
 
   const { data: feeds, error: feedsError } = await supabase
@@ -79,16 +98,15 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
           return !Number.isNaN(publishedMs) && publishedMs >= cutoffMs
         })
 
-      let existingGuids = new Set<string>()
-      if (items.length > 0) {
+      const existingGuids = new Set<string>()
+      const guids = items.map((entry) => entry.guid)
+      for (let i = 0; i < guids.length; i += EXISTING_GUID_CHECK_BATCH_SIZE) {
+        const batch = guids.slice(i, i + EXISTING_GUID_CHECK_BATCH_SIZE)
         const { data: existing, error: existingError } = await supabase
           .from('feed_items')
           .select('guid')
           .eq('feed_id', feed.id)
-          .in(
-            'guid',
-            items.map((entry) => entry.guid)
-          )
+          .in('guid', batch)
 
         if (existingError) {
           throw new Error(
@@ -96,7 +114,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
           )
         }
 
-        existingGuids = new Set((existing ?? []).map((row) => row.guid))
+        for (const row of existing ?? []) existingGuids.add(row.guid)
       }
 
       const newItems = items.filter((entry) => !existingGuids.has(entry.guid))

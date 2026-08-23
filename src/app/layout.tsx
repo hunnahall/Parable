@@ -27,8 +27,16 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const user = await getUser()
-  const prefs = await getUserPreferences()
-  const articlesUnfiledCount = user ? await getArticlesUnfiledCount() : 0
+  // Independent of each other (both only need `user`, already resolved
+  // above and memoized by React's cache() for the rest of this request) —
+  // running them sequentially was paying for two round trips end-to-end
+  // on every single navigation, since this layout re-executes on every
+  // request (getUser() reads cookies(), which opts the whole tree out of
+  // Next.js's route-segment caching).
+  const [prefs, articlesUnfiledCount] = await Promise.all([
+    getUserPreferences(),
+    user ? getArticlesUnfiledCount() : Promise.resolve(0),
+  ])
 
   return (
     <html

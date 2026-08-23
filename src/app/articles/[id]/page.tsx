@@ -19,6 +19,11 @@ export default async function ArticleReadingPage({
   if (!user) redirect('/login')
 
   const { id } = await params
+  // Independent of article/content below — kicked off now instead of
+  // after that chain resolves, so it overlaps instead of adding its own
+  // sequential round trip.
+  const foldersPromise = listFolderOptions()
+
   const article = await getArticleById(id)
   if (!article) notFound()
 
@@ -43,7 +48,7 @@ export default async function ArticleReadingPage({
     }
   }
 
-  const folders = await listFolderOptions()
+  const folders = await foldersPromise
 
   return (
     <ArticleReadingView

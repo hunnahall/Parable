@@ -30,10 +30,22 @@ export async function createClient() {
 
 // Wrapped in React.cache so layout.tsx and page.tsx can each call getUser()
 // without paying for two round trips to the Supabase Auth server per request.
+//
+// Deliberately getSession() (reads the JWT from cookies locally), not the
+// network-verifying auth.getUser() Supabase's own docs recommend for
+// server-side code — that recommendation exists because a page normally
+// can't assume its incoming cookies were checked by anything. Here they
+// were: src/proxy.ts's middleware matcher covers every route this app
+// serves (all but static assets — see its `config.matcher`) and already
+// ran the real auth.getUser() network verification, rewriting refreshed
+// cookies, before this render ever starts. Re-verifying again here was a
+// second ~400ms round trip on every navigation for no additional safety.
+// If the middleware matcher is ever narrowed to exclude a route that
+// calls this, that route would need its own real auth.getUser() check.
 export const getUser = cache(async () => {
   const supabase = await createClient()
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.user ?? null
 })

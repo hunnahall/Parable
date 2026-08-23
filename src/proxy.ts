@@ -34,6 +34,11 @@ export async function proxy(request: NextRequest) {
   return supabaseResponse
 }
 
+// src/lib/supabase/server.ts's getUser() trusts this matcher to cover
+// every route it's called from — it skips its own network verification
+// specifically because this middleware already did one for the request.
+// Narrowing this matcher to exclude a route that calls getUser() would
+// leave that route trusting an unverified cookie.
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',

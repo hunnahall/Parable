@@ -26,12 +26,6 @@ function formatRate(rate: EngagementRate | undefined): string {
   return `${Math.round(rate.rate * 100)}%`
 }
 
-function selectedOptionIds(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
-  return Array.from(options)
-    .filter((o) => o.selected)
-    .map((o) => o.value)
-}
-
 export default function FeedManager({
   feeds,
   folders,
@@ -219,12 +213,11 @@ export default function FeedManager({
             className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
           />
           <select
-            multiple
-            value={newFolderIds}
-            onChange={(e) => setNewFolderIds(selectedOptionIds(e.target.options))}
+            value={newFolderIds[0] ?? ''}
+            onChange={(e) => setNewFolderIds(e.target.value ? [e.target.value] : [])}
             className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
-            size={Math.min(4, Math.max(2, folders.length))}
           >
+            <option value="">{NO_FOLDER}</option>
             {folders.map((folder) => (
               <option key={folder.id} value={folder.id}>
                 {folder.label}
@@ -284,12 +277,11 @@ export default function FeedManager({
                     className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
                   />
                   <select
-                    multiple
-                    value={editFolderIds}
-                    onChange={(e) => setEditFolderIds(selectedOptionIds(e.target.options))}
+                    value={editFolderIds[0] ?? ''}
+                    onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
                     className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
-                    size={Math.min(4, Math.max(2, folders.length))}
                   >
+                    <option value="">{NO_FOLDER}</option>
                     {folders.map((folder) => (
                       <option key={folder.id} value={folder.id}>
                         {folder.label}
