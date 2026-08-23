@@ -121,17 +121,20 @@ function adminClient(): AdminClient {
 // user_preferences, if any, is that account's settings. autoDeleteKeywords
 // comes back empty whenever the feature is off, so callers never need to
 // check the enabled flag separately.
-async function loadIngestPreferences(
-  supabase: AdminClient
-): Promise<{ targetLanguage: string; autoDeleteKeywords: string[] }> {
+async function loadIngestPreferences(supabase: AdminClient): Promise<{
+  targetLanguage: string
+  autoDeleteKeywords: string[]
+  summarizeEnabled: boolean
+}> {
   const { data } = await supabase
     .from('user_preferences')
-    .select('language, auto_delete_enabled, auto_delete_keywords')
+    .select('language, auto_delete_enabled, auto_delete_keywords, summarize_articles')
     .maybeSingle()
 
   return {
     targetLanguage: data?.language ?? DEFAULT_LANGUAGE,
     autoDeleteKeywords: data?.auto_delete_enabled ? (data.auto_delete_keywords ?? []) : [],
+    summarizeEnabled: data?.summarize_articles ?? false,
   }
 }
 
@@ -157,7 +160,8 @@ async function processItem(
   item: FeedEntryItem,
   guid: string,
   targetLanguage: string,
-  autoDeleteKeywords: string[]
+  autoDeleteKeywords: string[],
+  summarizeEnabled: boolean
 ): Promise<{ inserted: boolean; autoDeleted: boolean }> {
   try {
     const rawTitle = item.title ?? ''
@@ -183,11 +187,18 @@ async function processItem(
       return { inserted: false, autoDeleted: true }
     }
 
-    const summary_ai = await summarizeArticle(
-      title_en ?? stripHtml(rawTitle),
-      summary_en ?? stripHtml(rawSummary),
-      targetLanguage
-    )
+    // Off by default (see UserPreferences.summarizeEnabled) — the OpenAI
+    // call this skips is the pipeline's one unconditional per-article cost
+    // (unlike translation, which only fires for non-target-language
+    // content); when it's off, feed_items.summary_ai just stays null and
+    // article lists fall back to the feed's own description instead.
+    const summary_ai = summarizeEnabled
+      ? await summarizeArticle(
+          title_en ?? stripHtml(rawTitle),
+          summary_en ?? stripHtml(rawSummary),
+          targetLanguage
+        )
+      : null
 
     // upsert + ignoreDuplicates rather than a plain insert: if this run
     // overlaps another (cron firing while "Run ingest now" is also
@@ -269,7 +280,8 @@ async function processFeed(
   feed: FeedRow,
   cutoffMs: number | null,
   targetLanguage: string,
-  autoDeleteKeywords: string[]
+  autoDeleteKeywords: string[],
+  summarizeEnabled: boolean
 ): Promise<FeedResult> {
   try {
     const rawItems = await fetchFeedItems(feed)
@@ -322,7 +334,7 @@ async function processFeed(
     // OpenAI calls) would otherwise discard every already-processed item
     // for this feed, and re-pay for the same OpenAI calls on the next run.
     const results = await mapWithConcurrency(newItems, ITEM_CONCURRENCY, ({ item, guid }) =>
-      processItem(supabase, feed, item, guid, targetLanguage, autoDeleteKeywords)
+      processItem(supabase, feed, item, guid, targetLanguage, autoDeleteKeywords, summarizeEnabled)
     )
 
     const itemsInserted = results.filter((r) => r.inserted).length
@@ -373,18 +385,20 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
 
   // Independent of each other — run together instead of paying for two
   // sequential round trips before any feed work can start.
-  const [{ data: feeds, error: feedsError }, { targetLanguage, autoDeleteKeywords }] =
-    await Promise.all([
-      supabase.from('feeds').select('id, url, title, is_scraped'),
-      loadIngestPreferences(supabase),
-    ])
+  const [
+    { data: feeds, error: feedsError },
+    { targetLanguage, autoDeleteKeywords, summarizeEnabled },
+  ] = await Promise.all([
+    supabase.from('feeds').select('id, url, title, is_scraped'),
+    loadIngestPreferences(supabase),
+  ])
 
   if (feedsError) {
     throw new Error(`Failed to load feeds: ${feedsError.message}`)
   }
 
   const results = await mapWithConcurrency(feeds ?? [], FEED_CONCURRENCY, (feed) =>
-    processFeed(supabase, feed, cutoffMs, targetLanguage, autoDeleteKeywords)
+    processFeed(supabase, feed, cutoffMs, targetLanguage, autoDeleteKeywords, summarizeEnabled)
   )
 
   let feedsProcessed = 0

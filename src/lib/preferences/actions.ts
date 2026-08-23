@@ -21,6 +21,7 @@ export async function updatePreferences(
     language: prefs.language,
     auto_delete_enabled: prefs.autoDeleteEnabled,
     auto_delete_keywords: prefs.autoDeleteKeywords,
+    summarize_articles: prefs.summarizeEnabled,
     updated_at: new Date().toISOString(),
   })
   if (error) return { error: error.message }
