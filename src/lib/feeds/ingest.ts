@@ -27,6 +27,37 @@ const EXISTING_GUID_CHECK_BATCH_SIZE = 200
 // to get past naive UA blocklists without pretending to be a browser.
 const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https://github.com/hunnahall/Parable)'
 
+// rss-parser's underlying XML parser (sax-js) always reports a parse
+// failure with "Line: N" and "Column: N" in the message — a distinctive
+// enough signature to tell "this feed's XML is malformed" apart from a
+// network/HTTP failure, which is what parseAndRepairFeed below uses to
+// decide whether a repair attempt is worth making.
+function isXmlParseError(err: unknown): boolean {
+  return err instanceof Error && /Line:\s*\d+/.test(err.message) && /Column:\s*\d+/.test(err.message)
+}
+
+// A small number of feeds (crisisgroup.org, tunisienumerique.com — both
+// observed failing this way) leak raw, unescaped page boilerplate (a
+// Google Tag Manager snippet, in crisisgroup's case) into an item field
+// without CDATA-wrapping or entity-escaping it. A literal `&l=` in that
+// snippet reads to an XML parser as the start of a malformed entity
+// reference, which is what "Invalid character in entity name" actually
+// is — a bug in the feed's own template, not anything about how we
+// request it. Rather than failing the whole feed on it, retry once with
+// stray `&` characters (any not already part of a real entity) escaped
+// to `&amp;`. Only reached when parser.parseURL() already threw an
+// XML-shaped error, so a healthy feed never pays for this extra fetch.
+async function parseAndRepairFeed(parser: Parser, url: string) {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': FEED_USER_AGENT },
+    signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`Status code ${res.status}`)
+  const raw = await res.text()
+  const repaired = raw.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;')
+  return parser.parseString(repaired)
+}
+
 export interface FeedFailure {
   feedId: string
   url: string
@@ -75,7 +106,10 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
 
   for (const feed of feeds ?? []) {
     try {
-      const parsed = await parser.parseURL(feed.url)
+      const parsed = await parser.parseURL(feed.url).catch((err) => {
+        if (!isXmlParseError(err)) throw err
+        return parseAndRepairFeed(parser, feed.url)
+      })
 
       // Each RSS item needs a stable identifier to dedupe against. Most
       // feeds set <guid>; a handful only set <link>. If neither is
