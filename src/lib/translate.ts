@@ -3,6 +3,7 @@ import he from 'he'
 import { franc } from 'franc'
 import langs from 'langs'
 import OpenAI from 'openai'
+import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -75,8 +76,9 @@ export function stripHtml(html: string): string {
     .trim()
 }
 
-async function translateToEnglish(
-  texts: [string, string]
+async function translateToTargetLanguage(
+  texts: [string, string],
+  targetLanguage: string
 ): Promise<[string | null, string | null] | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
@@ -85,6 +87,7 @@ async function translateToEnglish(
   }
 
   const [title, summary] = texts
+  const targetName = languageLabel(targetLanguage)
   const client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS })
 
   try {
@@ -116,8 +119,7 @@ async function translateToEnglish(
       input: [
         {
           role: 'developer',
-          content:
-            'Translate the article title and summary into English. Preserve meaning and tone; do not add commentary or labels. If a field is already in English, return it unchanged.',
+          content: `Translate the article title and summary into ${targetName}. Preserve meaning and tone; do not add commentary or labels. If a field is already in ${targetName}, return it unchanged.`,
         },
         { role: 'user', content: `Title: ${title}\n\nSummary: ${summary}` },
       ],
@@ -158,18 +160,23 @@ function textToParagraphHtml(text: string): string {
 
 // Translate-on-open: a separate path from translateArticle's ingest-time
 // title/summary translation (which is unaffected by this). Only runs when
-// a user actually opens a non-English article's reading view (see
-// src/app/articles/[id]/page.tsx), operating on Readability's extracted
-// plain text rather than the raw HTML — simpler and cheaper than asking
-// the model to preserve markup, and textToParagraphHtml above restores
-// enough structure for a readable result.
-export async function translateFullContent(text: string): Promise<string | null> {
+// a user actually opens a reading view for an article not already in their
+// target language (see src/app/articles/[id]/page.tsx), operating on
+// Readability's extracted plain text rather than the raw HTML — simpler
+// and cheaper than asking the model to preserve markup, and
+// textToParagraphHtml above restores enough structure for a readable
+// result.
+export async function translateFullContent(
+  text: string,
+  targetLanguage: string = DEFAULT_LANGUAGE
+): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     console.error('translate: OPENAI_API_KEY not set, skipping full-content translation')
     return null
   }
 
+  const targetName = languageLabel(targetLanguage)
   const truncated = text.slice(0, BODY_MAX_LENGTH)
   const client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS })
 
@@ -182,8 +189,7 @@ export async function translateFullContent(text: string): Promise<string | null>
       input: [
         {
           role: 'developer',
-          content:
-            'Translate the following article body into English. Preserve paragraph breaks (blank lines between paragraphs). Do not add commentary, labels, or a preamble — output only the translated text.',
+          content: `Translate the following article body into ${targetName}. Preserve paragraph breaks (blank lines between paragraphs). Do not add commentary, labels, or a preamble — output only the translated text.`,
         },
         { role: 'user', content: truncated },
       ],
@@ -204,7 +210,8 @@ export async function translateFullContent(text: string): Promise<string | null>
 
 export async function translateArticle(
   rawTitle: string,
-  rawSummary: string
+  rawSummary: string,
+  targetLanguage: string = DEFAULT_LANGUAGE
 ): Promise<TranslatedArticle> {
   const title = stripHtml(rawTitle)
   const summary = stripHtml(rawSummary)
@@ -213,13 +220,13 @@ export async function translateArticle(
   const original_language =
     detected === 'und' ? 'und' : toTwoLetterCode(detected)
 
-  if (original_language === 'en' || detected === 'und') {
+  if (original_language === targetLanguage || detected === 'und') {
     return { original_language, title_en: null, summary_en: null }
   }
 
   const truncatedSummary = summary.slice(0, SUMMARY_MAX_LENGTH)
 
-  const translated = await translateToEnglish([title, truncatedSummary])
+  const translated = await translateToTargetLanguage([title, truncatedSummary], targetLanguage)
 
   if (!translated) {
     return { original_language, title_en: null, summary_en: null }

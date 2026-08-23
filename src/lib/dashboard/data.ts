@@ -372,12 +372,18 @@ export async function getArticlesUnfiledCount(): Promise<number> {
   if (!user) return 0
 
   const supabase = await createClient()
-  const { count, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
+  // Not `.select('id', { count: 'exact', head: true })`: PostgREST doesn't
+  // return a Content-Range count header for a HEAD request against an RPC
+  // endpoint (only plain table queries), so that combination silently came
+  // back with count === null here — the badge was always rendering as 0.
+  // The inbox is bounded (excludes saved/archived), so fetching ids and
+  // counting them client-side is cheap and actually works.
+  const { data, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
     p_user_id: user.id,
     p_exclude_states: ['saved', 'archived'],
-  }).select('id', { count: 'exact', head: true })
+  }).select('id')
   logQueryError('dashboard/getArticlesUnfiledCount', error)
-  return count ?? 0
+  return data?.length ?? 0
 }
 
 export interface ArticlesPageFilters {

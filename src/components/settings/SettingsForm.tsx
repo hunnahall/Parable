@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { X } from 'lucide-react'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
+import { SUPPORTED_LANGUAGES } from '@/lib/languages'
 import ExportFeedsButton from './ExportFeedsButton'
 import CleanSlateSection from './CleanSlateSection'
 
@@ -30,11 +32,29 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
   const [prefs, setPrefs] = useState(initialPreferences)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [keywordInput, setKeywordInput] = useState('')
 
-  // Computed once per mount, not per render — Intl.supportedValuesOf
-  // returns several hundred zones and never changes during a session.
-  const zones = useMemo(() => timezoneOptions(), [])
-  const detectedZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
+  // Computed only after mount, not during render — Intl.supportedValuesOf's
+  // zone list and the resolved default zone both come from the runtime's own
+  // ICU data, which can differ between Node (SSR) and the browser (e.g. the
+  // tz alias "Africa/Asmara" vs "Africa/Asmera", or the server's system zone
+  // vs the browser's, especially once deployed where the server runs in
+  // UTC). Computing either one during render made the server-rendered HTML
+  // and the client's first render diverge — a hydration mismatch. An effect
+  // only ever runs client-side, after hydration has already committed, so
+  // there's nothing for the mismatch check to compare it against.
+  const [zones, setZones] = useState<string[]>([])
+  const [detectedZone, setDetectedZone] = useState('')
+
+  useEffect(() => {
+    // Deliberately setState-in-effect, not derived-during-render: the whole
+    // point is that this must NOT run during the render React uses to
+    // hydrate against the server HTML (see the comment above) — an effect
+    // is the one place guaranteed to run only after that's already done.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZones(timezoneOptions())
+    setDetectedZone(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  }, [])
 
   // No Save button — every control commits on change. Local state updates
   // immediately (so the control feels instant); the save + refresh happen
@@ -58,13 +78,22 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
     router.refresh()
   }
 
+  function addKeyword() {
+    const trimmed = keywordInput.trim()
+    if (!trimmed) return
+    setKeywordInput('')
+    if (prefs.autoDeleteKeywords.some((word) => word.toLowerCase() === trimmed.toLowerCase())) return
+    applyChange({ autoDeleteKeywords: [...prefs.autoDeleteKeywords, trimmed] })
+  }
+
+  function removeKeyword(word: string) {
+    applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
+  }
+
   return (
     <div className="space-y-6">
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Font</h2>
-        <p className="text-xs text-muted">
-          Applies to body text throughout the app — headings stay Hanken Grotesk.
-        </p>
         <select
           value={prefs.font}
           onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
@@ -80,15 +109,12 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
 
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Timezone</h2>
-        <p className="text-xs text-muted">
-          Auto-detect uses your browser&rsquo;s timezone ({detectedZone}) without needing to pick one.
-        </p>
         <select
           value={prefs.timezone}
           onChange={(e) => applyChange({ timezone: e.target.value })}
           className="w-full border border-border px-3 py-2 text-sm bg-background"
         >
-          <option value="">Auto-detect ({detectedZone})</option>
+          <option value="">{detectedZone ? `Auto-detect (${detectedZone})` : 'Auto-detect'}</option>
           {zones.map((zone) => (
             <option key={zone} value={zone}>
               {zone}
@@ -152,6 +178,82 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
             Dark
           </label>
         </div>
+      </div>
+
+      <div className="card-elevated p-4 space-y-2">
+        <h2 className="text-sm font-medium font-heading">Language</h2>
+        <p className="text-xs text-muted">
+          Titles and summaries are translated into this language automatically. Other content is
+          translated when opened.
+        </p>
+        <select
+          value={prefs.language}
+          onChange={(e) => applyChange({ language: e.target.value })}
+          className="w-full border border-border px-3 py-2 text-sm bg-background"
+        >
+          {SUPPORTED_LANGUAGES.map((lang) => (
+            <option key={lang.code} value={lang.code}>
+              {lang.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card-elevated p-4 space-y-2">
+        <h2 className="text-sm font-medium font-heading">Auto-delete by keyword</h2>
+        <p className="text-xs text-muted">
+          New articles with these keywords in the title will be automatically discarded.
+        </p>
+        <label className="flex items-center gap-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={prefs.autoDeleteEnabled}
+            onChange={(e) => applyChange({ autoDeleteEnabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addKeyword()
+              }
+            }}
+            placeholder="e.g. soccer"
+            className="flex-1 border border-border px-3 py-2 text-sm bg-background"
+          />
+          <button
+            type="button"
+            onClick={addKeyword}
+            className="border border-border px-3 py-2 text-sm hover:bg-foreground/5 transition-colors"
+          >
+            Add
+          </button>
+        </div>
+        {prefs.autoDeleteKeywords.length > 0 && (
+          <ul className="flex flex-wrap gap-2">
+            {prefs.autoDeleteKeywords.map((word) => (
+              <li
+                key={word}
+                className="flex items-center gap-1 border border-border px-2 py-1 text-xs"
+              >
+                {word}
+                <button
+                  type="button"
+                  onClick={() => removeKeyword(word)}
+                  aria-label={`Remove ${word}`}
+                  className="text-muted hover:text-foreground transition-colors"
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <ExportFeedsButton />

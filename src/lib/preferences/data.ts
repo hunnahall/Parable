@@ -1,5 +1,6 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
+import { DEFAULT_LANGUAGE } from '@/lib/languages'
 
 export type FontChoice = 'inter' | 'hanken-grotesk' | 'work-sans' | 'instrument-sans' | 'lato'
 export type ClockFormat = '12h' | '24h'
@@ -13,6 +14,15 @@ export interface UserPreferences {
   clockFormat: ClockFormat
   theme: ThemeChoice
   sidebarCollapsed: boolean
+  // ISO 639-1 code (see src/lib/languages.ts) — the target language for
+  // ingest-time title/summary translation and translate-on-open, not a UI
+  // locale. Articles already in this language are left untranslated.
+  language: string
+  autoDeleteEnabled: boolean
+  // Case-insensitive substring match against the (already-translated)
+  // title — see runIngest in src/lib/feeds/ingest.ts for where this is
+  // applied.
+  autoDeleteKeywords: string[]
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -21,6 +31,9 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   clockFormat: '24h',
   theme: 'system',
   sidebarCollapsed: false,
+  language: DEFAULT_LANGUAGE,
+  autoDeleteEnabled: false,
+  autoDeleteKeywords: [],
 }
 
 // No row is created for a user until they first change a setting — every
@@ -33,7 +46,9 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('font, timezone, clock_format, theme, sidebar_collapsed')
+    .select(
+      'font, timezone, clock_format, theme, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords'
+    )
     .eq('user_id', user.id)
     .maybeSingle()
   logQueryError('preferences/getUserPreferences', error)
@@ -45,5 +60,8 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     clockFormat: data.clock_format as ClockFormat,
     theme: data.theme as ThemeChoice,
     sidebarCollapsed: data.sidebar_collapsed,
+    language: data.language,
+    autoDeleteEnabled: data.auto_delete_enabled,
+    autoDeleteKeywords: data.auto_delete_keywords ?? [],
   }
 }

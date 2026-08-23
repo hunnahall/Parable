@@ -34,10 +34,7 @@ export default function ExportFeedsButton() {
   return (
     <div className="card-elevated p-4 space-y-2">
       <h2 className="text-sm font-medium font-heading">Export feeds</h2>
-      <p className="text-xs text-muted">
-        Download an OPML file listing every feed you&rsquo;ve subscribed to, organized by folder —
-        importable into Parable or any other feed reader.
-      </p>
+      <p className="text-xs text-muted">Download an OPML file listing all of your feeds and folders.</p>
       <button
         type="button"
         onClick={handleExport}

@@ -166,7 +166,14 @@ export default function FeedManager({
                 Processed {ingestSummary.feedsProcessed} feed
                 {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
                 {ingestSummary.itemsInserted} new item
-                {ingestSummary.itemsInserted === 1 ? '' : 's'}.
+                {ingestSummary.itemsInserted === 1 ? '' : 's'}
+                {ingestSummary.itemsAutoDeleted > 0 && (
+                  <>
+                    , auto-deleted {ingestSummary.itemsAutoDeleted} item
+                    {ingestSummary.itemsAutoDeleted === 1 ? '' : 's'}
+                  </>
+                )}
+                .
               </p>
               {ingestSummary.feedsFailed.length > 0 && (
                 <ul className="mt-1 space-y-0.5">
