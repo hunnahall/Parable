@@ -10,10 +10,13 @@ import type { FeedRow } from './data'
 
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
+const FEED_SELECT = 'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles'
+
 export async function addFeed(input: {
   url: string
   title: string
   category: string | null
+  summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -45,8 +48,8 @@ export async function addFeed(input: {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('feeds')
-    .insert({ url, title, category })
-    .select('id, url, title, category, last_fetched_at, last_error, is_scraped')
+    .insert({ url, title, category, summarize_articles: input.summarizeArticles ?? false })
+    .select(FEED_SELECT)
     .single()
 
   if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
@@ -79,6 +82,7 @@ export async function createBuiltFeed(input: {
   sourceUrl: string
   title: string
   category: string | null
+  summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -93,8 +97,14 @@ export async function createBuiltFeed(input: {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('feeds')
-    .insert({ url, title, category, is_scraped: true })
-    .select('id, url, title, category, last_fetched_at, last_error, is_scraped')
+    .insert({
+      url,
+      title,
+      category,
+      is_scraped: true,
+      summarize_articles: input.summarizeArticles ?? false,
+    })
+    .select(FEED_SELECT)
     .single()
 
   if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
@@ -125,7 +135,7 @@ export async function runIngestNow(): Promise<
 
 export async function updateFeed(
   id: string,
-  input: { title: string; category: string | null }
+  input: { title: string; category: string | null; summarizeArticles: boolean }
 ): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -136,7 +146,10 @@ export async function updateFeed(
   if (!title) return { error: 'Title is required' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('feeds').update({ title, category }).eq('id', id)
+  const { error } = await supabase
+    .from('feeds')
+    .update({ title, category, summarize_articles: input.summarizeArticles })
+    .eq('id', id)
 
   if (error) return { error: error.message }
 

@@ -225,22 +225,6 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">AI Summaries</h2>
-        <p className="text-xs text-muted">
-          Generate a short AI summary for each article. When off, the list shows the
-          feed&rsquo;s own description instead.
-        </p>
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={prefs.summarizeEnabled}
-            onChange={(e) => applyChange({ summarizeEnabled: e.target.checked })}
-          />
-          Enabled
-        </label>
-      </div>
-
-      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Auto-delete by keyword</h2>
         <p className="text-xs text-muted">
           New articles with these keywords in the title will be automatically discarded.

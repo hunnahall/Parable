@@ -23,11 +23,6 @@ export interface UserPreferences {
   // title — see runIngest in src/lib/feeds/ingest.ts for where this is
   // applied.
   autoDeleteKeywords: string[]
-  // Gates the summarizeArticle() OpenAI call in src/lib/feeds/ingest.ts —
-  // off by default (this column predates the UI for it; see the DB
-  // default). When off, article lists fall back to each feed's own
-  // description instead of an AI-generated one.
-  summarizeEnabled: boolean
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -39,7 +34,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   language: DEFAULT_LANGUAGE,
   autoDeleteEnabled: false,
   autoDeleteKeywords: [],
-  summarizeEnabled: false,
 }
 
 // No row is created for a user until they first change a setting — every
@@ -53,7 +47,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const { data, error } = await supabase
     .from('user_preferences')
     .select(
-      'font, timezone, clock_format, theme, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords, summarize_articles'
+      'font, timezone, clock_format, theme, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords'
     )
     .eq('user_id', user.id)
     .maybeSingle()
@@ -69,6 +63,5 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     language: data.language,
     autoDeleteEnabled: data.auto_delete_enabled,
     autoDeleteKeywords: data.auto_delete_keywords ?? [],
-    summarizeEnabled: data.summarize_articles,
   }
 }
