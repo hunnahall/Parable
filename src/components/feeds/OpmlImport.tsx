@@ -114,7 +114,7 @@ export default function OpmlImport() {
           {result.failed.length > 0 && (
             <ul className="mt-1 space-y-0.5">
               {result.failed.map((f) => (
-                <li key={f.url} className="text-red-600">
+                <li key={f.url} className="text-danger">
                   {f.url}: {f.error}
                 </li>
               ))}

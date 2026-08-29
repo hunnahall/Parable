@@ -141,7 +141,7 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
           Add folder
         </button>
       </form>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No folders yet.</p>
       ) : (
@@ -200,10 +200,10 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => handleRemove(folder.id)}
-                    className="text-muted hover:text-red-600 transition-colors disabled:opacity-50"
+                    className="text-muted hover:text-danger transition-colors disabled:opacity-50"
                     aria-label={`Delete folder ${folder.name}`}
                   >
-                    <X size={12} />
+                    <X size={12} strokeWidth={1.75} />
                   </button>
                 </span>
               </li>

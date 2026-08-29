@@ -10,7 +10,8 @@ import type { FeedRow } from './data'
 
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
-const FEED_SELECT = 'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles'
+const FEED_SELECT =
+  'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, consecutive_failures'
 
 export async function addFeed(input: {
   url: string

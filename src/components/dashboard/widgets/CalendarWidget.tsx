@@ -77,9 +77,9 @@ export default function CalendarWidget() {
           components={{
             Chevron: ({ orientation, ...props }) =>
               orientation === 'left' ? (
-                <ChevronLeft size={16} {...props} />
+                <ChevronLeft size={16} strokeWidth={1.75} {...props} />
               ) : (
-                <ChevronRight size={16} {...props} />
+                <ChevronRight size={16} strokeWidth={1.75} {...props} />
               ),
           }}
         />

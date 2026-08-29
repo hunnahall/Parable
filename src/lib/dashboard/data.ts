@@ -15,6 +15,11 @@ export interface ArticleItem {
   tags: string[]
   archivedAt: string | null
   folderId: string | null
+  // Article-level image (enclosure/media:content/media:thumbnail captured
+  // at ingest, or a scraped feed's detected image) — null for most feeds.
+  // Card view (ArticleCardGrid) falls back to a favicon derived from
+  // `link`'s origin when this is null.
+  imageUrl: string | null
 }
 
 export interface FeedOption {
@@ -72,16 +77,23 @@ interface ArticleStateInfo {
 // All of a user's curation state fits comfortably in one query at personal
 // scale — used both to exclude archived items from the default views and to
 // annotate the ones that are saved/archived.
+//
+// `user` is optional: pass an already-resolved user (or null) when the
+// caller has one in hand so this doesn't pay for its own getUser() call —
+// see getArticleById, which resolves it once and fans it out to this and
+// getArticleFoldersMap in parallel instead of each calling getUser()
+// separately. Omit it (or pass undefined) to resolve it here as before.
 async function getArticleStatesMap(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user?: Awaited<ReturnType<typeof getUser>>
 ): Promise<Map<string, ArticleStateInfo>> {
-  const user = await getUser()
-  if (!user) return new Map()
+  const resolvedUser = user !== undefined ? user : await getUser()
+  if (!resolvedUser) return new Map()
 
   const { data, error } = await supabase
     .from('article_states')
     .select('feed_item_id, state, note, tags, archived_at')
-    .eq('user_id', user.id)
+    .eq('user_id', resolvedUser.id)
   logQueryError('dashboard/getArticleStatesMap', error)
 
   return new Map(
@@ -100,23 +112,25 @@ async function getArticleStatesMap(
 // A user's per-article folder filing (Saved-page organization) — separate
 // from feed_folders (subscription organization), though both read from the
 // same folders table. One row per (user, article) by article_folders' PK.
+// See getArticleStatesMap above for why `user` is optional.
 async function getArticleFoldersMap(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user?: Awaited<ReturnType<typeof getUser>>
 ): Promise<Map<string, string>> {
-  const user = await getUser()
-  if (!user) return new Map()
+  const resolvedUser = user !== undefined ? user : await getUser()
+  if (!resolvedUser) return new Map()
 
   const { data, error } = await supabase
     .from('article_folders')
     .select('feed_item_id, folder_id')
-    .eq('user_id', user.id)
+    .eq('user_id', resolvedUser.id)
   logQueryError('dashboard/getArticleFoldersMap', error)
 
   return new Map((data ?? []).map((row) => [row.feed_item_id, row.folder_id]))
 }
 
 const ARTICLE_SELECT =
-  'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at'
+  'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at, image_url'
 
 // There's no generated Database type in this project (createClient() has
 // no Schema generic), so postgrest-js can infer a `.from('feed_items')
@@ -149,6 +163,7 @@ type ArticleRow = {
   summary_en: string | null
   summary_ai: string | null
   published_at: string | null
+  image_url: string | null
 }
 
 function toArticleItem(
@@ -172,6 +187,7 @@ function toArticleItem(
     tags: info?.tags ?? [],
     archivedAt: info?.archivedAt ?? null,
     folderId: folders.get(item.id) ?? null,
+    imageUrl: item.image_url,
   }
 }
 
@@ -182,17 +198,25 @@ export async function getArticleById(
   id: string
 ): Promise<(ArticleItem & { originalLanguage: string | null }) | null> {
   const supabase = await createClient()
-  const { data: item, error } = await supabase
-    .from('feed_items')
-    .select(`${ARTICLE_SELECT}, original_language`)
-    .eq('id', id)
-    .maybeSingle()
+  // The item select and the user lookup are independent of each other —
+  // resolving user here once (instead of the two separate internal
+  // getUser() calls getArticleStatesMap/getArticleFoldersMap used to each
+  // make) removes the artificial sequential ordering between them below.
+  const [{ data: item, error }, user] = await Promise.all([
+    supabase.from('feed_items').select(`${ARTICLE_SELECT}, original_language`).eq('id', id).maybeSingle(),
+    getUser(),
+  ])
   logQueryError('dashboard/getArticleById', error)
   if (!item) return null
 
-  const states = await getArticleStatesMap(supabase)
-  const folders = await getArticleFoldersMap(supabase)
-  const feedMeta = await attachFeedMeta(supabase, [item])
+  // states/folders/feedMeta only depend on `item`/`user` above, not on
+  // each other — previously awaited one at a time, paying for each
+  // other's latency serially for no reason.
+  const [states, folders, feedMeta] = await Promise.all([
+    getArticleStatesMap(supabase, user),
+    getArticleFoldersMap(supabase, user),
+    attachFeedMeta(supabase, [item]),
+  ])
 
   return { ...toArticleItem(item, feedMeta, states, folders), originalLanguage: item.original_language }
 }
@@ -363,8 +387,8 @@ export async function getArticlesUnfiledCount(): Promise<number> {
 export interface ArticlesPageFilters {
   query?: string
   view?: 'unfiled' | 'saved' | 'archived'
-  folderId?: string | null
-  sourceFeedId?: string | null
+  folderIds?: string[]
+  sourceFeedIds?: string[]
   tag?: string | null
   dateFrom?: string | null
   dateTo?: string | null
@@ -395,8 +419,10 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   if (!user) return { items: [], nextCursor: null }
 
   const supabase = await createClient()
-  const states = await getArticleStatesMap(supabase)
-  const folders = await getArticleFoldersMap(supabase)
+  const [states, folders] = await Promise.all([
+    getArticleStatesMap(supabase, user),
+    getArticleFoldersMap(supabase, user),
+  ])
   const limit = filters.limit ?? ARTICLES_PAGE_LIMIT
   const view = filters.view ?? 'unfiled'
 
@@ -444,8 +470,8 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     })
   }
 
-  if (filters.sourceFeedId) {
-    query = query.eq('feed_id', filters.sourceFeedId)
+  if (filters.sourceFeedIds && filters.sourceFeedIds.length > 0) {
+    query = query.in('feed_id', filters.sourceFeedIds)
   }
 
   if (filters.dateFrom) {
@@ -458,12 +484,15 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   // A folder can hold feeds (subscription organization) and/or saved
   // articles filed directly into it — matching either satisfies the
   // filter, since both mean "this article belongs to that folder" from
-  // the user's point of view.
-  if (filters.folderId) {
+  // the user's point of view. Multiple selected folders union together
+  // "for free": both lookups already collect ids into flat arrays before
+  // the final .or(), so switching .eq -> .in just widens each array to
+  // every feed/article belonging to ANY selected folder.
+  if (filters.folderIds && filters.folderIds.length > 0) {
     const [{ data: feedFolderRows, error: feedFolderError }, { data: articleFolderRows, error: articleFolderError }] =
       await Promise.all([
-        supabase.from('feed_folders').select('feed_id').eq('folder_id', filters.folderId),
-        supabase.from('article_folders').select('feed_item_id').eq('folder_id', filters.folderId),
+        supabase.from('feed_folders').select('feed_id').in('folder_id', filters.folderIds),
+        supabase.from('article_folders').select('feed_item_id').in('folder_id', filters.folderIds),
       ])
     logQueryError('dashboard/getArticlesPage (folder feed lookup)', feedFolderError)
     logQueryError('dashboard/getArticlesPage (folder article lookup)', articleFolderError)

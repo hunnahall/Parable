@@ -10,6 +10,7 @@ export interface FeedRow {
   last_error: string | null
   is_scraped: boolean
   summarize_articles: boolean
+  consecutive_failures: number
   folderIds: string[]
 }
 
@@ -17,7 +18,9 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('feeds')
-    .select('id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles')
+    .select(
+      'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, consecutive_failures'
+    )
     .order('title')
   logQueryError('feeds/listFeedsDetailed', error)
   const feeds = data ?? []

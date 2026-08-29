@@ -138,6 +138,29 @@ h1 {
   line-height: 1.08;
 }
 
+/* Rest of the heading scale, tightened toward a dense/utilitarian
+   register (Linear/Titanium direction) rather than a marketing-page
+   jump between levels — h2 is a real section header, h3/h4 step down
+   into label-weight territory. Bare elements only, same rule as h1
+   above: any call site with its own Tailwind text-* class overrides
+   these via normal specificity, so existing compact `text-sm` section
+   headers (Settings, dialogs, etc.) are untouched — this is the
+   default for headings that don't opt into a specific size. */
+h2 {
+  font-size: 1.25rem; /* 20px */
+  line-height: 1.3;
+}
+h3 {
+  font-size: 1rem; /* 16px */
+  line-height: 1.4;
+}
+h4 {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 /* Elevation system (design-instructions.md #2): one shared surface for
    every card/panel/modal/popover instead of hand-tuning border+shadow
    per component. Zero-radius stays — elevation here is purely

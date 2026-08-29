@@ -72,7 +72,7 @@ export default function ExportDialog({
             aria-label="Close"
             className="text-muted hover:text-foreground transition-colors"
           >
-            <X size={16} aria-hidden="true" />
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
 
@@ -108,7 +108,7 @@ export default function ExportDialog({
           <span className="text-sm text-muted">.{filetype === 'pdf' ? 'pdf' : 'md'}</span>
         </div>
 
-        {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+        {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
         <button
           type="button"

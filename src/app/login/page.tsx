@@ -13,7 +13,7 @@ export default async function LoginPage({
       <ParableLogo height={32} />
       <h1>Sign in</h1>
 
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
       {message && <p className="text-green-600 text-sm">{message}</p>}
 
       <form className="space-y-3">

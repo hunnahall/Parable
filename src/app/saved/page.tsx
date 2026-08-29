@@ -15,6 +15,7 @@ export default async function SavedPage({
     tag?: string
     from?: string
     to?: string
+    display?: string
   }>
 }) {
   const user = await getUser()
@@ -24,19 +25,20 @@ export default async function SavedPage({
   const filters: ArticlesFilters = {
     query: params.q ?? '',
     view: 'saved',
-    folderId: params.folder ?? null,
-    sourceFeedId: params.source ?? null,
+    folderIds: params.folder ? params.folder.split(',').filter(Boolean) : [],
+    sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
     tag: params.tag ?? null,
     dateFrom: params.from ?? null,
     dateTo: params.to ?? null,
+    display: params.display === 'card' ? 'card' : 'list',
   }
 
   const [page, folders, feedOptions, allTags] = await Promise.all([
     getArticlesPage({
       query: filters.query || undefined,
       view: filters.view,
-      folderId: filters.folderId,
-      sourceFeedId: filters.sourceFeedId,
+      folderIds: filters.folderIds,
+      sourceFeedIds: filters.sourceFeedIds,
       tag: filters.tag,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
@@ -47,7 +49,7 @@ export default async function SavedPage({
   ])
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className={filters.display === 'card' ? 'p-8 max-w-6xl mx-auto' : 'p-8 max-w-3xl mx-auto'}>
       <h1 className="mb-4">Saved</h1>
       <ArticlesView
         basePath="/saved"

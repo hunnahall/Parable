@@ -47,7 +47,7 @@ export default function WidgetCard({
           className="flex items-center justify-center w-5 h-5 text-muted hover:bg-foreground/5 hover:text-foreground text-sm leading-none transition-colors"
           aria-label="Remove widget"
         >
-          <X size={14} />
+          <X size={14} strokeWidth={1.75} />
         </button>
       </div>
       <div className="p-3 overflow-auto grow">

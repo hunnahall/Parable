@@ -53,7 +53,7 @@ export default function Sidebar({
             aria-label="Collapse sidebar"
             className="text-muted hover:text-foreground transition-colors shrink-0"
           >
-            <PanelLeftClose size={17} aria-hidden="true" />
+            <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -65,7 +65,7 @@ export default function Sidebar({
           aria-label="Expand sidebar"
           className="text-muted hover:text-foreground transition-colors mx-auto mb-2"
         >
-          <PanelLeftOpen size={17} aria-hidden="true" />
+          <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
 
@@ -74,7 +74,11 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-border-subtle p-3 text-sm">
-        {!collapsed && <div className="text-muted truncate mb-2">{userEmail}</div>}
+        {!collapsed && (
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted truncate mb-2">
+            {userEmail}
+          </div>
+        )}
         <form action={signOut}>
           <button
             type="submit"

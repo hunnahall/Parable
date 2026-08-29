@@ -51,10 +51,10 @@ export default function ArticleTagEditor({
           <button
             type="button"
             onClick={() => removeTag(tag)}
-            className="hover:text-red-600 transition-colors"
+            className="hover:text-danger transition-colors"
             aria-label={`Remove tag ${tag}`}
           >
-            <X size={12} />
+            <X size={12} strokeWidth={1.75} />
           </button>
         </span>
       ))}

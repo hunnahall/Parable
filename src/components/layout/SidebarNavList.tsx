@@ -34,13 +34,13 @@ export default function SidebarNavList({
             aria-current={active ? 'page' : undefined}
             title={collapsed ? entry.label : undefined}
             className={
-              'flex items-center gap-3 px-3 py-2 text-sm font-label transition-colors ' +
+              'flex items-center gap-3 px-3 py-1.5 text-sm font-label transition-colors ' +
               (active
                 ? 'text-foreground border-l-2 border-accent bg-foreground/5'
                 : 'text-muted hover:text-foreground border-l-2 border-transparent')
             }
           >
-            <Icon size={17} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+            <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{entry.label}</span>}
             {!collapsed && badgeCount > 0 && <CountBadge count={badgeCount} />}
           </Link>

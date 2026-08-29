@@ -1,12 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
-import { saveArticle, archiveArticle, clearArticleState, deleteArticle } from '@/lib/articles/actions'
-import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
 import type { ArticleItem } from '@/lib/dashboard/data'
+import { useArticleCardActions } from './useArticleCardActions'
+import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
 
@@ -54,100 +51,7 @@ export default function ArticleCard({
   selected?: boolean
   onToggleSelect?: (id: string) => void
 }) {
-  const router = useRouter()
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [addingFolder, setAddingFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-
-  async function handleSave() {
-    setPending(true)
-    setError(null)
-    onUpdate(item.id, { state: 'saved', archivedAt: null })
-    const result = await saveArticle(item.id)
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleArchive() {
-    setPending(true)
-    setError(null)
-    onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString() })
-    const result = await archiveArticle(item.id)
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleUnfile() {
-    setPending(true)
-    setError(null)
-    onUpdate(item.id, { state: null, archivedAt: null })
-    const result = await clearArticleState(item.id)
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleDelete() {
-    setPending(true)
-    setError(null)
-    onRemove(item.id)
-    const result = await deleteArticle(item.id)
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  // Filing an article into a folder is a saved-article concept — picking
-  // one from Articles/Archive implicitly saves the article too, so "save
-  // directly to a folder" is one action instead of save-then-refile.
-  async function handleFolderChange(folderId: string | null) {
-    const shouldSave = folderId !== null && item.state !== 'saved'
-    onUpdate(item.id, { folderId, ...(shouldSave ? { state: 'saved', archivedAt: null } : {}) })
-    if (shouldSave) {
-      const saveResult = await saveArticle(item.id)
-      if (saveResult.error) {
-        setError(saveResult.error)
-        return
-      }
-    }
-    const result = await assignArticleToFolder(item.id, folderId)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleCreateFolder() {
-    const name = newFolderName.trim()
-    setNewFolderName('')
-    setAddingFolder(false)
-    if (!name) return
-
-    const result = await addFolder({ name, parentId: null })
-    if (result.error || !result.id) {
-      setError(result.error ?? 'Failed to create folder')
-      return
-    }
-    onFolderCreated?.({ id: result.id, label: name })
-    await handleFolderChange(result.id)
-  }
-
+  const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showEditors = item.state === 'saved' || item.state === 'archived'
 
   return (
@@ -174,101 +78,14 @@ export default function ArticleCard({
           >
             {item.title}
           </Link>
-          {item.summary && <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.summary}</p>}
-          <div className="flex items-center gap-3 mt-1">
-            {item.state === 'saved' ? (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={handleUnfile}
-                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-              >
-                Unsave
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={handleSave}
-                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-              >
-                Save
-              </button>
-            )}
-            {item.state === 'archived' ? (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={handleUnfile}
-                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-              >
-                Unarchive
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={handleArchive}
-                className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-              >
-                Archive
-              </button>
-            )}
-            {showDelete && item.state === 'saved' && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={handleDelete}
-                className="text-xs text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
-              >
-                Delete
-              </button>
-            )}
-          </div>
-          {showFolderPicker && folders && (
-            <div className="flex items-center gap-1 mt-1">
-              <select
-                value={item.folderId ?? ''}
-                onChange={(e) => handleFolderChange(e.target.value || null)}
-                className="border border-border px-2 py-1 text-xs bg-background"
-              >
-                <option value="">No folder</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-              {addingFolder ? (
-                <input
-                  type="text"
-                  autoFocus
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onBlur={handleCreateFolder}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                    if (e.key === 'Escape') {
-                      setNewFolderName('')
-                      setAddingFolder(false)
-                    }
-                  }}
-                  placeholder="New folder…"
-                  className="w-28 border border-border px-2 py-1 text-xs bg-background"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setAddingFolder(true)}
-                  aria-label="Add folder"
-                  title="Add folder"
-                  className="text-muted hover:text-accent transition-colors"
-                >
-                  <Plus size={14} />
-                </button>
-              )}
-            </div>
-          )}
+          {item.summary && <p className="text-sm text-muted mt-0.5">{item.summary}</p>}
+          <ArticleCardActionsRow
+            item={item}
+            actions={actions}
+            folders={folders}
+            showFolderPicker={showFolderPicker}
+            showDelete={showDelete}
+          />
           {showEditors && (
             <>
               <ArticleNoteEditor
@@ -283,7 +100,7 @@ export default function ArticleCard({
               />
             </>
           )}
-          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          {actions.error && <p className="text-xs text-danger mt-1">{actions.error}</p>}
         </div>
       </div>
     </li>

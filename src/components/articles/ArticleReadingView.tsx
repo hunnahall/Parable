@@ -120,7 +120,7 @@ export default function ArticleReadingView({
         href="/articles"
         className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-accent transition-colors mb-6"
       >
-        <ArrowLeft size={14} aria-hidden="true" />
+        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
         Back to Articles
       </Link>
 
@@ -232,7 +232,7 @@ export default function ArticleReadingView({
             title="Add folder"
             className="text-muted hover:text-accent transition-colors"
           >
-            <Plus size={14} />
+            <Plus size={14} strokeWidth={1.75} />
           </button>
         )}
       </div>
@@ -252,7 +252,7 @@ export default function ArticleReadingView({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+      {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       <hr className="border-border-subtle mb-6" />
 

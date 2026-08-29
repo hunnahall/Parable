@@ -2,10 +2,14 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import sanitizeHtml from 'sanitize-html'
 
-// Matches the ingest pipeline's fetch-timeout convention (see
-// FEED_FETCH_TIMEOUT_MS in src/lib/feeds/ingest.ts) — a slow source
-// shouldn't hang the reading view indefinitely.
-const FETCH_TIMEOUT_MS = 15_000
+// Shorter than the ingest pipeline's fetch-timeout convention (see
+// FEED_FETCH_TIMEOUT_MS in src/lib/feeds/ingest.ts, still 15s — that one
+// runs in the background, this one blocks a user staring at a reading
+// view) — a slow source shouldn't hang the reading view indefinitely.
+// Most successful extractions complete in low single-digit seconds, so
+// 10s still comfortably covers normal sites without extending the
+// worst-case wait as far as 15s did.
+const FETCH_TIMEOUT_MS = 10_000
 
 export type ExtractResult = { html: string; text: string } | { error: string }
 

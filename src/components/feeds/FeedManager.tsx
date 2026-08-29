@@ -219,7 +219,7 @@ export default function FeedManager({
               {ingestSummary.feedsFailed.length > 0 && (
                 <ul className="mt-1 space-y-0.5">
                   {ingestSummary.feedsFailed.map((failure) => (
-                    <li key={failure.feedId} className="text-red-600">
+                    <li key={failure.feedId} className="text-danger">
                       {failure.url}: {failure.error}
                     </li>
                   ))}
@@ -227,7 +227,7 @@ export default function FeedManager({
               )}
             </div>
           )}
-          {ingestError && <p className="text-xs text-red-600 mt-1">{ingestError}</p>}
+          {ingestError && <p className="text-xs text-danger mt-1">{ingestError}</p>}
         </div>
         <button
           type="button"
@@ -290,7 +290,7 @@ export default function FeedManager({
         </label>
       </form>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
 
@@ -397,8 +397,15 @@ export default function FeedManager({
                       Last fetched: {formatDate(feed.last_fetched_at)}
                     </p>
                     {feed.last_error && (
-                      <p className="text-xs text-red-600 mt-0.5">
-                        ⚠ Failing: {feed.last_error}
+                      <p className="text-xs text-danger mt-0.5">
+                        {feed.consecutive_failures >= 3 ? (
+                          <span className="border border-danger text-danger px-1 py-0.5 mr-1 font-medium">
+                            Failing {feed.consecutive_failures}x
+                          </span>
+                        ) : (
+                          '⚠ '
+                        )}
+                        {feed.last_error}
                       </p>
                     )}
                   </div>
@@ -425,7 +432,7 @@ export default function FeedManager({
                       type="button"
                       disabled={pending}
                       onClick={() => handleRemove(feed.id)}
-                      className="text-sm text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
+                      className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
                     >
                       Remove
                     </button>

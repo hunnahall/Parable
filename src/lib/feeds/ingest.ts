@@ -145,6 +145,7 @@ type FeedRow = {
   title: string | null
   is_scraped: boolean
   summarize_articles: boolean
+  consecutive_failures: number
 }
 // Deliberately a small structural subset rather than rss-parser's own Item
 // type: real feed items satisfy this shape as-is, and the entries
@@ -159,6 +160,20 @@ interface FeedEntryItem {
   summary?: string
   contentSnippet?: string
   isoDate?: string
+  imageUrl?: string
+}
+
+// rss-parser exposes <enclosure> out of the box; media:content/
+// media:thumbnail (the other two common per-item image tags) need
+// explicit customFields wiring. Checked in this priority order since
+// enclosure is the most standard/reliable when present.
+type RawFeedItem = Parser.Item & {
+  mediaContent?: { $?: { url?: string } }
+  mediaThumbnail?: { $?: { url?: string } }
+}
+
+function extractItemImage(item: RawFeedItem): string | undefined {
+  return item.enclosure?.url ?? item.mediaContent?.$?.url ?? item.mediaThumbnail?.$?.url ?? undefined
 }
 
 async function processItem(
@@ -225,6 +240,7 @@ async function processItem(
         title_en,
         summary_en,
         summary_ai,
+        image_url: item.imageUrl ?? null,
       },
       { onConflict: 'feed_id,guid', ignoreDuplicates: true }
     )
@@ -263,6 +279,7 @@ async function fetchFeedItems(feed: FeedRow): Promise<FeedEntryItem[]> {
       link: a.link,
       content: a.snippet ?? undefined,
       isoDate: a.publishedAt ?? undefined,
+      imageUrl: a.imageUrl ?? undefined,
     }))
   }
 
@@ -270,16 +287,19 @@ async function fetchFeedItems(feed: FeedRow): Promise<FeedEntryItem[]> {
   // shared across all concurrent processFeed calls — cheap to construct,
   // and avoids relying on xml2js's string-parse callback happening to run
   // synchronously to keep concurrent parses from stepping on each other's
-  // internal state.
+  // internal state. customFields pulls in media:content/media:thumbnail,
+  // which rss-parser doesn't expose by default (enclosure is already
+  // built in) — see extractItemImage.
   const parser = new Parser({
     timeout: FEED_FETCH_TIMEOUT_MS,
     headers: { 'User-Agent': FEED_USER_AGENT },
+    customFields: { item: [['media:content', 'mediaContent'], ['media:thumbnail', 'mediaThumbnail']] },
   })
   const parsed = await parser.parseURL(feed.url).catch((err) => {
     if (!isXmlParseError(err)) throw err
     return parseAndRepairFeed(parser, feed.url)
   })
-  return parsed.items ?? []
+  return (parsed.items ?? []).map((item) => ({ ...item, imageUrl: extractItemImage(item) }))
 }
 
 async function processFeed(
@@ -302,16 +322,20 @@ async function processFeed(
       .map((item) => ({ item, guid: item.guid ?? item.link ?? null }))
       .filter((entry): entry is { item: FeedEntryItem; guid: string } => entry.guid !== null)
       // When a max age is set, an item with no parseable publish date
-      // can't be confirmed to fall inside it — exclude rather than guess,
-      // so "last 24 hours" doesn't silently let through whatever a feed
-      // leaves undated. Skipped entirely for scraped feeds: detectArticles
-      // rarely finds a reliable date, so age-filtering them would just
-      // drop everything on every manual run — dedup-by-link below already
-      // keeps re-ingesting the same articles from being a problem.
+      // can't be confirmed to fall inside or outside it — INCLUDE rather
+      // than exclude, so a feed using a non-standard/relative date format
+      // rss-parser can't normalize doesn't have its items silently
+      // disappear from every manual "Run ingest now" run. (Previously
+      // excluded undated items here, which meant a feed whose dates never
+      // parse would look "empty" on manual runs forever — dedup-by-guid
+      // above already prevents an included-but-actually-old item from
+      // being a repeat problem.) Skipped entirely for scraped feeds:
+      // detectArticles rarely finds a reliable date, so age-filtering them
+      // would just drop everything on every manual run either way.
       .filter((entry) => {
         if (cutoffMs === null || feed.is_scraped) return true
         const publishedMs = entry.item.isoDate ? new Date(entry.item.isoDate).getTime() : NaN
-        return !Number.isNaN(publishedMs) && publishedMs >= cutoffMs
+        return Number.isNaN(publishedMs) || publishedMs >= cutoffMs
       })
 
     const existingGuids = new Set<string>()
@@ -348,7 +372,7 @@ async function processFeed(
 
     const { error: updateError } = await supabase
       .from('feeds')
-      .update({ last_fetched_at: new Date().toISOString(), last_error: null })
+      .update({ last_fetched_at: new Date().toISOString(), last_error: null, consecutive_failures: 0 })
       .eq('id', feed.id)
 
     if (updateError) {
@@ -362,11 +386,13 @@ async function processFeed(
 
     // Best-effort — a feed a user thinks they're covering could otherwise
     // stay silently broken indefinitely with nothing but a stale
-    // last_fetched_at to notice (and even that isn't surfaced anywhere in
-    // the UI today). Don't let a failure here mask the real error.
+    // last_fetched_at to notice. consecutive_failures lets the UI flag a
+    // feed that's been failing for a while (see FeedManager.tsx) rather
+    // than just showing the latest error with no sense of how long it's
+    // been stuck.
     const { error: errorUpdateError } = await supabase
       .from('feeds')
-      .update({ last_error: message })
+      .update({ last_error: message, consecutive_failures: feed.consecutive_failures + 1 })
       .eq('id', feed.id)
     if (errorUpdateError) {
       console.error(
@@ -393,7 +419,9 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
   // sequential round trips before any feed work can start.
   const [{ data: feeds, error: feedsError }, { targetLanguage, autoDeleteKeywords }] =
     await Promise.all([
-      supabase.from('feeds').select('id, url, title, is_scraped, summarize_articles'),
+      supabase
+        .from('feeds')
+        .select('id, url, title, is_scraped, summarize_articles, consecutive_failures'),
       loadIngestPreferences(supabase),
     ])
 

@@ -34,7 +34,7 @@ export default function MobileSidebarDrawer({
           aria-label="Open menu"
           className="text-muted hover:text-foreground transition-colors shrink-0"
         >
-          <Menu size={20} aria-hidden="true" />
+          <Menu size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
         <Link href="/" aria-label="Parable">
           <ParableLogo height={24} />
@@ -62,7 +62,7 @@ export default function MobileSidebarDrawer({
                 aria-label="Close menu"
                 className="text-muted hover:text-foreground transition-colors"
               >
-                <X size={20} aria-hidden="true" />
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-2">
@@ -72,7 +72,9 @@ export default function MobileSidebarDrawer({
               />
             </div>
             <div className="border-t border-border-subtle p-3 text-sm">
-              <div className="text-muted truncate mb-2">{userEmail}</div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted truncate mb-2">
+                {userEmail}
+              </div>
               <form action={signOut}>
                 <button
                   type="submit"

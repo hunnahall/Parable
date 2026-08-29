@@ -240,7 +240,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
                   aria-label={`Remove ${word}`}
                   className="text-muted hover:text-foreground transition-colors"
                 >
-                  <X size={12} aria-hidden="true" />
+                  <X size={12} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </li>
             ))}
@@ -270,7 +270,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       <div className="text-sm text-muted" role="status">
         {status === 'saving' && 'Saving…'}
         {status === 'saved' && 'Saved.'}
-        {status === 'error' && <span className="text-red-600">{error}</span>}
+        {status === 'error' && <span className="text-danger">{error}</span>}
       </div>
     </div>
   )

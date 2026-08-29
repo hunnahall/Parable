@@ -2,31 +2,37 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { LayoutList, LayoutGrid } from 'lucide-react'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/dashboard/data'
 import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
 import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
+import ArticleCardGrid from './ArticleCardGrid'
+import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
 
 export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
+export type ArticlesDisplayMode = 'list' | 'card'
 
 export interface ArticlesFilters {
   query: string
   view: ArticlesViewMode
-  folderId: string | null
-  sourceFeedId: string | null
+  folderIds: string[]
+  sourceFeedIds: string[]
   tag: string | null
   dateFrom: string | null
   dateTo: string | null
+  display: ArticlesDisplayMode
 }
 
 function buildUrl(basePath: string, filters: ArticlesFilters): string {
   const params = new URLSearchParams()
   if (filters.query) params.set('q', filters.query)
-  if (filters.folderId) params.set('folder', filters.folderId)
-  if (filters.sourceFeedId) params.set('source', filters.sourceFeedId)
+  if (filters.folderIds.length > 0) params.set('folder', filters.folderIds.join(','))
+  if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
   if (filters.tag) params.set('tag', filters.tag)
   if (filters.dateFrom) params.set('from', filters.dateFrom)
   if (filters.dateTo) params.set('to', filters.dateTo)
+  if (filters.display !== 'list') params.set('display', filters.display)
   const qs = params.toString()
   return qs ? `${basePath}?${qs}` : basePath
 }
@@ -171,8 +177,8 @@ export default function ArticlesView({
     const filterArg: ArticlesPageFilters = {
       query: filters.query || undefined,
       view: filters.view,
-      folderId: filters.folderId,
-      sourceFeedId: filters.sourceFeedId,
+      folderIds: filters.folderIds,
+      sourceFeedIds: filters.sourceFeedIds,
       tag: filters.tag,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
@@ -186,99 +192,121 @@ export default function ArticlesView({
 
   const activeFilterCount =
     (filters.query ? 1 : 0) +
-    (filters.folderId ? 1 : 0) +
-    (filters.sourceFeedId ? 1 : 0) +
+    (filters.folderIds.length > 0 ? 1 : 0) +
+    (filters.sourceFeedIds.length > 0 ? 1 : 0) +
     (filters.tag ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0)
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="search"
-          placeholder="Search articles…"
-          value={queryDraft}
-          onChange={(e) => setQueryDraft(e.target.value)}
-          onBlur={commitSearch}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commitSearch()
-          }}
-          className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-sm bg-background"
-        />
-        <select
-          value={filters.folderId ?? ''}
-          onChange={(e) => navigate({ folderId: e.target.value || null })}
-          className="border border-border px-3 py-2 text-sm bg-background"
-        >
-          <option value="">All folders</option>
-          {localFolders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
-              {folder.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filters.sourceFeedId ?? ''}
-          onChange={(e) => navigate({ sourceFeedId: e.target.value || null })}
-          className="border border-border px-3 py-2 text-sm bg-background"
-        >
-          <option value="">All sources</option>
-          {feedOptions.map((feed) => (
-            <option key={feed.id} value={feed.id}>
-              {feed.title ?? feed.id}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-1.5 text-sm text-muted">
-          From
+      <div className="space-y-3 pb-4 border-b border-border-subtle">
+        <div className="flex flex-wrap items-center gap-3">
           <input
-            type="date"
-            value={filters.dateFrom ?? ''}
-            onChange={(e) => navigate({ dateFrom: e.target.value || null })}
-            className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+            type="search"
+            placeholder="Search articles…"
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
+            onBlur={commitSearch}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitSearch()
+            }}
+            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-sm bg-background"
           />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted">
-          To
-          <input
-            type="date"
-            value={filters.dateTo ?? ''}
-            onChange={(e) => navigate({ dateTo: e.target.value || null })}
-            className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+          <MultiSelectDropdown
+            label="All folders"
+            options={localFolders.map((f) => ({ id: f.id, label: f.label }))}
+            selectedIds={filters.folderIds}
+            onChange={(folderIds) => navigate({ folderIds })}
+            className="w-40"
           />
-        </label>
-      </div>
-
-      {allTags.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => navigate({ tag: null })}
-            className={
-              filters.tag === null
-                ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
-                : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
-            }
-          >
-            All tags
-          </button>
-          {allTags.map((tag) => (
+          <MultiSelectDropdown
+            label="All sources"
+            options={feedOptions.map((f) => ({ id: f.id, label: f.title ?? f.id }))}
+            selectedIds={filters.sourceFeedIds}
+            onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
+            className="w-48"
+          />
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            From
+            <input
+              type="date"
+              value={filters.dateFrom ?? ''}
+              onChange={(e) => navigate({ dateFrom: e.target.value || null })}
+              className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            To
+            <input
+              type="date"
+              value={filters.dateTo ?? ''}
+              onChange={(e) => navigate({ dateTo: e.target.value || null })}
+              className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+            />
+          </label>
+          <div className="flex items-center border border-border ml-auto">
             <button
-              key={tag}
               type="button"
-              onClick={() => navigate({ tag })}
+              onClick={() => navigate({ display: 'list' })}
+              aria-label="List view"
+              aria-pressed={filters.display === 'list'}
               className={
-                filters.tag === tag
+                'flex items-center justify-center w-8 h-8 transition-colors ' +
+                (filters.display === 'list'
+                  ? 'bg-foreground/10 text-foreground'
+                  : 'text-muted hover:text-foreground')
+              }
+            >
+              <LayoutList size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate({ display: 'card' })}
+              aria-label="Card view"
+              aria-pressed={filters.display === 'card'}
+              className={
+                'flex items-center justify-center w-8 h-8 border-l border-border transition-colors ' +
+                (filters.display === 'card'
+                  ? 'bg-foreground/10 text-foreground'
+                  : 'text-muted hover:text-foreground')
+              }
+            >
+              <LayoutGrid size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        {allTags.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => navigate({ tag: null })}
+              className={
+                filters.tag === null
                   ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
                   : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
               }
             >
-              {tag}
+              All tags
             </button>
-          ))}
-        </div>
-      )}
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => navigate({ tag })}
+                className={
+                  filters.tag === tag
+                    ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
+                    : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
+                }
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {enableBulkActions && localItems.length > 0 && (
         <div className="flex items-center gap-3 text-sm">
@@ -334,7 +362,7 @@ export default function ArticlesView({
           )}
         </div>
       )}
-      {bulkError && <p className="text-xs text-red-600">{bulkError}</p>}
+      {bulkError && <p className="text-xs text-danger">{bulkError}</p>}
 
       {localItems.length === 0 ? (
         <div className="relative py-16 text-center">
@@ -345,6 +373,21 @@ export default function ArticlesView({
           <p className="relative text-sm text-muted">
             {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
           </p>
+        </div>
+      ) : filters.display === 'card' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {localItems.map((item) => (
+            <ArticleCardGrid
+              key={item.id}
+              item={item}
+              onUpdate={updateItem}
+              onRemove={removeItem}
+              folders={localFolders}
+              onFolderCreated={handleFolderCreated}
+              showFolderPicker={showFolderPicker}
+              showDelete={showDelete}
+            />
+          ))}
         </div>
       ) : (
         <ul className="card-elevated divide-y divide-border">

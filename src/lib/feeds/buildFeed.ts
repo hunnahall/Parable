@@ -44,7 +44,14 @@ function fetchErrorMessage(err: unknown): string {
 // A winning group needs at least this many cards before it's trusted as a
 // real article list rather than a coincidence.
 const MIN_CARD_COUNT = 3
-const MAX_ARTICLES = 40
+// Raised from 40: the page's HTML is already fully fetched/parsed
+// regardless of how many cards get extracted, so this costs no extra
+// network work, only a bit more parse/insert work per poll — worth it to
+// stop silently dropping items past the old cap on busier sites. Still a
+// hard ceiling, not real pagination: a site whose list is genuinely
+// paginated (a "next page" link, not just a long single page) needs a
+// crawler this scraper isn't, and won't be caught by raising this number.
+const MAX_ARTICLES = 100
 // Headline candidates shorter than this are almost always nav/UI chrome
 // ("Home", "Login", "→"); longer than this are almost never a headline.
 const MIN_TITLE_LENGTH = 12

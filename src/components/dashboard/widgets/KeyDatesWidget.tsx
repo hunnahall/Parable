@@ -89,7 +89,7 @@ export default function KeyDatesWidget({ items }: { items: KeyDateRow[] }) {
           Add
         </button>
       </form>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
       {localItems.length === 0 ? (
         <p className="text-sm text-muted">No key dates yet.</p>
       ) : (
@@ -117,10 +117,10 @@ export default function KeyDatesWidget({ items }: { items: KeyDateRow[] }) {
               <button
                 type="button"
                 onClick={() => handleRemove(item.id)}
-                className="shrink-0 text-muted hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 text-xs"
+                className="shrink-0 text-muted hover:text-danger transition-colors opacity-0 group-hover:opacity-100 text-xs"
                 aria-label={`Delete key date "${item.title}"`}
               >
-                <X size={12} />
+                <X size={12} strokeWidth={1.75} />
               </button>
             </li>
           ))}

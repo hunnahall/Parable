@@ -47,7 +47,7 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
   return (
     <div className="card-elevated p-4 space-y-3">
       <h2 className="text-sm font-medium">Manage tags</h2>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {tags.length === 0 ? (
         <p className="text-sm text-muted">No tags yet.</p>
       ) : (
@@ -95,10 +95,10 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => handleDelete(tag)}
-                    className="text-muted hover:text-red-600 transition-colors disabled:opacity-50"
+                    className="text-muted hover:text-danger transition-colors disabled:opacity-50"
                     aria-label={`Delete tag ${tag}`}
                   >
-                    <X size={12} />
+                    <X size={12} strokeWidth={1.75} />
                   </button>
                 </span>
               </li>

@@ -124,7 +124,7 @@ export default function BuildFeedSection({
                 aria-label="Close"
                 className="text-muted hover:text-foreground transition-colors disabled:opacity-50"
               >
-                <X size={16} aria-hidden="true" />
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
@@ -143,7 +143,7 @@ export default function BuildFeedSection({
                   onChange={(e) => setUrl(e.target.value)}
                   className="w-full border border-border px-3 py-2 text-sm bg-background"
                 />
-                {error && <p className="text-xs text-red-600">{error}</p>}
+                {error && <p className="text-xs text-danger">{error}</p>}
                 <button
                   type="submit"
                   disabled={detecting}
@@ -223,7 +223,7 @@ export default function BuildFeedSection({
                   </p>
                 )}
 
-                {error && <p className="text-xs text-red-600">{error}</p>}
+                {error && <p className="text-xs text-danger">{error}</p>}
 
                 <div className="flex items-center gap-3">
                   <button

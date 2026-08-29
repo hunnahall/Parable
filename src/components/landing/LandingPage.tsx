@@ -28,7 +28,7 @@ export default function LandingPage() {
         <ul className="inline-grid grid-cols-2 gap-x-8 gap-y-4">
           {FEATURES.map(({ icon: Icon, label }) => (
             <li key={label} className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] font-label text-muted">
-              <Icon size={15} strokeWidth={2} aria-hidden="true" />
+              <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
               {label}
             </li>
           ))}

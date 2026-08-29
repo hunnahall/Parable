@@ -60,7 +60,7 @@ export default function AddWidgetMenu({
         onClick={() => setOpen(true)}
         className="flex items-center text-xs font-medium border border-accent text-accent px-2.5 py-1.5 hover:bg-accent/10 transition-colors"
       >
-        <Plus size={13} strokeWidth={2.5} className="-ms-0.5 me-1.5" aria-hidden="true" />
+        <Plus size={14} strokeWidth={1.75} className="-ms-0.5 me-1.5" aria-hidden="true" />
         Add widget
       </button>
     )
