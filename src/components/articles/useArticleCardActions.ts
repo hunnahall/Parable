@@ -7,10 +7,11 @@ import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
 import type { ArticleItem } from '@/lib/dashboard/data'
 import type { FolderOption } from './ArticleCard'
 
-// Shared save/archive/delete/folder-assignment logic behind ArticleCard
-// (list row) and ArticleCardGrid (card tile) — same handlers, same
+// Shared archive/delete/folder-assignment logic behind ArticleCard (list
+// row) and ArticleCardGrid (card tile) — same handlers, same
 // optimistic-update contract, so the two layouts can't drift apart on
-// what these actions actually do.
+// what these actions actually do. There's no standalone save action:
+// handleFolderChange below is what saves an article.
 export function useArticleCardActions({
   item,
   onUpdate,
@@ -27,19 +28,6 @@ export function useArticleCardActions({
   const [error, setError] = useState<string | null>(null)
   const [addingFolder, setAddingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-
-  async function handleSave() {
-    setPending(true)
-    setError(null)
-    onUpdate(item.id, { state: 'saved', archivedAt: null })
-    const result = await saveArticle(item.id)
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
 
   async function handleArchive() {
     setPending(true)
@@ -123,7 +111,6 @@ export function useArticleCardActions({
     setAddingFolder,
     newFolderName,
     setNewFolderName,
-    handleSave,
     handleArchive,
     handleUnfile,
     handleDelete,

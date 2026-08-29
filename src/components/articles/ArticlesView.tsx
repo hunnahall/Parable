@@ -375,7 +375,7 @@ export default function ArticlesView({
           </p>
         </div>
       ) : filters.display === 'card' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {localItems.map((item) => (
             <ArticleCardGrid
               key={item.id}
