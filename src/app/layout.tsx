@@ -41,7 +41,6 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      data-theme={prefs.theme === 'system' ? undefined : prefs.theme}
       data-font={prefs.font === 'inter' ? undefined : prefs.font}
       className={`${hankenGrotesk.variable} ${inter.variable} ${workSans.variable} ${instrumentSans.variable} ${lato.variable}`}
     >

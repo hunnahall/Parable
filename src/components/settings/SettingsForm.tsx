@@ -173,39 +173,6 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Theme</h2>
-        <div className="flex items-center gap-4 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="theme"
-              checked={prefs.theme === 'system'}
-              onChange={() => applyChange({ theme: 'system' })}
-            />
-            System
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="theme"
-              checked={prefs.theme === 'light'}
-              onChange={() => applyChange({ theme: 'light' })}
-            />
-            Light
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="theme"
-              checked={prefs.theme === 'dark'}
-              onChange={() => applyChange({ theme: 'dark' })}
-            />
-            Dark
-          </label>
-        </div>
-      </div>
-
-      <div className="card-elevated p-4 space-y-2">
         <h2 className="text-sm font-medium font-heading">Language</h2>
         <p className="text-xs text-muted">
           Titles and summaries are translated into this language automatically. Other content is

@@ -16,7 +16,6 @@ export async function updatePreferences(
     font: prefs.font,
     timezone: prefs.timezone,
     clock_format: prefs.clockFormat,
-    theme: prefs.theme,
     sidebar_collapsed: prefs.sidebarCollapsed,
     language: prefs.language,
     auto_delete_enabled: prefs.autoDeleteEnabled,
@@ -25,9 +24,9 @@ export async function updatePreferences(
   })
   if (error) return { error: error.message }
 
-  // Theme/font apply via attributes rendered on <html> in the root layout
+  // Font applies via an attribute rendered on <html> in the root layout
   // (see src/app/layout.tsx) — a client-only state update can't reach
-  // those, so this needs the full server round-trip, unlike most other
+  // that, so this needs the full server round-trip, unlike most other
   // mutations in this app.
   revalidatePath('/', 'layout')
   return { error: null }

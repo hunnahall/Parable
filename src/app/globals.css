@@ -29,29 +29,28 @@
 /* Covenant Works design system: ink on paper, hairline rules, zero
    radius, one functional accent per surface — see
    ~/Downloads/Design System/covenant-works-design-system_updated.html.
-   Dark palette below is this app's own extrapolation (the source system
-   is light-only) following the same ink/paper-inversion + hairline +
-   single-accent discipline.
-
-   Background/foreground are deliberately off-white/off-black, not pure
-   #FFFFFF/#000000 (see design-instructions.md) — flat pure black-on-white
-   reads as stark/flat; a hair off either end gives the page a paper-like
-   base. Surface is the *true* white/near-white, reserved for elevated
-   panels (cards, modals, popovers) — it now reads as "raised" precisely
-   because it's brighter than the page behind it, without needing radius
-   or heavy color to say so. */
+   Parable is dark-only (Reader branch dropped light mode/the theme
+   switcher) — these are the values that used to live in a
+   prefers-color-scheme/[data-theme="dark"] override, now the sole
+   palette. Surface sits brighter than the page behind it ("elevated"),
+   the same discipline the (now-removed) light mode followed, just
+   running the other direction — box shadows are close to invisible on a
+   dark background, so cards skip shadow-card entirely and rely on the
+   brighter surface tone + a light-on-dark hairline border instead;
+   floating panels (modals/drawers) sit over a dimmed backdrop where a
+   real shadow is visible again, so shadow-modal stays a true shadow. */
 :root {
-  --background: #fafafa;
-  --foreground: #0a0a0a;
-  --foreground-muted: #4a4d59;
-  --border: #d8d9de;
-  --border-subtle: #ebecef;
+  --background: #0b0c0f;
+  --foreground: #f4f5f7;
+  --foreground-muted: #b3b6c0;
+  --border: #33353d;
+  --border-subtle: #26272c;
 
-  --surface: #ffffff;
-  --surface-border: rgba(0, 0, 0, 0.08);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-card-hover: 0 4px 10px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.05);
-  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.06);
+  --surface: #17181c;
+  --surface-border: rgba(255, 255, 255, 0.09);
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.25);
 
   /* Grain texture for the page background only (never cards — see
      .card-elevated below, which sets no background-image of its own).
@@ -61,42 +60,30 @@
      (saturate 0) so it's neutral gray speckle, then the outer <rect>'s
      opacity keeps it near-invisible (~4%) at normal viewing distance. The
      tile is a fixed 180x180 px region with stitchTiles="stitch" so it
-     repeats seamlessly via the default CSS background-repeat. One shared
-     image works for both themes: gray speckle at 4% opacity reads as
-     texture against either a light or dark base without needing to
-     invert per theme. */
+     repeats seamlessly via the default CSS background-repeat. */
   --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
 
-  /* Action blue: same hue as the Parable mark's brand blue, darkened for
-     AA-contrast text/icons/focus rings on white. Reserved as a true
-     accent (links, focus, active nav, a single chart series, primary
-     button borders) — never a decorative fill; see the button-styling
-     convention below. */
-  --accent: #2f6fb8;
-  --accent-foreground: #ffffff;
+  /* Action blue: the Parable mark's own brand blue, reserved as a true
+     accent (links, focus, active nav, primary button borders) — never a
+     decorative fill; see the button-styling convention below. --brand
+     is the same hue/value as --accent here (there's no longer a
+     lighter/darker split between them now that light mode is gone), kept
+     as a separate token since call sites still reach for --brand
+     specifically for the mark/logo treatment. */
+  --accent: #92afd7;
+  --accent-foreground: #131418;
   --brand: #92afd7;
-  /* Brand blue is the same hue in both themes (it's the Parable mark's
-     own color, not a theme-adaptive accent), so unlike accent-foreground
-     this doesn't flip per theme — #92afd7 is light enough to need dark
-     ink text in light AND dark mode alike. */
   --brand-foreground: #131418;
-  /* Danger red: the design system's actual red family (see
-     ~/Downloads/Design System/covenant-works-design-system_updated.html),
-     not an invented one — Brick (#885A5A, listed "Red — dark") for
-     AA-contrast white text in light mode, flipping to Rose (#CC8B8C) with
-     dark ink text in dark mode (see the dark-mode block below), the same
-     dark-hue/light-hue split every other family in that palette follows
-     (e.g. Fern vs. Eucalyptus for green). Dusty rose pairs deliberately
-     with Slate Blue (#92afd7 below) — the same "muted, coordinated
-     candidates" pairing the system's own palette is built from, and
-     exactly the brand's accent hue. Contrast checked: Brick+white
-     5.74:1, Rose+ink 6.70:1 — both comfortably pass AA. */
-  --danger: #885a5a;
-  --danger-foreground: #ffffff;
+  /* Danger red: the design system's actual dark-mode red (Rose, #CC8B8C)
+     with dark ink text — see
+     ~/Downloads/Design System/covenant-works-design-system_updated.html.
+     Contrast checked: Rose+ink 6.70:1, comfortably passes AA. */
+  --danger: #cc8b8c;
+  --danger-foreground: #131418;
   /* "Label gray" from the design system's core neutrals — the app's
      existing secondary/de-emphasized text color, most call sites already
      use it via text-muted. */
-  --muted: #7c7f8c;
+  --muted: #9a9daa;
 
   /* Body font default (Inter) — the [data-font="..."] rules below
      override this. Defined on :root, not body, since Tailwind's preflight
@@ -110,56 +97,6 @@
   --motion-fast: 120ms;
   --motion-standard: 200ms;
   --motion-slow: 360ms;
-}
-
-/* Dark mode inverts the light-mode logic: the page dims a shade below the
-   old flat dark background, and that old value becomes --surface — the
-   same "elevated = brighter than the page" relationship as light mode,
-   just running the other direction. Box shadows are close to invisible
-   on a dark background, so cards skip shadow-card entirely and rely on
-   the brighter surface tone + a light-on-dark hairline border instead;
-   floating panels (modals/drawers) sit over a dimmed backdrop where a
-   real shadow is visible again, so shadow-modal stays a true shadow. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: #0b0c0f;
-    --foreground: #f4f5f7;
-    --foreground-muted: #b3b6c0;
-    --border: #33353d;
-    --border-subtle: #26272c;
-    --accent: #92afd7;
-    --accent-foreground: #131418;
-    --brand: #92afd7;
-    --muted: #9a9daa;
-    --danger: #cc8b8c;
-    --danger-foreground: #131418;
-
-    --surface: #17181c;
-    --surface-border: rgba(255, 255, 255, 0.09);
-    --shadow-card: none;
-    --shadow-card-hover: none;
-    --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.25);
-  }
-}
-
-:root[data-theme="dark"] {
-  --background: #0b0c0f;
-  --foreground: #f4f5f7;
-  --foreground-muted: #b3b6c0;
-  --border: #33353d;
-  --border-subtle: #26272c;
-  --accent: #92afd7;
-  --accent-foreground: #131418;
-  --brand: #92afd7;
-  --muted: #9a9daa;
-  --danger: #cc8b8c;
-  --danger-foreground: #131418;
-
-  --surface: #17181c;
-  --surface-border: rgba(255, 255, 255, 0.09);
-  --shadow-card: none;
-  --shadow-card-hover: none;
-  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.25);
 }
 
 /* Body font choice (Settings page) — Inter is the unset/default case, so
