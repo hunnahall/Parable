@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ReactGridLayout, WidthProvider, type Layout } from 'react-grid-layout/legacy'
+import { Responsive, WidthProvider, type Layout } from 'react-grid-layout/legacy'
 import 'react-grid-layout/css/styles.css'
 import { saveDashboardLayout, addWidget, removeWidget } from '@/lib/dashboard/actions'
 import type { WidgetInstance, WidgetType } from '@/lib/dashboard/widgets'
@@ -11,7 +11,16 @@ import type { FeedOption } from '@/lib/dashboard/data'
 import WidgetCard from './WidgetCard'
 import AddWidgetMenu from './AddWidgetMenu'
 
-const GridLayout = WidthProvider(ReactGridLayout)
+const GridLayout = WidthProvider(Responsive)
+
+// Matches the md: breakpoint the rest of the shell (Sidebar,
+// MobileSidebarDrawer) uses to switch between the desktop sidebar and the
+// mobile drawer nav, so the widget grid and the nav collapse at the same
+// width. Below it, widgets stack full-width in a single column — dragging
+// and resizing are disabled there since a 1-column stack can't express a
+// meaningful x/w and we only persist one set of x/y/w/h per widget.
+const BREAKPOINTS = { lg: 768, xxs: 0 }
+const COLS = { lg: 12, xxs: 1 }
 
 export default function DashboardGrid({
   initialWidgets,
@@ -39,6 +48,7 @@ export default function DashboardGrid({
   }
 
   const [error, setError] = useState<string | null>(null)
+  const [breakpoint, setBreakpoint] = useState<keyof typeof BREAKPOINTS>('lg')
   const router = useRouter()
 
   // Fires once per completed drag/resize gesture, not per pixel — safe to
@@ -125,11 +135,17 @@ export default function DashboardGrid({
         </div>
       ) : (
         <GridLayout
-          layout={layout}
-          cols={12}
+          layouts={{ lg: layout }}
+          breakpoints={BREAKPOINTS}
+          cols={COLS}
           rowHeight={40}
           margin={[16, 16]}
           draggableHandle=".widget-drag-handle"
+          isDraggable={breakpoint === 'lg'}
+          isResizable={breakpoint === 'lg'}
+          onBreakpointChange={(newBreakpoint) =>
+            setBreakpoint(newBreakpoint as keyof typeof BREAKPOINTS)
+          }
           onDragStop={handleLayoutSettled}
           onResizeStop={handleLayoutSettled}
         >
