@@ -102,12 +102,12 @@ export default function OpmlImport() {
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={importing}
-        className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+        className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
       >
         {importing ? 'Importing…' : 'Import OPML'}
       </button>
       {result && (
-        <div className="text-xs text-muted mt-2">
+        <div className="text-base text-muted mt-2">
           <p>
             Imported {result.added} feed{result.added === 1 ? '' : 's'}.
           </p>

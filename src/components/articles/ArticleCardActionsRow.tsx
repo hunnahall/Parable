@@ -42,7 +42,7 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Unsave
         </button>
@@ -51,7 +51,7 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleSave}
-          className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Save
         </button>
@@ -61,7 +61,7 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Unarchive
         </button>
@@ -70,7 +70,7 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleArchive}
-          className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Archive
         </button>
@@ -80,7 +80,7 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleDelete}
-          className="text-xs text-danger hover:opacity-80 transition-colors disabled:opacity-50"
+          className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
         >
           Delete
         </button>
@@ -90,7 +90,7 @@ export default function ArticleCardActionsRow({
           <select
             value={item.folderId ?? ''}
             onChange={(e) => handleFolderChange(e.target.value || null)}
-            className="border border-border px-2 py-1 text-xs bg-background"
+            className="border border-border px-2 py-1 text-base bg-background"
           >
             <option value="">No folder</option>
             {folders.map((f) => (
@@ -114,7 +114,7 @@ export default function ArticleCardActionsRow({
                 }
               }}
               placeholder="New folder…"
-              className="w-28 border border-border px-2 py-1 text-xs bg-background"
+              className="w-28 border border-border px-2 py-1 text-base bg-background"
             />
           ) : (
             <button

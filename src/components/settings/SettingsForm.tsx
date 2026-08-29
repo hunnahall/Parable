@@ -118,11 +118,11 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
   return (
     <div className="space-y-6">
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold font-heading">Font</h2>
+        <h2 className="text-lg font-bold font-heading">Font</h2>
         <select
           value={prefs.font}
           onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
-          className="w-full border border-border px-3 py-2 text-sm bg-background"
+          className="w-full border border-border px-3 py-2 text-lg bg-background"
         >
           {FONT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -133,11 +133,11 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold font-heading">Timezone</h2>
+        <h2 className="text-lg font-bold font-heading">Timezone</h2>
         <select
           value={prefs.timezone}
           onChange={(e) => applyChange({ timezone: e.target.value })}
-          className="w-full border border-border px-3 py-2 text-sm bg-background"
+          className="w-full border border-border px-3 py-2 text-lg bg-background"
         >
           <option value="">{detectedZone ? `Auto-detect (${detectedZone})` : 'Auto-detect'}</option>
           {zones.map((zone) => (
@@ -149,8 +149,8 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold font-heading">Clock</h2>
-        <div className="flex items-center gap-4 text-sm">
+        <h2 className="text-lg font-bold font-heading">Clock</h2>
+        <div className="flex items-center gap-4 text-lg">
           <label className="flex items-center gap-1.5">
             <input
               type="radio"
@@ -173,15 +173,15 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold font-heading">Language</h2>
-        <p className="text-xs text-muted">
+        <h2 className="text-lg font-bold font-heading">Language</h2>
+        <p className="text-base text-muted">
           Titles and summaries are translated into this language automatically. Other content is
           translated when opened.
         </p>
         <select
           value={prefs.language}
           onChange={(e) => applyChange({ language: e.target.value })}
-          className="w-full border border-border px-3 py-2 text-sm bg-background"
+          className="w-full border border-border px-3 py-2 text-lg bg-background"
         >
           {SUPPORTED_LANGUAGES.map((lang) => (
             <option key={lang.code} value={lang.code}>
@@ -192,11 +192,11 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold font-heading">Auto-delete by keyword</h2>
-        <p className="text-xs text-muted">
+        <h2 className="text-lg font-bold font-heading">Auto-delete by keyword</h2>
+        <p className="text-base text-muted">
           New articles with these keywords in the title will be automatically discarded.
         </p>
-        <label className="flex items-center gap-1.5 text-sm">
+        <label className="flex items-center gap-1.5 text-base">
           <input
             type="checkbox"
             checked={prefs.autoDeleteEnabled}
@@ -216,12 +216,12 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
               }
             }}
             placeholder="e.g. soccer"
-            className="flex-1 border border-border px-3 py-2 text-sm bg-background"
+            className="flex-1 border border-border px-3 py-2 text-lg bg-background"
           />
           <button
             type="button"
             onClick={addKeyword}
-            className="border border-border px-3 py-2 text-sm hover:bg-foreground/5 transition-colors"
+            className="border border-border px-3 py-2 text-base hover:bg-foreground/5 transition-colors"
           >
             Add
           </button>
@@ -231,7 +231,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
             {prefs.autoDeleteKeywords.map((word) => (
               <li
                 key={word}
-                className="flex items-center gap-1 border border-border px-2 py-1 text-xs"
+                className="flex items-center gap-1 border border-border px-2 py-1 text-base"
               >
                 {word}
                 <button
@@ -251,15 +251,15 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
             type="button"
             onClick={handleRunRulesNow}
             disabled={runningRules || prefs.autoDeleteKeywords.length === 0}
-            className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
           >
             {runningRules ? 'Running…' : 'Run rules now'}
           </button>
-          <p className="text-xs text-muted mt-1">
+          <p className="text-base text-muted mt-1">
             Deletes any article currently in your Articles inbox whose title matches one of these
             keywords. Saved and archived articles are left alone.
           </p>
-          {rulesRunResult && <p className="text-xs text-muted mt-1">{rulesRunResult}</p>}
+          {rulesRunResult && <p className="text-base text-muted mt-1">{rulesRunResult}</p>}
         </div>
       </div>
 
@@ -267,7 +267,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
 
       <CleanSlateSection />
 
-      <div className="text-sm text-muted" role="status">
+      <div className="text-lg text-muted" role="status">
         {status === 'saving' && 'Saving…'}
         {status === 'saved' && 'Saved.'}
         {status === 'error' && <span className="text-danger">{error}</span>}

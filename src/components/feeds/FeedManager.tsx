@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronRight, X } from 'lucide-react'
 import {
   addFeed,
   updateFeed,
   removeFeed,
   runIngestNow,
   setFeedSummarizeArticles,
+  setFeedTranslateEnabled,
 } from '@/lib/feeds/actions'
 import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
@@ -47,6 +49,7 @@ export default function FeedManager({
   const router = useRouter()
   const { timezone, clockFormat } = usePreferences()
   const formatDate = (dateString: string | null) => formatDateTime(dateString, { timezone, clockFormat }) ?? 'never'
+  const [feedsExpanded, setFeedsExpanded] = useState(false)
   const [folderFilter, setFolderFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +68,6 @@ export default function FeedManager({
   const [newUrl, setNewUrl] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [newFolderIds, setNewFolderIds] = useState<string[]>([])
-  const [newSummarizeArticles, setNewSummarizeArticles] = useState(false)
 
   const [editTitle, setEditTitle] = useState('')
   const [editFolderIds, setEditFolderIds] = useState<string[]>([])
@@ -88,7 +90,6 @@ export default function FeedManager({
       url: newUrl,
       title: newTitle,
       category: null,
-      summarizeArticles: newSummarizeArticles,
     })
     if (result.error !== null) {
       setPending(false)
@@ -103,7 +104,6 @@ export default function FeedManager({
     setNewUrl('')
     setNewTitle('')
     setNewFolderIds([])
-    setNewSummarizeArticles(false)
     router.refresh()
   }
 
@@ -165,6 +165,26 @@ export default function FeedManager({
     router.refresh()
   }
 
+  // Same pattern as handleToggleSummarize above — no Edit-mode round trip.
+  // Unchecking this is a promise that this feed never needs translation
+  // (see setFeedTranslateEnabled), which is also what lets runIngest
+  // safely pre-cache this feed's future articles.
+  async function handleToggleTranslate(feed: FeedRow) {
+    const next = !feed.translate_enabled
+    setLocalFeeds((prev) =>
+      prev.map((f) => (f.id === feed.id ? { ...f, translate_enabled: next } : f))
+    )
+    const result = await setFeedTranslateEnabled(feed.id, next)
+    if (result.error) {
+      setError(result.error)
+      setLocalFeeds((prev) =>
+        prev.map((f) => (f.id === feed.id ? { ...f, translate_enabled: feed.translate_enabled } : f))
+      )
+      return
+    }
+    router.refresh()
+  }
+
   async function handleRemove(id: string) {
     setPending(true)
     setError(null)
@@ -196,13 +216,13 @@ export default function FeedManager({
     <div className="space-y-6">
       <div className="flex items-center justify-between pb-6 border-b border-border">
         <div>
-          <h2 className="text-base font-bold">Run ingest now</h2>
-          <p className="text-xs text-muted mt-0.5">
+          <h2 className="text-lg font-bold">Run ingest now</h2>
+          <p className="text-base text-muted mt-0.5">
             Fetches new items published in the last 24 hours for every feed, instead of waiting
             for the cron job.
           </p>
           {ingestSummary && (
-            <div className="text-xs text-muted mt-1">
+            <div className="text-base text-muted mt-1">
               <p>
                 Processed {ingestSummary.feedsProcessed} feed
                 {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
@@ -227,13 +247,13 @@ export default function FeedManager({
               )}
             </div>
           )}
-          {ingestError && <p className="text-xs text-danger mt-1">{ingestError}</p>}
+          {ingestError && <p className="text-base text-danger mt-1">{ingestError}</p>}
         </div>
         <button
           type="button"
           onClick={handleRunIngest}
           disabled={ingesting}
-          className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
+          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
         >
           {ingesting ? 'Running…' : 'Run ingest now'}
         </button>
@@ -241,7 +261,7 @@ export default function FeedManager({
 
       <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold">Add a feed</h2>
+          <h2 className="text-lg font-bold">Add a feed</h2>
           <OpmlImport />
         </div>
         <div className="flex flex-wrap gap-3">
@@ -251,19 +271,19 @@ export default function FeedManager({
             required
             value={newUrl}
             onChange={(e) => setNewUrl(e.target.value)}
-            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-lg bg-background"
           />
           <input
             type="text"
             placeholder="Title (auto-detected if left blank)"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
           />
           <select
             value={newFolderIds[0] ?? ''}
             onChange={(e) => setNewFolderIds(e.target.value ? [e.target.value] : [])}
-            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
           >
             <option value="">{NO_FOLDER}</option>
             {folders.map((folder) => (
@@ -275,174 +295,200 @@ export default function FeedManager({
           <button
             type="submit"
             disabled={pending}
-            className="bg-foreground text-background px-4 py-2 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+            className="bg-foreground text-background px-4 py-2 text-base transition-colors hover:opacity-90 disabled:opacity-50"
           >
             Add feed
           </button>
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-muted">
-          <input
-            type="checkbox"
-            checked={newSummarizeArticles}
-            onChange={(e) => setNewSummarizeArticles(e.target.checked)}
-          />
-          Generate AI summaries for this feed
-        </label>
       </form>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-lg text-danger">{error}</p>}
 
       <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
 
       <FolderManager folders={folderRows} />
 
-      <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1">
-        {[
-          { id: 'all', label: 'All' },
-          { id: 'uncategorized', label: NO_FOLDER },
-          ...folders,
-        ].map((option) => {
-          const active = folderFilter === option.id
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => setFolderFilter(option.id)}
-              className={
-                active
-                  ? 'shrink-0 border border-accent text-accent bg-accent/10 px-3 py-1 text-xs font-medium transition-colors'
-                  : 'shrink-0 border border-border text-muted px-3 py-1 text-xs font-medium hover:border-accent hover:text-accent transition-colors'
-              }
-            >
-              {option.label}
-            </button>
-          )
-        })}
-      </div>
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setFeedsExpanded((prev) => !prev)}
+          aria-expanded={feedsExpanded}
+          className="flex items-center gap-2 text-left"
+        >
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            className={`shrink-0 text-muted transition-transform ${feedsExpanded ? 'rotate-90' : ''}`}
+            aria-hidden="true"
+          />
+          <h2 className="text-lg font-bold">Manage feeds</h2>
+        </button>
 
-      {visibleFeeds.length === 0 ? (
-        <p className="text-sm text-muted">No feeds yet.</p>
-      ) : (
-        <ul className="card-elevated divide-y divide-border">
-          {visibleFeeds.map((feed) => (
-            <li key={feed.id} className="p-4">
-              {editingId === feed.id ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
-                  />
-                  <select
-                    value={editFolderIds[0] ?? ''}
-                    onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
-                    className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-sm bg-background"
-                  >
-                    <option value="">{NO_FOLDER}</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.label}
-                      </option>
-                    ))}
-                  </select>
+        {feedsExpanded && (
+          <>
+            <div className="flex items-center gap-2 text-lg overflow-x-auto pb-1">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'uncategorized', label: NO_FOLDER },
+                ...folders,
+              ].map((option) => {
+                const active = folderFilter === option.id
+                return (
                   <button
+                    key={option.id}
                     type="button"
-                    disabled={pending}
-                    onClick={() => handleSaveEdit(feed.id)}
-                    className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+                    onClick={() => setFolderFilter(option.id)}
+                    className={
+                      active
+                        ? 'shrink-0 border border-accent text-accent bg-accent/10 px-3 py-1 text-base font-medium transition-colors'
+                        : 'shrink-0 border border-border text-muted px-3 py-1 text-base font-medium hover:border-accent hover:text-accent transition-colors'
+                    }
                   >
-                    Save
+                    {option.label}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(null)}
-                    className="text-sm text-muted hover:text-accent transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{feed.title}</span>
-                      {feed.is_scraped && (
-                        <span
-                          className="text-xs bg-accent/10 text-accent px-2 py-0.5"
-                          title="Built from a page with no RSS feed of its own — re-scraped on every ingest"
+                )
+              })}
+            </div>
+
+            {visibleFeeds.length === 0 ? (
+              <p className="text-lg text-muted">No feeds yet.</p>
+            ) : (
+              <ul className="card-elevated divide-y divide-border">
+                {visibleFeeds.map((feed) => (
+                  <li key={feed.id} className="p-4">
+                    {editingId === feed.id ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-lg bg-background"
+                        />
+                        <select
+                          value={editFolderIds[0] ?? ''}
+                          onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
+                          className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-lg bg-background"
                         >
-                          Built
-                        </span>
-                      )}
-                      <span className="text-xs bg-foreground/5 text-muted px-2 py-0.5">
-                        {folderLabelsFor(feed.folderIds, folders)}
-                      </span>
-                      <span
-                        className="text-xs text-muted"
-                        title="Rolling 7-day read rate: articles you've read from this feed ÷ articles it produced"
-                      >
-                        Engagement: {formatRate(engagement[feed.id])}
-                      </span>
-                    </div>
-                    <a
-                      href={feed.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-muted hover:underline truncate block"
-                    >
-                      {feed.url}
-                    </a>
-                    <p className="text-xs text-muted mt-0.5">
-                      Last fetched: {formatDate(feed.last_fetched_at)}
-                    </p>
-                    {feed.last_error && (
-                      <p className="text-xs text-danger mt-0.5">
-                        {feed.consecutive_failures >= 3 ? (
-                          <span className="border border-danger text-danger px-1 py-0.5 mr-1 font-medium">
-                            Failing {feed.consecutive_failures}x
-                          </span>
-                        ) : (
-                          '⚠ '
-                        )}
-                        {feed.last_error}
-                      </p>
+                          <option value="">{NO_FOLDER}</option>
+                          {folders.map((folder) => (
+                            <option key={folder.id} value={folder.id}>
+                              {folder.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => handleSaveEdit(feed.id)}
+                          className="bg-foreground text-background px-3 py-1.5 text-base transition-colors hover:opacity-90 disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="text-base text-muted hover:text-accent transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-lg">{feed.title}</span>
+                            {feed.is_scraped && (
+                              <span
+                                className="text-base bg-accent/10 text-accent px-2 py-0.5"
+                                title="Built from a page with no RSS feed of its own — re-scraped on every ingest"
+                              >
+                                Built
+                              </span>
+                            )}
+                            <span className="text-base bg-foreground/5 text-muted px-2 py-0.5">
+                              {folderLabelsFor(feed.folderIds, folders)}
+                            </span>
+                            <span
+                              className="text-base text-muted"
+                              title="Rolling 7-day read rate: articles you've read from this feed ÷ articles it produced"
+                            >
+                              Engagement: {formatRate(engagement[feed.id])}
+                            </span>
+                          </div>
+                          <a
+                            href={feed.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-base text-muted hover:underline truncate block"
+                          >
+                            {feed.url}
+                          </a>
+                          <p className="text-base text-muted mt-0.5">
+                            Last fetched: {formatDate(feed.last_fetched_at)}
+                          </p>
+                          {feed.last_error && (
+                            <p className="text-base text-danger mt-0.5">
+                              {feed.consecutive_failures >= 3 ? (
+                                <span className="border border-danger text-danger px-1 py-0.5 mr-1 font-medium">
+                                  Failing {feed.consecutive_failures}x
+                                </span>
+                              ) : (
+                                '⚠ '
+                              )}
+                              {feed.last_error}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <label
+                            className="flex items-center gap-1.5 text-base text-muted"
+                            title="Generate an AI summary for each new article from this feed"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={feed.summarize_articles}
+                              onChange={() => handleToggleSummarize(feed)}
+                            />
+                            AI summary
+                          </label>
+                          <label
+                            className="flex items-center gap-1.5 text-base text-muted"
+                            title="Uncheck if this feed's articles never need translation — lets Parable pre-cache new articles from it for faster opening"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={feed.translate_enabled}
+                              onChange={() => handleToggleTranslate(feed)}
+                            />
+                            Translate
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(feed)}
+                            className="text-base text-muted hover:text-accent transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => handleRemove(feed.id)}
+                            aria-label="Remove feed"
+                            title="Remove feed"
+                            className="text-accent hover:opacity-80 transition-colors disabled:opacity-50"
+                          >
+                            <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <label
-                      className="flex items-center gap-1.5 text-sm text-muted"
-                      title="Generate an AI summary for each new article from this feed"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={feed.summarize_articles}
-                        onChange={() => handleToggleSummarize(feed)}
-                      />
-                      AI summary
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => startEdit(feed)}
-                      className="text-sm text-muted hover:text-accent transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => handleRemove(feed.id)}
-                      className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

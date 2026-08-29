@@ -7,8 +7,8 @@ const BASE =
   'inline-flex items-center justify-center font-label transition-colors disabled:opacity-50 disabled:pointer-events-none'
 
 const SIZES: Record<ButtonSize, string> = {
-  default: 'px-3 py-1.5 text-sm',
-  compact: 'px-2.5 py-1 text-xs',
+  default: 'px-3 py-1.5 text-base',
+  compact: 'px-2.5 py-1 text-sm',
 }
 
 // Direct systematization of patterns already in use across the app (e.g.

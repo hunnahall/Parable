@@ -65,7 +65,7 @@ export default function ExportDialog({
         className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-5"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold">Export article</h2>
+          <h2 className="text-lg font-bold">Export article</h2>
           <button
             type="button"
             onClick={onClose}
@@ -76,7 +76,7 @@ export default function ExportDialog({
           </button>
         </div>
 
-        <div className="flex items-center gap-4 mb-3 text-sm">
+        <div className="flex items-center gap-4 mb-3 text-lg">
           <label className="flex items-center gap-1.5">
             <input
               type="radio"
@@ -97,24 +97,24 @@ export default function ExportDialog({
           </label>
         </div>
 
-        <label className="block text-xs text-muted mb-1">Filename</label>
+        <label className="block text-sm text-muted mb-1">Filename</label>
         <div className="flex items-center gap-1 mb-4">
           <input
             type="text"
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
-            className="flex-1 border border-border px-2 py-1.5 text-sm bg-background"
+            className="flex-1 border border-border px-2 py-1.5 text-lg bg-background"
           />
-          <span className="text-sm text-muted">.{filetype === 'pdf' ? 'pdf' : 'md'}</span>
+          <span className="text-lg text-muted">.{filetype === 'pdf' ? 'pdf' : 'md'}</span>
         </div>
 
-        {error && <p className="text-xs text-danger mb-3">{error}</p>}
+        {error && <p className="text-base text-danger mb-3">{error}</p>}
 
         <button
           type="button"
           onClick={handleDownload}
           disabled={exporting || !filename.trim()}
-          className="w-full border border-brand bg-brand text-brand-foreground px-4 py-2 text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+          className="w-full border border-brand bg-brand text-brand-foreground px-4 py-2 text-base font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
         >
           {exporting ? 'Exporting…' : 'Download'}
         </button>

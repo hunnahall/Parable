@@ -5,8 +5,6 @@ export type WidgetType =
   | 'feed-category'
   | 'clock'
   | 'calendar'
-  | 'todo'
-  | 'key-dates'
 
 export interface WidgetInstance {
   id: string
@@ -22,11 +20,9 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   headlines: 'Latest headlines',
   feed: 'Single feed',
   saved: 'Saved articles',
-  'feed-category': 'Feeds by category',
+  'feed-category': 'Single category',
   clock: 'Clock',
   calendar: 'Calendar',
-  todo: 'To-do list',
-  'key-dates': 'Key dates',
 }
 
 // Sizing hints for addWidget when a widget type wants something other
@@ -35,7 +31,6 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
 export const WIDGET_DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
   clock: { w: 3, h: 3 },
   calendar: { w: 4, h: 5 },
-  'key-dates': { w: 4, h: 5 },
 }
 
 // Shown when a signed-in user has no saved dashboard_widgets rows yet.

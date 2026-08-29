@@ -1,8 +1,9 @@
 // Next's file-based loading convention wraps this route segment's page in
 // an automatic Suspense boundary — this renders immediately on
-// navigation, before getArticleById/getOrFetchArticleContent/
-// translateFullContent resolve, so opening an article never looks frozen
-// even on a slow cache-miss scrape.
+// navigation, before the page's own getArticleById/listFolderOptions
+// resolve. The scrape+translate chain itself isn't even on this path
+// anymore (see ArticleReadingView.tsx) — it's fetched client-side after
+// the shell mounts, with its own in-component loading state.
 export default function ArticleLoading() {
   return (
     <div className="max-w-2xl mx-auto p-8 animate-pulse">

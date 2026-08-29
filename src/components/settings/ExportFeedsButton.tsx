@@ -33,17 +33,17 @@ export default function ExportFeedsButton() {
 
   return (
     <div className="card-elevated p-4 space-y-2">
-      <h2 className="text-base font-bold font-heading">Export feeds</h2>
-      <p className="text-xs text-muted">Download an OPML file listing all of your feeds and folders.</p>
+      <h2 className="text-lg font-bold font-heading">Export feeds</h2>
+      <p className="text-base text-muted">Download an OPML file listing all of your feeds and folders.</p>
       <button
         type="button"
         onClick={handleExport}
         disabled={exporting}
-        className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+        className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
       >
         {exporting ? 'Exporting…' : 'Export OPML'}
       </button>
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p className="text-base text-danger">{error}</p>}
     </div>
   )
 }

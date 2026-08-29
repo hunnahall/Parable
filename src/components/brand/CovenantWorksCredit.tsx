@@ -22,7 +22,7 @@ export default function CovenantWorksCredit({ className = 'mt-8' }: { className?
         <path d="M30 104 A50 50 0 0 1 130 104" />
         <path d="M22 126 H138" />
       </svg>
-      <span className="text-sm font-heading font-bold leading-none">Covenant Works</span>
+      <span className="text-base font-heading font-bold leading-none">Covenant Works</span>
     </div>
   )
 }

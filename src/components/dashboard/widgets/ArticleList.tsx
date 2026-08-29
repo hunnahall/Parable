@@ -37,13 +37,13 @@ export default function ArticleList({
   const visibleItems = tagFilter ? localItems.filter((item) => item.tags.includes(tagFilter)) : localItems
 
   if (items.length === 0) {
-    return <p className="text-sm text-muted">No articles yet.</p>
+    return <p className="text-lg text-muted">No articles yet.</p>
   }
 
   return (
     <div>
       {allTags.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs mb-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1.5 text-base mb-2 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => setTagFilter(null)}

@@ -63,7 +63,7 @@ export default async function RootLayout({
             </div>
           ) : (
             <>
-              <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-sm">
+              <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-base">
                 <Link href="/" aria-label="Parable">
                   <ParableMark size={22} />
                 </Link>

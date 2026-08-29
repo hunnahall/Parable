@@ -54,7 +54,7 @@ export default function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 w-full border border-border px-3 py-2 text-sm bg-background text-left truncate"
+        className="flex items-center gap-1.5 w-full border border-border px-3 py-2 text-base bg-background text-left truncate"
       >
         <span className="flex-1 truncate">{buttonLabel}</span>
         <ChevronDown size={14} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
@@ -62,12 +62,12 @@ export default function MultiSelectDropdown({
       {open && (
         <div className="card-modal absolute z-10 mt-1 max-h-64 w-56 overflow-y-auto py-1">
           {options.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-muted">No options.</p>
+            <p className="px-3 py-2 text-base text-muted">No options.</p>
           ) : (
             options.map((option) => (
               <label
                 key={option.id}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-foreground/5 cursor-pointer"
+                className="flex items-center gap-2 px-3 py-1.5 text-lg hover:bg-foreground/5 cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -82,7 +82,7 @@ export default function MultiSelectDropdown({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 text-xs text-muted hover:text-foreground border-t border-border-subtle mt-1 pt-1.5"
+              className="w-full text-left px-3 py-1.5 text-sm text-muted hover:text-foreground border-t border-border-subtle mt-1 pt-1.5"
             >
               Clear
             </button>

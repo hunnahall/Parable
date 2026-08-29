@@ -111,7 +111,7 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
 
   return (
     <div className="card-elevated p-4 space-y-3">
-      <h2 className="text-base font-bold">Manage folders</h2>
+      <h2 className="text-lg font-bold">Manage folders</h2>
       <form onSubmit={handleAdd} className="flex flex-wrap gap-3">
         <input
           type="text"
@@ -119,12 +119,12 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-sm bg-background"
+          className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-lg bg-background"
         />
         <select
           value={parentId}
           onChange={(e) => setParentId(e.target.value)}
-          className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-sm bg-background"
+          className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
         >
           <option value="">No parent (top level)</option>
           {rows.map(({ folder, depth }) => (
@@ -136,14 +136,14 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
         <button
           type="submit"
           disabled={pending}
-          className="bg-foreground text-background px-4 py-2 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+          className="bg-foreground text-background px-4 py-2 text-base transition-colors hover:opacity-90 disabled:opacity-50"
         >
           Add folder
         </button>
       </form>
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-lg text-danger">{error}</p>}
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">No folders yet.</p>
+        <p className="text-lg text-muted">No folders yet.</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map(({ folder, depth }) =>
@@ -153,12 +153,12 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-sm bg-background"
+                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-lg bg-background"
                 />
                 <select
                   value={editParentId}
                   onChange={(e) => setEditParentId(e.target.value)}
-                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-sm bg-background"
+                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-lg bg-background"
                 >
                   <option value="">No parent (top level)</option>
                   {rows
@@ -173,26 +173,26 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
                   type="button"
                   disabled={pending}
                   onClick={() => handleSaveEdit(folder.id)}
-                  className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+                  className="bg-foreground text-background px-3 py-1.5 text-base transition-colors hover:opacity-90 disabled:opacity-50"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="text-sm text-muted hover:text-accent transition-colors"
+                  className="text-base text-muted hover:text-accent transition-colors"
                 >
                   Cancel
                 </button>
               </li>
             ) : (
-              <li key={folder.id} className="py-2 flex items-center justify-between gap-2 text-sm">
+              <li key={folder.id} className="py-2 flex items-center justify-between gap-2 text-lg">
                 <span style={{ paddingLeft: depth * 16 }}>{folder.name}</span>
                 <span className="flex items-center gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => startEdit(folder)}
-                    className="text-xs text-muted hover:text-accent transition-colors"
+                    className="text-sm text-muted hover:text-accent transition-colors"
                   >
                     Edit
                   </button>

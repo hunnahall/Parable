@@ -107,7 +107,7 @@ export default function DashboardGrid({
 
   return (
     <div>
-      {error && <p className="text-sm text-danger mb-4">{error}</p>}
+      {error && <p className="text-lg text-danger mb-4">{error}</p>}
       <div className="flex justify-end mb-4">
         <AddWidgetMenu
           feedOptions={feedOptions}
@@ -121,7 +121,7 @@ export default function DashboardGrid({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/parable-mark.svg" alt="" className="w-56 h-56" />
           </div>
-          <p className="relative text-sm text-muted">No widgets yet — add one to get started.</p>
+          <p className="relative text-lg text-muted">No widgets yet — add one to get started.</p>
         </div>
       ) : (
         <GridLayout

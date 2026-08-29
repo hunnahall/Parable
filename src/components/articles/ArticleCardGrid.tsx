@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { ArticleItem } from '@/lib/dashboard/data'
+import { prefetchArticleContent } from '@/lib/articles/contentCache'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import type { FolderOption } from './ArticleCard'
@@ -61,6 +62,8 @@ export default function ArticleCardGrid({
     <div className="card-elevated flex flex-col overflow-hidden">
       <Link
         href={`/articles/${item.id}`}
+        onMouseDown={() => prefetchArticleContent(item.id)}
+        onTouchStart={() => prefetchArticleContent(item.id)}
         className="flex items-center justify-center aspect-[16/9] bg-surface-border shrink-0"
       >
         {imageSrc &&
@@ -73,22 +76,25 @@ export default function ArticleCardGrid({
           ))}
       </Link>
       <div className="p-3 flex-1 flex flex-col min-w-0">
-        <div className="flex items-center gap-2 text-xs text-muted mb-0.5">
+        <div className="flex items-center gap-2 text-base text-muted mb-0.5">
           {item.feed_title && <span className="font-medium truncate">{item.feed_title}</span>}
           {formatDate(item.published_at) && <span className="shrink-0">{formatDate(item.published_at)}</span>}
         </div>
         <Link
           href={`/articles/${item.id}`}
-          className="text-sm font-medium hover:text-accent hover:underline"
+          onMouseDown={() => prefetchArticleContent(item.id)}
+          onTouchStart={() => prefetchArticleContent(item.id)}
+          onFocus={() => prefetchArticleContent(item.id)}
+          className="text-lg font-medium hover:text-accent hover:underline break-words"
         >
           {item.title}
         </Link>
         {item.summary && (
-          <p className="text-sm text-muted mt-0.5">
+          <p className="text-lg text-muted mt-0.5">
             {item.isAiSummary && (
               <span
                 title="AI-generated summary"
-                className="inline-block align-middle mr-1.5 text-[10px] font-medium uppercase tracking-wider border border-border-subtle text-muted px-1 py-0.5"
+                className="inline-block align-middle mr-1.5 text-sm font-medium uppercase tracking-wider border border-border-subtle text-muted px-1 py-0.5"
               >
                 AI
               </span>
@@ -105,7 +111,7 @@ export default function ArticleCardGrid({
             showDelete={showDelete}
           />
         </div>
-        {actions.error && <p className="text-xs text-danger mt-1">{actions.error}</p>}
+        {actions.error && <p className="text-base text-danger mt-1">{actions.error}</p>}
       </div>
     </div>
   )

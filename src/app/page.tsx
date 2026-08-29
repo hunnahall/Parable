@@ -7,8 +7,6 @@ import {
   listFeeds,
 } from '@/lib/dashboard/data'
 import { listCategories } from '@/lib/categories/data'
-import { listTasks } from '@/lib/tasks/data'
-import { listKeyDates } from '@/lib/keydates/data'
 import { getDefaultLayout, type WidgetInstance } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
 import DashboardGrid from '@/components/dashboard/DashboardGrid'
@@ -41,10 +39,8 @@ export default async function Home() {
   ].filter(Boolean)
   const needsHeadlines = widgets.some((w) => w.widget_type === 'headlines')
   const needsSaved = widgets.some((w) => w.widget_type === 'saved')
-  const needsTasks = widgets.some((w) => w.widget_type === 'todo')
-  const needsKeyDates = widgets.some((w) => w.widget_type === 'key-dates')
 
-  const [headlines, feedEntries, saved, categoryEntries, feedOptions, categoryOptions, tasks, keyDates] =
+  const [headlines, feedEntries, saved, categoryEntries, feedOptions, categoryOptions] =
     await Promise.all([
       needsHeadlines ? getHeadlinesData() : Promise.resolve([]),
       Promise.all(feedIds.map(async (id) => [id, await getFeedData(id)] as const)),
@@ -54,8 +50,6 @@ export default async function Home() {
       ),
       listFeeds(),
       listCategories(),
-      needsTasks ? listTasks() : Promise.resolve([]),
-      needsKeyDates ? listKeyDates() : Promise.resolve([]),
     ])
 
   const widgetData: DashboardWidgetData = {
@@ -63,8 +57,6 @@ export default async function Home() {
     feeds: Object.fromEntries(feedEntries),
     saved,
     feedCategories: Object.fromEntries(categoryEntries),
-    tasks,
-    keyDates,
   }
 
   return (

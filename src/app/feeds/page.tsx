@@ -22,13 +22,13 @@ export default async function FeedsPage() {
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-6">
       <h1>Feeds</h1>
+      <TagManager tags={tags} />
       <FeedManager
         feeds={feeds}
         folders={folderOptions}
         folderRows={folderRows}
         engagement={Object.fromEntries(engagementRates)}
       />
-      <TagManager tags={tags} />
     </div>
   )
 }

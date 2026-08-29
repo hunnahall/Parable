@@ -8,8 +8,6 @@ import FeedWidget from './widgets/FeedWidget'
 import FeedCategoryWidget from './widgets/FeedCategoryWidget'
 import ClockWidget from './widgets/ClockWidget'
 import CalendarWidget from './widgets/CalendarWidget'
-import TodoWidget from './widgets/TodoWidget'
-import KeyDatesWidget from './widgets/KeyDatesWidget'
 
 export default function WidgetCard({
   widget,
@@ -37,7 +35,7 @@ export default function WidgetCard({
       }
     >
       <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-border cursor-move shrink-0">
-        <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+        <span className="text-sm font-semibold text-foreground uppercase tracking-wide">
           {label}
         </span>
         <button
@@ -61,8 +59,6 @@ export default function WidgetCard({
         )}
         {widget.widget_type === 'clock' && <ClockWidget />}
         {widget.widget_type === 'calendar' && <CalendarWidget />}
-        {widget.widget_type === 'todo' && <TodoWidget items={data.tasks} />}
-        {widget.widget_type === 'key-dates' && <KeyDatesWidget items={data.keyDates} />}
       </div>
     </div>
   )

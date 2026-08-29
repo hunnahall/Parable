@@ -71,7 +71,7 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
         className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md p-5"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold">Clean slate</h2>
+          <h2 className="text-lg font-bold">Clean slate</h2>
           <button
             type="button"
             onClick={() => !pending && onClose()}
@@ -95,8 +95,8 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
               }}
             />
             <span>
-              <span className="block text-sm font-medium">Partial reset — inbox to zero</span>
-              <span className="block text-xs text-muted mt-0.5">
+              <span className="block text-lg font-medium">Partial reset — inbox to zero</span>
+              <span className="block text-base text-muted mt-0.5">
                 Archives every unread article in your Articles inbox, as if you&rsquo;d gone through
                 and dismissed each one. Feeds, saved articles, tags, notes, and read history are
                 untouched.
@@ -113,12 +113,11 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
               onChange={() => setMode('full')}
             />
             <span>
-              <span className="block text-sm font-medium">Full reset</span>
-              <span className="block text-xs text-muted mt-0.5">
+              <span className="block text-lg font-medium">Full reset</span>
+              <span className="block text-base text-muted mt-0.5">
                 Permanently deletes everything — every feed, article, saved item, tag, note, and
-                folder, plus your display preferences, dashboard layout, key dates, and tasks. Your
-                account goes back to exactly how it looked right after signup. This can&rsquo;t be
-                undone.
+                folder, plus your display preferences and dashboard layout. Your account goes back
+                to exactly how it looked right after signup. This can&rsquo;t be undone.
               </span>
             </span>
           </label>
@@ -126,20 +125,20 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
 
         {mode === 'full' && (
           <div className="mb-4">
-            <label className="block text-xs text-muted mb-1">
+            <label className="block text-sm text-muted mb-1">
               Type <span className="font-mono font-semibold">{CONFIRM_PHRASE}</span> to confirm
             </label>
             <input
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              className="w-full border border-border px-2 py-1.5 text-sm bg-background"
+              className="w-full border border-border px-2 py-1.5 text-lg bg-background"
               autoComplete="off"
             />
           </div>
         )}
 
-        {error && <p className="text-xs text-danger mb-3">{error}</p>}
+        {error && <p className="text-base text-danger mb-3">{error}</p>}
 
         <button
           type="button"
@@ -147,8 +146,8 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
           disabled={pending || !canConfirm}
           className={
             mode === 'full'
-              ? 'w-full border border-danger bg-danger text-danger-foreground px-4 py-2 text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50'
-              : 'w-full border border-brand bg-brand text-brand-foreground px-4 py-2 text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50'
+              ? 'w-full border border-danger bg-danger text-danger-foreground px-4 py-2 text-base font-semibold transition-colors hover:opacity-90 disabled:opacity-50'
+              : 'w-full border border-brand bg-brand text-brand-foreground px-4 py-2 text-base font-semibold transition-colors hover:opacity-90 disabled:opacity-50'
           }
         >
           {pending

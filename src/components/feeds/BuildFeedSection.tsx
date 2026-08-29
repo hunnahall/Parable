@@ -89,14 +89,14 @@ export default function BuildFeedSection({
   return (
     <>
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-base font-bold">Build a Feed</h2>
-        <p className="text-xs text-muted">
+        <h2 className="text-lg font-bold">Build a Feed</h2>
+        <p className="text-base text-muted">
           Parable can detect articles in websites that don&rsquo;t offer RSS feeds.
         </p>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors"
+          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors"
         >
           Build feed
         </button>
@@ -116,7 +116,7 @@ export default function BuildFeedSection({
             className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold">Build a Feed</h2>
+              <h2 className="text-lg font-bold">Build a Feed</h2>
               <button
                 type="button"
                 onClick={close}
@@ -130,7 +130,7 @@ export default function BuildFeedSection({
 
             {step === 'url' && (
               <form onSubmit={handleDetect} className="space-y-3">
-                <p className="text-xs text-muted">
+                <p className="text-base text-muted">
                   Enter the URL of a page that lists articles — a blog index, a news section, and
                   so on. Parable will try to detect the repeating article pattern from its HTML.
                 </p>
@@ -141,13 +141,13 @@ export default function BuildFeedSection({
                   placeholder="https://example.com/news"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  className="w-full border border-border px-3 py-2 text-sm bg-background"
+                  className="w-full border border-border px-3 py-2 text-lg bg-background"
                 />
-                {error && <p className="text-xs text-danger">{error}</p>}
+                {error && <p className="text-base text-danger">{error}</p>}
                 <button
                   type="submit"
                   disabled={detecting}
-                  className="w-full bg-foreground text-background px-4 py-2 text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                  className="w-full bg-foreground text-background px-4 py-2 text-base font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
                 >
                   {detecting ? 'Detecting…' : 'Detect articles'}
                 </button>
@@ -156,28 +156,28 @@ export default function BuildFeedSection({
 
             {step === 'preview' && preview && (
               <div className="space-y-3">
-                <p className="text-xs text-muted">
+                <p className="text-base text-muted">
                   Found {preview.articles.length} article{preview.articles.length === 1 ? '' : 's'}{' '}
                   on <span className="font-medium break-all">{preview.sourceUrl}</span>.
                 </p>
 
                 <div>
-                  <label className="block text-xs text-muted mb-1">Feed title</label>
+                  <label className="block text-sm text-muted mb-1">Feed title</label>
                   <input
                     type="text"
                     required
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full border border-border px-3 py-2 text-sm bg-background"
+                    className="w-full border border-border px-3 py-2 text-lg bg-background"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-muted mb-1">Folder</label>
+                  <label className="block text-sm text-muted mb-1">Folder</label>
                   <select
                     value={folderId}
                     onChange={(e) => setFolderId(e.target.value)}
-                    className="w-full border border-border px-3 py-2 text-sm bg-background"
+                    className="w-full border border-border px-3 py-2 text-lg bg-background"
                   >
                     <option value="">{NO_FOLDER}</option>
                     {folders.map((folder) => (
@@ -188,7 +188,7 @@ export default function BuildFeedSection({
                   </select>
                 </div>
 
-                <label className="flex items-center gap-1.5 text-xs text-muted">
+                <label className="flex items-center gap-1.5 text-base text-muted">
                   <input
                     type="checkbox"
                     checked={summarizeArticles}
@@ -209,28 +209,28 @@ export default function BuildFeedSection({
                         />
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{article.title}</p>
+                        <p className="text-base font-medium truncate">{article.title}</p>
                         {article.snippet && (
-                          <p className="text-xs text-muted line-clamp-2">{article.snippet}</p>
+                          <p className="text-base text-muted line-clamp-2">{article.snippet}</p>
                         )}
                       </div>
                     </li>
                   ))}
                 </ul>
                 {preview.articles.length > PREVIEW_ITEM_LIMIT && (
-                  <p className="text-xs text-muted">
+                  <p className="text-base text-muted">
                     +{preview.articles.length - PREVIEW_ITEM_LIMIT} more not shown.
                   </p>
                 )}
 
-                {error && <p className="text-xs text-danger">{error}</p>}
+                {error && <p className="text-base text-danger">{error}</p>}
 
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={handleCreate}
                     disabled={saving || !title.trim()}
-                    className="flex-1 bg-foreground text-background px-4 py-2 text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                    className="flex-1 bg-foreground text-background px-4 py-2 text-base font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
                   >
                     {saving ? 'Adding…' : 'Add feed'}
                   </button>
@@ -242,7 +242,7 @@ export default function BuildFeedSection({
                       setError(null)
                     }}
                     disabled={saving}
-                    className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+                    className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
                   >
                     Try a different URL
                   </button>

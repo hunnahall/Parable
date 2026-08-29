@@ -71,8 +71,8 @@ export default function MobileSidebarDrawer({
                 onNavigate={() => setOpen(false)}
               />
             </div>
-            <div className="border-t border-border-subtle p-3 text-sm">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted truncate mb-2">
+            <div className="border-t border-border-subtle p-3 text-base">
+              <div className="text-xs font-medium uppercase tracking-wider text-muted truncate mb-2">
                 {userEmail}
               </div>
               <form action={signOut}>

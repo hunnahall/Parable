@@ -211,7 +211,7 @@ export default function ArticlesView({
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitSearch()
             }}
-            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-sm bg-background"
+            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-lg bg-background"
           />
           <MultiSelectDropdown
             label="All folders"
@@ -227,22 +227,22 @@ export default function ArticlesView({
             onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
             className="w-48"
           />
-          <label className="flex items-center gap-1.5 text-sm text-muted">
+          <label className="flex items-center gap-1.5 text-base text-muted">
             From
             <input
               type="date"
               value={filters.dateFrom ?? ''}
               onChange={(e) => navigate({ dateFrom: e.target.value || null })}
-              className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
             />
           </label>
-          <label className="flex items-center gap-1.5 text-sm text-muted">
+          <label className="flex items-center gap-1.5 text-base text-muted">
             To
             <input
               type="date"
               value={filters.dateTo ?? ''}
               onChange={(e) => navigate({ dateTo: e.target.value || null })}
-              className="border border-border px-3 py-2 text-sm bg-background text-foreground"
+              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
             />
           </label>
           <div className="flex items-center border border-border ml-auto">
@@ -278,7 +278,7 @@ export default function ArticlesView({
         </div>
 
         {allTags.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 text-base overflow-x-auto pb-1">
             <button
               type="button"
               onClick={() => navigate({ tag: null })}
@@ -309,7 +309,7 @@ export default function ArticlesView({
       </div>
 
       {enableBulkActions && localItems.length > 0 && (
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-lg">
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
@@ -330,7 +330,7 @@ export default function ArticlesView({
                   type="button"
                   disabled={bulkPending}
                   onClick={handleBulkArchive}
-                  className="border border-border px-3 py-1.5 text-xs hover:bg-foreground/5 transition-colors disabled:opacity-50"
+                  className="border border-border px-3 py-1.5 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
                 >
                   Archive selected
                 </button>
@@ -341,8 +341,8 @@ export default function ArticlesView({
                 onClick={handleBulkDelete}
                 className={
                   confirmingDelete
-                    ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-xs transition-colors disabled:opacity-50'
-                    : 'border border-danger text-danger px-3 py-1.5 text-xs hover:bg-danger/10 transition-colors disabled:opacity-50'
+                    ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-sm transition-colors disabled:opacity-50'
+                    : 'border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50'
                 }
               >
                 {confirmingDelete
@@ -353,7 +353,7 @@ export default function ArticlesView({
                 <button
                   type="button"
                   onClick={() => setConfirmingDelete(false)}
-                  className="text-xs text-muted hover:text-foreground transition-colors"
+                  className="text-sm text-muted hover:text-foreground transition-colors"
                 >
                   Cancel
                 </button>
@@ -362,7 +362,7 @@ export default function ArticlesView({
           )}
         </div>
       )}
-      {bulkError && <p className="text-xs text-danger">{bulkError}</p>}
+      {bulkError && <p className="text-base text-danger">{bulkError}</p>}
 
       {localItems.length === 0 ? (
         <div className="relative py-16 text-center">
@@ -370,7 +370,7 @@ export default function ArticlesView({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/parable-mark.svg" alt="" className="w-40 h-40" />
           </div>
-          <p className="relative text-sm text-muted">
+          <p className="relative text-lg text-muted">
             {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
           </p>
         </div>
@@ -414,7 +414,7 @@ export default function ArticlesView({
             type="button"
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
           >
             {loadingMore ? 'Loading…' : 'Load more'}
           </button>

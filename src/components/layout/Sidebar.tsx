@@ -73,9 +73,9 @@ export default function Sidebar({
         <SidebarNavList collapsed={collapsed} articlesUnfiledCount={articlesUnfiledCount} />
       </div>
 
-      <div className="border-t border-border-subtle p-3 text-sm">
+      <div className="border-t border-border-subtle p-3 text-base">
         {!collapsed && (
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted truncate mb-2">
+          <div className="text-xs font-medium uppercase tracking-wider text-muted truncate mb-2">
             {userEmail}
           </div>
         )}

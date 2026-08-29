@@ -55,7 +55,7 @@ export default function CalendarWidget() {
     <div ref={outerRef} className="w-full h-full flex items-center justify-center overflow-hidden">
       <div
         ref={innerRef}
-        className="text-foreground text-sm"
+        className="text-foreground text-lg"
         style={
           {
             visibility: scale === null ? 'hidden' : 'visible',

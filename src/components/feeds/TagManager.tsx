@@ -46,10 +46,10 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
 
   return (
     <div className="card-elevated p-4 space-y-3">
-      <h2 className="text-base font-bold">Manage tags</h2>
-      {error && <p className="text-sm text-danger">{error}</p>}
+      <h2 className="text-lg font-bold">Manage tags</h2>
+      {error && <p className="text-lg text-danger">{error}</p>}
       {tags.length === 0 ? (
-        <p className="text-sm text-muted">No tags yet.</p>
+        <p className="text-lg text-muted">No tags yet.</p>
       ) : (
         <ul className="divide-y divide-border">
           {tags.map(({ tag, count }) =>
@@ -60,34 +60,34 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
                   autoFocus
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  className="flex-1 border border-border px-2 py-1 text-sm bg-background"
+                  className="flex-1 border border-border px-2 py-1 text-lg bg-background"
                 />
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => handleRename(tag)}
-                  className="bg-foreground text-background px-3 py-1.5 text-sm transition-colors hover:opacity-90 disabled:opacity-50"
+                  className="bg-foreground text-background px-3 py-1.5 text-base transition-colors hover:opacity-90 disabled:opacity-50"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingTag(null)}
-                  className="text-sm text-muted hover:text-accent transition-colors"
+                  className="text-base text-muted hover:text-accent transition-colors"
                 >
                   Cancel
                 </button>
               </li>
             ) : (
-              <li key={tag} className="py-2 flex items-center justify-between gap-2 text-sm">
+              <li key={tag} className="py-2 flex items-center justify-between gap-2 text-lg">
                 <span>
-                  {tag} <span className="text-xs text-muted">({count})</span>
+                  {tag} <span className="text-base text-muted">({count})</span>
                 </span>
                 <span className="flex items-center gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => startEdit(tag)}
-                    className="text-xs text-muted hover:text-accent transition-colors"
+                    className="text-sm text-muted hover:text-accent transition-colors"
                   >
                     Rename
                   </button>

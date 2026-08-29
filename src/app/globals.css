@@ -134,7 +134,7 @@ h1, h2, h3, h4 {
    reading view's article title) overrides it as normal, since a class
    selector beats this element selector on specificity. */
 h1 {
-  font-size: clamp(1.875rem, 1.1rem + 2.5vw, 2.75rem);
+  font-size: clamp(2.25rem, 1.3rem + 2.75vw, 3rem);
   line-height: 1.08;
 }
 
@@ -147,15 +147,15 @@ h1 {
    headers (Settings, dialogs, etc.) are untouched — this is the
    default for headings that don't opt into a specific size. */
 h2 {
-  font-size: 1.25rem; /* 20px */
+  font-size: 1.5rem; /* 24px */
   line-height: 1.3;
 }
 h3 {
-  font-size: 1rem; /* 16px */
+  font-size: 1.125rem; /* 18px */
   line-height: 1.4;
 }
 h4 {
-  font-size: 0.8125rem; /* 13px */
+  font-size: 0.9375rem; /* 15px */
   line-height: 1.4;
   letter-spacing: 0.02em;
   text-transform: uppercase;

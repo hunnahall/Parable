@@ -5,7 +5,7 @@ import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
 
 const FEATURES = [
   { icon: Rss, label: 'Read RSS feeds' },
-  { icon: Clock, label: 'Calendar, tasks & clock' },
+  { icon: Clock, label: 'Calendar & clock' },
   { icon: LayoutGrid, label: 'Arrange your dashboard' },
   { icon: Bookmark, label: 'Save what matters' },
 ]
@@ -16,18 +16,18 @@ export default function LandingPage() {
       <div className="animate-landing-reveal flex flex-col items-center text-center px-8 py-24 max-w-2xl mx-auto">
         <h1 className="sr-only">Parable</h1>
         <ParableLogo height={144} />
-        <p className="text-xl text-muted mt-6 mb-10">
+        <p className="text-3xl text-muted mt-6 mb-10">
           A simple dashboard for your feeds.
         </p>
         <Link
           href="/login"
-          className="border border-brand bg-background text-foreground px-8 py-3 text-sm font-semibold mb-16 transition-colors duration-[var(--motion-fast)] ease-out hover:bg-brand hover:text-brand-foreground"
+          className="border border-brand bg-background text-foreground px-8 py-3 text-base font-semibold mb-16 transition-colors duration-[var(--motion-fast)] ease-out hover:bg-brand hover:text-brand-foreground"
         >
           Sign in to get started
         </Link>
         <ul className="inline-grid grid-cols-2 gap-x-8 gap-y-4">
           {FEATURES.map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] font-label text-muted">
+            <li key={label} className="flex items-center gap-2 text-base font-bold uppercase tracking-[0.14em] font-label text-muted">
               <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
               {label}
             </li>

@@ -12,6 +12,7 @@ import {
   markArticleRead,
 } from '@/lib/articles/actions'
 import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
+import { getArticleContent } from '@/lib/articles/contentCache'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
 import ExportDialog from './ExportDialog'
@@ -65,9 +66,13 @@ export default function ArticleReadingView({
     // state) per article via `key={id}` in page.tsx — so this effect
     // never actually needs to re-run for a *changed* article.id on an
     // already-mounted instance.
+    //
+    // getArticleContent (not a raw fetch) so a request already warmed by
+    // the article card's onMouseDown/onTouchStart/onFocus — see
+    // src/lib/articles/contentCache.ts — is reused here instead of
+    // duplicated.
     let cancelled = false
-    fetch(`/api/articles/${article.id}/content`)
-      .then((res) => res.json())
+    getArticleContent(article.id)
       .then((data) => {
         if (cancelled) return
         if (data.error) {
@@ -167,13 +172,13 @@ export default function ArticleReadingView({
     <div className="max-w-2xl mx-auto p-8">
       <Link
         href="/articles"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-accent transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-base text-muted hover:text-accent transition-colors mb-6"
       >
         <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
         Back to Articles
       </Link>
 
-      <div className="flex items-center gap-2 text-xs text-muted mb-2">
+      <div className="flex items-center gap-2 text-base text-muted mb-2">
         {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
         {item.category && <span>{item.category}</span>}
         {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
@@ -187,12 +192,12 @@ export default function ArticleReadingView({
           href={item.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-2xl font-heading font-bold hover:text-accent hover:underline mb-4"
+          className="block text-4xl font-heading font-bold hover:text-accent hover:underline mb-4"
         >
           {item.title}
         </a>
       ) : (
-        <h1 className="text-2xl font-heading font-bold mb-4">{item.title}</h1>
+        <h1 className="text-4xl font-heading font-bold mb-4">{item.title}</h1>
       )}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -201,7 +206,7 @@ export default function ArticleReadingView({
             type="button"
             disabled={pending}
             onClick={handleUnfile}
-            className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+            className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
           >
             Unsave
           </button>
@@ -210,7 +215,7 @@ export default function ArticleReadingView({
             type="button"
             disabled={pending}
             onClick={handleSave}
-            className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+            className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
           >
             Save
           </button>
@@ -220,7 +225,7 @@ export default function ArticleReadingView({
             type="button"
             disabled={pending}
             onClick={handleUnfile}
-            className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+            className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
           >
             Unarchive
           </button>
@@ -229,7 +234,7 @@ export default function ArticleReadingView({
             type="button"
             disabled={pending}
             onClick={handleArchive}
-            className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+            className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
           >
             Archive
           </button>
@@ -239,7 +244,7 @@ export default function ArticleReadingView({
           disabled={!content.contentHtml}
           onClick={() => setExportOpen(true)}
           title={content.contentHtml ? undefined : 'Waiting for article content to load'}
-          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Export
         </button>
@@ -249,7 +254,7 @@ export default function ArticleReadingView({
         <select
           value={item.folderId ?? ''}
           onChange={(e) => handleFolderChange(e.target.value || null)}
-          className="border border-border px-2 py-1 text-xs bg-background"
+          className="border border-border px-2 py-1 text-base bg-background"
         >
           <option value="">No folder</option>
           {localFolders.map((f) => (
@@ -273,7 +278,7 @@ export default function ArticleReadingView({
               }
             }}
             placeholder="New folder…"
-            className="w-28 border border-border px-2 py-1 text-xs bg-background"
+            className="w-28 border border-border px-2 py-1 text-base bg-background"
           />
         ) : (
           <button
@@ -303,7 +308,7 @@ export default function ArticleReadingView({
         </div>
       )}
 
-      {error && <p className="text-sm text-danger mb-4">{error}</p>}
+      {error && <p className="text-lg text-danger mb-4">{error}</p>}
 
       <hr className="border-border-subtle mb-6" />
 
@@ -319,13 +324,13 @@ export default function ArticleReadingView({
 
       {content.status !== 'loading' && content.contentHtml && (
         <div
-          className="prose-reading text-[17px] leading-relaxed [&>p]:mb-4 [&>h1]:font-heading [&>h1]:font-bold [&>h1]:text-xl [&>h1]:mb-3 [&>h1]:mt-6 [&>h2]:font-heading [&>h2]:font-bold [&>h2]:text-lg [&>h2]:mb-3 [&>h2]:mt-6 [&>blockquote]:border-l-2 [&>blockquote]:border-border [&>blockquote]:pl-4 [&>blockquote]:text-muted [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&_a]:text-accent [&_a]:hover:underline [&_img]:max-w-full"
+          className="prose-reading text-[21px] leading-relaxed [&>p]:mb-4 [&>h1]:font-heading [&>h1]:font-bold [&>h1]:text-3xl [&>h1]:mb-3 [&>h1]:mt-6 [&>h2]:font-heading [&>h2]:font-bold [&>h2]:text-2xl [&>h2]:mb-3 [&>h2]:mt-6 [&>blockquote]:border-l-2 [&>blockquote]:border-border [&>blockquote]:pl-4 [&>blockquote]:text-muted [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&_a]:text-accent [&_a]:hover:underline [&_img]:max-w-full"
           dangerouslySetInnerHTML={{ __html: content.contentHtml }}
         />
       )}
 
       {content.status !== 'loading' && !content.contentHtml && (
-        <p className="text-sm text-muted">
+        <p className="text-lg text-muted">
           {content.extractionError ?? 'Content unavailable.'}{' '}
           {item.link && (
             <a href={item.link} target="_blank" rel="noopener noreferrer" className="underline">

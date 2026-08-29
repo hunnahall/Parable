@@ -12,8 +12,6 @@ const WIDGET_TYPES: WidgetType[] = [
   'feed-category',
   'clock',
   'calendar',
-  'todo',
-  'key-dates',
 ]
 
 export default function AddWidgetMenu({
@@ -58,20 +56,20 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center text-xs font-medium border border-accent text-accent px-2.5 py-1.5 hover:bg-accent/10 transition-colors"
+        aria-label="Add widget"
+        className="flex items-center justify-center h-8 w-8 bg-accent hover:opacity-90 transition-opacity"
       >
-        <Plus size={14} strokeWidth={1.75} className="-ms-0.5 me-1.5" aria-hidden="true" />
-        Add widget
+        <Plus size={16} strokeWidth={1.75} className="text-white" aria-hidden="true" />
       </button>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs border border-accent px-2.5 py-1.5 bg-background">
+    <div className="flex items-center gap-2 h-8 text-base border border-accent px-2 bg-background">
       <select
         value={widgetType}
         onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-        className="border border-border px-2 py-1 bg-background"
+        className="h-full border border-border px-2 bg-background"
       >
         {WIDGET_TYPES.map((type) => (
           <option key={type} value={type}>
@@ -85,7 +83,7 @@ export default function AddWidgetMenu({
           <select
             value={feedId}
             onChange={(e) => setFeedId(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
+            className="h-full border border-border px-2 bg-background"
           >
             {feedOptions.map((feed) => (
               <option key={feed.id} value={feed.id}>
@@ -103,7 +101,7 @@ export default function AddWidgetMenu({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
+            className="h-full border border-border px-2 bg-background"
           >
             {categoryOptions.map((cat) => (
               <option key={cat} value={cat}>
@@ -120,14 +118,14 @@ export default function AddWidgetMenu({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="bg-foreground text-background px-3 py-1 transition-colors hover:opacity-90 disabled:opacity-50"
+        className="h-full px-2 text-accent font-medium hover:opacity-80 transition-opacity disabled:opacity-50"
       >
         Add
       </button>
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="text-muted hover:text-accent transition-colors px-1"
+        className="h-full text-muted hover:text-accent transition-colors px-2"
       >
         Cancel
       </button>

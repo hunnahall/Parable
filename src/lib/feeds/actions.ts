@@ -12,7 +12,7 @@ import type { FeedRow } from './data'
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
 const FEED_SELECT =
-  'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, consecutive_failures'
+  'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, translate_enabled, consecutive_failures'
 
 export async function addFeed(input: {
   url: string
@@ -190,6 +190,33 @@ export async function setFeedSummarizeArticles(
       .eq('feed_id', id)
     logQueryError('feeds/setFeedSummarizeArticles (clear summary_ai)', clearError)
   }
+
+  revalidatePath('/feeds')
+  return { error: null }
+}
+
+// Toggled directly from the feed list (see FeedManager.tsx), same
+// no-Edit-mode pattern as setFeedSummarizeArticles above. Unchecking this
+// is a promise that this feed's content is always already in the reader's
+// target language — see runIngest in src/lib/feeds/ingest.ts, which skips
+// translateArticle entirely for a translate_enabled=false feed and copies
+// the flag onto each of its feed_items rows, and the article content
+// route, which uses that per-item copy to skip translate-on-open. Because
+// that guarantees no OpenAI call will ever fire for this feed's articles,
+// runIngest also eagerly pre-caches (scrapes) each new item's full content
+// in the background right after ingest, instead of waiting for the first
+// open to pay for the scrape.
+export async function setFeedTranslateEnabled(
+  id: string,
+  enabled: boolean
+): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('feeds').update({ translate_enabled: enabled }).eq('id', id)
+
+  if (error) return { error: error.message }
 
   revalidatePath('/feeds')
   return { error: null }

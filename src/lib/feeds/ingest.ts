@@ -1,7 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { after } from 'next/server'
 import Parser from 'rss-parser'
 import { stripHtml, translateArticle } from '@/lib/translate'
 import { summarizeArticle } from '@/lib/summarize'
+import { prewarmArticleContent } from '@/lib/articles/content'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
 import { detectArticles } from './buildFeed'
@@ -39,6 +41,12 @@ const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https:/
 // per-connection rate limits.
 const FEED_CONCURRENCY = 6
 const ITEM_CONCURRENCY = 5
+// The background content-prewarm pass (see the translate_enabled branch in
+// processItem/runIngest below) is a live scrape of an external site per
+// item, same as the reading view's own lazy fetch — kept low so an ingest
+// run with a lot of new items on translate-disabled feeds doesn't hammer
+// several hosts at once.
+const PREWARM_CONCURRENCY = 3
 
 // Runs `fn` over `items` with at most `limit` calls in flight at once.
 // Order of results matches `items`; order of completion doesn't.
@@ -145,6 +153,13 @@ type FeedRow = {
   title: string | null
   is_scraped: boolean
   summarize_articles: boolean
+  // Per-feed opt-out from all translation (ingest-time title/summary and
+  // reading-view full-content alike) — see setFeedTranslateEnabled in
+  // src/lib/feeds/actions.ts and the checkbox in FeedManager.tsx. Off
+  // guarantees this feed's articles never trigger an OpenAI translate
+  // call, which is what makes eagerly pre-caching their content below
+  // safe (no speculative API cost, only a scrape).
+  translate_enabled: boolean
   consecutive_failures: number
 }
 // Deliberately a small structural subset rather than rss-parser's own Item
@@ -176,6 +191,11 @@ function extractItemImage(item: RawFeedItem): string | undefined {
   return item.enclosure?.url ?? item.mediaContent?.$?.url ?? item.mediaThumbnail?.$?.url ?? undefined
 }
 
+interface PrewarmTarget {
+  feedItemId: string
+  link: string
+}
+
 async function processItem(
   supabase: AdminClient,
   feed: FeedRow,
@@ -183,7 +203,7 @@ async function processItem(
   guid: string,
   targetLanguage: string,
   autoDeleteKeywords: string[]
-): Promise<{ inserted: boolean; autoDeleted: boolean }> {
+): Promise<{ inserted: boolean; autoDeleted: boolean; prewarm: PrewarmTarget | null }> {
   try {
     const rawTitle = item.title ?? ''
     const rawSummary = item.content ?? item.summary ?? item.contentSnippet ?? ''
@@ -191,12 +211,14 @@ async function processItem(
     // translateArticle() re-strips these same raw strings internally —
     // passing it the same raw HTML that stripHtml() cleans here keeps the
     // stored title/summary and the detected/translated text based on
-    // identical input.
-    const { original_language, title_en, summary_en } = await translateArticle(
-      rawTitle,
-      rawSummary,
-      targetLanguage
-    )
+    // identical input. Skipped entirely for a translate_enabled=false
+    // feed — see the FeedRow.translate_enabled comment above — rather
+    // than just letting franc's language detection decide, since a
+    // false-positive detection on short/ambiguous text would otherwise
+    // still trigger a translate-on-open attempt later.
+    const { original_language, title_en, summary_en } = feed.translate_enabled
+      ? await translateArticle(rawTitle, rawSummary, targetLanguage)
+      : { original_language: null, title_en: null, summary_en: null }
 
     // Auto-delete runs after translation (so a keyword typed in the user's
     // target language matches a title that's now in that language,
@@ -205,7 +227,7 @@ async function processItem(
     // second OpenAI call).
     const titleForMatching = title_en ?? stripHtml(rawTitle)
     if (matchedAutoDeleteKeyword(titleForMatching, autoDeleteKeywords)) {
-      return { inserted: false, autoDeleted: true }
+      return { inserted: false, autoDeleted: true, prewarm: null }
     }
 
     // Off by default per feed (see FeedRow.summarize_articles) — the
@@ -228,28 +250,47 @@ async function processItem(
     // for the same new item before either has inserted. A plain insert
     // would then fail on the (feed_id, guid) unique constraint; ignoring
     // the duplicate instead just no-ops that one row.
-    const { error: insertError } = await supabase.from('feed_items').upsert(
-      {
-        feed_id: feed.id,
-        guid,
-        title: stripHtml(rawTitle),
-        link: item.link ?? null,
-        summary: stripHtml(rawSummary).slice(0, STORED_SUMMARY_MAX_LENGTH),
-        published_at: item.isoDate ?? null,
-        original_language,
-        title_en,
-        summary_en,
-        summary_ai,
-        image_url: item.imageUrl ?? null,
-      },
-      { onConflict: 'feed_id,guid', ignoreDuplicates: true }
-    )
+    const { data: upserted, error: insertError } = await supabase
+      .from('feed_items')
+      .upsert(
+        {
+          feed_id: feed.id,
+          guid,
+          title: stripHtml(rawTitle),
+          link: item.link ?? null,
+          summary: stripHtml(rawSummary).slice(0, STORED_SUMMARY_MAX_LENGTH),
+          published_at: item.isoDate ?? null,
+          original_language,
+          title_en,
+          summary_en,
+          summary_ai,
+          image_url: item.imageUrl ?? null,
+          // Copied from the feed at insert time rather than looked up
+          // per-open — same pattern as summary_ai/feed.summarize_articles
+          // above. A later toggle of the feed's checkbox only affects
+          // items ingested after that point, not ones already sitting in
+          // the inbox.
+          translate_enabled: feed.translate_enabled,
+        },
+        { onConflict: 'feed_id,guid', ignoreDuplicates: true }
+      )
+      .select('id')
 
     if (insertError) {
       throw new Error(`Failed to insert item: ${insertError.message}`)
     }
 
-    return { inserted: true, autoDeleted: false }
+    // Only set on a genuine insert (upserted is empty when ignoreDuplicates
+    // skipped a same-run race — see the comment above) and only for a
+    // translate_enabled=false feed, since that's what guarantees the
+    // prewarm scrape below can't be followed by a wasted OpenAI call.
+    const insertedId = upserted?.[0]?.id as string | undefined
+    const prewarm: PrewarmTarget | null =
+      !feed.translate_enabled && insertedId && item.link
+        ? { feedItemId: insertedId, link: item.link }
+        : null
+
+    return { inserted: true, autoDeleted: false, prewarm }
   } catch (itemErr) {
     // A single malformed item (missing/garbage fields) or a one-off insert
     // failure shouldn't sink the rest of an otherwise-healthy feed.
@@ -257,12 +298,12 @@ async function processItem(
       `ingest-feeds: skipping item guid=${guid} in feed ${feed.id} (${feed.url})`,
       itemErr
     )
-    return { inserted: false, autoDeleted: false }
+    return { inserted: false, autoDeleted: false, prewarm: null }
   }
 }
 
 type FeedResult =
-  | { ok: true; itemsInserted: number; itemsAutoDeleted: number }
+  | { ok: true; itemsInserted: number; itemsAutoDeleted: number; prewarmTargets: PrewarmTarget[] }
   | { ok: false; failure: FeedFailure }
 
 // Fetches+parses the feed's raw item list, before dedup/cutoff filtering.
@@ -369,6 +410,7 @@ async function processFeed(
 
     const itemsInserted = results.filter((r) => r.inserted).length
     const itemsAutoDeleted = results.filter((r) => r.autoDeleted).length
+    const prewarmTargets = results.flatMap((r) => (r.prewarm ? [r.prewarm] : []))
 
     const { error: updateError } = await supabase
       .from('feeds')
@@ -379,7 +421,7 @@ async function processFeed(
       throw new Error(`Failed to update last_fetched_at: ${updateError.message}`)
     }
 
-    return { ok: true, itemsInserted, itemsAutoDeleted }
+    return { ok: true, itemsInserted, itemsAutoDeleted, prewarmTargets }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
@@ -421,7 +463,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
     await Promise.all([
       supabase
         .from('feeds')
-        .select('id, url, title, is_scraped, summarize_articles, consecutive_failures'),
+        .select('id, url, title, is_scraped, summarize_articles, translate_enabled, consecutive_failures'),
       loadIngestPreferences(supabase),
     ])
 
@@ -437,15 +479,31 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
   let itemsInserted = 0
   let itemsAutoDeleted = 0
   const feedsFailed: FeedFailure[] = []
+  const prewarmTargets: PrewarmTarget[] = []
 
   for (const result of results) {
     if (result.ok) {
       feedsProcessed++
       itemsInserted += result.itemsInserted
       itemsAutoDeleted += result.itemsAutoDeleted
+      prewarmTargets.push(...result.prewarmTargets)
     } else {
       feedsFailed.push(result.failure)
     }
+  }
+
+  // Scheduled to run after this request's response is sent (see Next's
+  // `after`) rather than awaited here — a live scrape per item would
+  // otherwise stretch every ingest cycle (cron and "Run ingest now" alike)
+  // by however long these translate-disabled feeds' new items take to
+  // fetch, defeating the point of pre-caching them ahead of a user ever
+  // opening one.
+  if (prewarmTargets.length > 0) {
+    after(() =>
+      mapWithConcurrency(prewarmTargets, PREWARM_CONCURRENCY, (target) =>
+        prewarmArticleContent(supabase, target.feedItemId, target.link)
+      )
+    )
   }
 
   return { feedsProcessed, feedsFailed, itemsInserted, itemsAutoDeleted }

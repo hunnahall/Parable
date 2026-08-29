@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient, getUser } from '@/lib/supabase/server'
-import { getOrFetchArticleContent, saveTranslatedContent } from '@/lib/articles/content'
+import {
+  checkArticleContentCache,
+  fetchAndPersistArticleContent,
+  saveTranslatedContent,
+  type ArticleContent,
+} from '@/lib/articles/content'
 import { translateFullContent } from '@/lib/translate'
 import { getUserPreferences } from '@/lib/preferences/data'
 
@@ -23,26 +28,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params
   const supabase = await createClient()
-  const { data: item, error } = await supabase
-    .from('feed_items')
-    .select('link, original_language')
-    .eq('id', id)
-    .maybeSingle()
+  // Three independent reads fired together instead of paying for three
+  // sequential round trips: the cache check only needs `id` (not the
+  // article's link, which the article_content lookup never uses), and
+  // prefs needs neither.
+  const [{ data: item, error }, cacheCheck, prefs] = await Promise.all([
+    supabase
+      .from('feed_items')
+      .select('link, original_language, translate_enabled')
+      .eq('id', id)
+      .maybeSingle(),
+    checkArticleContentCache(id),
+    getUserPreferences(),
+  ])
 
   if (error || !item) {
     return NextResponse.json({ error: 'Article not found' }, { status: 404 })
   }
 
-  const [content, prefs] = await Promise.all([
-    getOrFetchArticleContent(id, item.link),
-    getUserPreferences(),
-  ])
+  const content: ArticleContent = cacheCheck.hit
+    ? cacheCheck.content
+    : await fetchAndPersistArticleContent(id, item.link, cacheCheck.attemptCount)
 
   // Translate-on-open: only for articles not already in the user's target
-  // language, only once (cached in content_en_html thereafter), and only
-  // when extraction actually succeeded.
+  // language, only once (cached in content_en_html thereafter), only when
+  // extraction actually succeeded, and only when this item's feed hasn't
+  // opted out of translation entirely (translate_enabled, copied onto the
+  // row at ingest time — see runIngest in src/lib/feeds/ingest.ts).
   let contentEnHtml = content.contentEnHtml
   if (
+    item.translate_enabled &&
     !contentEnHtml &&
     content.contentText &&
     item.original_language &&
