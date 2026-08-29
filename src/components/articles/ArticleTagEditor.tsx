@@ -45,16 +45,16 @@ export default function ArticleTagEditor({
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 text-xs bg-foreground/5 text-muted px-2 py-0.5"
+          className="inline-flex items-center gap-1 text-base bg-foreground/5 text-muted px-2 py-0.5"
         >
           {tag}
           <button
             type="button"
             onClick={() => removeTag(tag)}
-            className="hover:text-red-600 transition-colors"
+            className="hover:text-danger transition-colors"
             aria-label={`Remove tag ${tag}`}
           >
-            <X size={12} />
+            <X size={12} strokeWidth={1.75} />
           </button>
         </span>
       ))}
@@ -73,13 +73,13 @@ export default function ArticleTagEditor({
             }
           }}
           placeholder="tag…"
-          className="w-16 border border-border px-2 py-0.5 text-xs bg-background"
+          className="w-16 border border-border px-2 py-0.5 text-base bg-background"
         />
       ) : (
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="text-xs text-muted hover:text-accent transition-colors"
+          className="text-base text-muted hover:text-accent transition-colors"
         >
           + tag
         </button>

@@ -70,29 +70,6 @@ export async function addWidget(
   return { widget: data, error: null }
 }
 
-// A single-widget config update, distinct from saveDashboardLayout's bulk
-// layout save — for widgets that expose their own in-place settings (e.g.
-// the watchlist's indicator picker) rather than only being configurable
-// at creation time via AddWidgetMenu.
-export async function updateWidgetConfig(
-  id: string,
-  config: Record<string, string>
-): Promise<{ error: string | null }> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
-
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('dashboard_widgets')
-    .update({ config })
-    .eq('id', id)
-    .eq('user_id', user.id)
-  if (error) return { error: error.message }
-
-  revalidatePath('/')
-  return { error: null }
-}
-
 export async function removeWidget(id: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }

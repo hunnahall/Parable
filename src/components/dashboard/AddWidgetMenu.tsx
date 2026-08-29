@@ -3,29 +3,23 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { WIDGET_LABELS, WIDGET_DEFAULT_SIZE, type WidgetType } from '@/lib/dashboard/widgets'
-import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
+import type { FeedOption } from '@/lib/dashboard/data'
 
 const WIDGET_TYPES: WidgetType[] = [
   'headlines',
   'feed',
-  'indicators',
   'saved',
   'feed-category',
   'clock',
   'calendar',
-  'todo',
-  'watchlist',
-  'key-dates',
 ]
 
 export default function AddWidgetMenu({
   feedOptions,
-  indicatorOptions,
   categoryOptions,
   onAdd,
 }: {
   feedOptions: FeedOption[]
-  indicatorOptions: IndicatorOption[]
   categoryOptions: string[]
   onAdd: (
     widgetType: WidgetType,
@@ -36,16 +30,13 @@ export default function AddWidgetMenu({
   const [open, setOpen] = useState(false)
   const [widgetType, setWidgetType] = useState<WidgetType>('headlines')
   const [feedId, setFeedId] = useState(feedOptions[0]?.id ?? '')
-  const [indicatorId, setIndicatorId] = useState(indicatorOptions[0]?.id ?? '')
   const [category, setCategory] = useState(categoryOptions[0] ?? '')
   const [submitting, setSubmitting] = useState(false)
 
   const needsFeed = widgetType === 'feed'
-  const needsIndicator = widgetType === 'indicators'
   const needsCategory = widgetType === 'feed-category'
   const canSubmit =
     (!needsFeed || feedId) &&
-    (!needsIndicator || indicatorId) &&
     (!needsCategory || category) &&
     !submitting
 
@@ -54,7 +45,6 @@ export default function AddWidgetMenu({
     setSubmitting(true)
     const config: Record<string, string> = {}
     if (needsFeed) config.feed_id = feedId
-    if (needsIndicator) config.indicator_id = indicatorId
     if (needsCategory) config.category = category
     await onAdd(widgetType, config, WIDGET_DEFAULT_SIZE[widgetType])
     setSubmitting(false)
@@ -66,20 +56,20 @@ export default function AddWidgetMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center min-h-[52px] text-sm font-semibold border-2 border-accent px-4 py-2 hover:bg-accent/10 transition-colors"
+        aria-label="Add widget"
+        className="flex items-center justify-center h-8 w-8 bg-accent hover:opacity-90 transition-opacity"
       >
-        <Plus size={16} strokeWidth={2.5} className="-ms-1 me-2" aria-hidden="true" />
-        Add widget
+        <Plus size={16} strokeWidth={1.75} className="text-white" aria-hidden="true" />
       </button>
     )
   }
 
   return (
-    <div className="flex items-center min-h-[52px] gap-2 text-sm border-2 border-accent px-4 py-2 bg-background">
+    <div className="flex items-center gap-2 h-8 text-base border border-accent px-2 bg-background">
       <select
         value={widgetType}
         onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-        className="border border-border px-2 py-1 bg-background"
+        className="h-full border border-border px-2 bg-background"
       >
         {WIDGET_TYPES.map((type) => (
           <option key={type} value={type}>
@@ -93,7 +83,7 @@ export default function AddWidgetMenu({
           <select
             value={feedId}
             onChange={(e) => setFeedId(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
+            className="h-full border border-border px-2 bg-background"
           >
             {feedOptions.map((feed) => (
               <option key={feed.id} value={feed.id}>
@@ -106,32 +96,12 @@ export default function AddWidgetMenu({
         )
       )}
 
-      {needsIndicator && (
-        indicatorOptions.length > 0 ? (
-          <select
-            value={indicatorId}
-            onChange={(e) => setIndicatorId(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
-          >
-            {indicatorOptions.map((indicator) => (
-              <option key={indicator.id} value={indicator.id}>
-                {indicator.display_name ?? indicator.id}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-muted">
-            No indicators yet — add one to the indicators table first.
-          </span>
-        )
-      )}
-
       {needsCategory && (
         categoryOptions.length > 0 ? (
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
+            className="h-full border border-border px-2 bg-background"
           >
             {categoryOptions.map((cat) => (
               <option key={cat} value={cat}>
@@ -148,14 +118,14 @@ export default function AddWidgetMenu({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="bg-foreground text-background px-3 py-1 transition-colors hover:opacity-90 disabled:opacity-50"
+        className="h-full px-2 text-accent font-medium hover:opacity-80 transition-opacity disabled:opacity-50"
       >
         Add
       </button>
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="text-muted hover:text-accent transition-colors px-1"
+        className="h-full text-muted hover:text-accent transition-colors px-2"
       >
         Cancel
       </button>

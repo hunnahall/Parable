@@ -2,81 +2,173 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { LayoutList, LayoutGrid } from 'lucide-react'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/dashboard/data'
-import { saveArticle, ignoreArticle, clearArticleState, fetchArticlesPage } from '@/lib/articles/actions'
-import ArticleNoteEditor from './ArticleNoteEditor'
-import ArticleTagEditor from './ArticleTagEditor'
+import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
+import { useOptimisticArticleList } from './useOptimisticArticleList'
+import ArticleCard, { type FolderOption } from './ArticleCard'
+import ArticleCardGrid from './ArticleCardGrid'
+import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
+
+export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
+export type ArticlesDisplayMode = 'list' | 'card'
 
 export interface ArticlesFilters {
   query: string
-  category: string | null
+  view: ArticlesViewMode
+  folderIds: string[]
+  sourceFeedIds: string[]
   tag: string | null
-  savedOnly: boolean
+  dateFrom: string | null
+  dateTo: string | null
+  display: ArticlesDisplayMode
 }
 
-function formatDate(dateString: string | null): string | null {
-  if (!dateString) return null
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function buildUrl(filters: ArticlesFilters): string {
+function buildUrl(basePath: string, filters: ArticlesFilters): string {
   const params = new URLSearchParams()
   if (filters.query) params.set('q', filters.query)
-  if (filters.category) params.set('category', filters.category)
+  if (filters.folderIds.length > 0) params.set('folder', filters.folderIds.join(','))
+  if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
   if (filters.tag) params.set('tag', filters.tag)
-  if (filters.savedOnly) params.set('saved', '1')
+  if (filters.dateFrom) params.set('from', filters.dateFrom)
+  if (filters.dateTo) params.set('to', filters.dateTo)
+  if (filters.display !== 'list') params.set('display', filters.display)
   const qs = params.toString()
-  return qs ? `/articles?${qs}` : '/articles'
+  return qs ? `${basePath}?${qs}` : basePath
 }
 
+// Powers the Articles, Saved, and Archive pages — each passes its own
+// `view` (which server-side query getArticlesPage runs) and `basePath` (so
+// filter navigation stays on that page). Save/Archive/Delete affordances
+// per card are the same shared ArticleCard; only Saved shows the folder
+// picker and Delete button, per the plan's explicit Saved-page requirement.
 export default function ArticlesView({
+  basePath,
   items,
   nextCursor,
-  categories,
-  savedTags,
+  folders,
+  feedOptions,
+  allTags,
   filters,
+  showFolderPicker = false,
+  showDelete = false,
+  enableBulkActions = false,
 }: {
+  basePath: string
   items: ArticleItem[]
   nextCursor: { publishedAt: string; id: string } | null
-  categories: string[]
-  savedTags: string[]
+  folders: FolderOption[]
+  feedOptions: { id: string; title: string | null }[]
+  allTags: string[]
   filters: ArticlesFilters
+  showFolderPicker?: boolean
+  showDelete?: boolean
+  // Multi-select toolbar (select all, bulk archive, bulk delete) —
+  // Articles/Saved/Archive all opt in. "Archive selected" is hidden on
+  // the archived view (nothing to do there); "Delete selected" is a full
+  // purge (see purgeArticles) on every view it's shown on, including
+  // Saved and Archive — this can permanently delete an article someone
+  // explicitly saved, by design, per the caller's request.
+  enableBulkActions?: boolean
 }) {
   const router = useRouter()
   const [queryDraft, setQueryDraft] = useState(filters.query)
-  const [pendingId, setPendingId] = useState<string | null>(null)
-  const [errorId, setErrorId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkPending, setBulkPending] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  // Optimistic local copy for per-item actions — see ArticleList.tsx for
-  // why. Also where "Load more" pages get appended, since accumulating
-  // them lives outside what the server-rendered `items` prop tracks.
-  const [localItems, setLocalItems] = useState(items)
+  // Folders created inline from a card (see ArticleCard's "+ Add folder")
+  // need to show up in every card's dropdown immediately, not just the one
+  // that created it — kept here, one level up, rather than per-card state.
+  const [localFolders, setLocalFolders] = useState(folders)
+  const [syncedFoldersFrom, setSyncedFoldersFrom] = useState(folders)
+  if (folders !== syncedFoldersFrom) {
+    setSyncedFoldersFrom(folders)
+    setLocalFolders(folders)
+  }
+  function handleFolderCreated(folder: FolderOption) {
+    setLocalFolders((prev) => [...prev, folder].sort((a, b) => a.label.localeCompare(b.label)))
+  }
+
+  function belongs(item: ArticleItem): boolean {
+    if (filters.view === 'unfiled') return item.state === null
+    return item.state === filters.view
+  }
+
+  const { localItems, updateItem, removeItem, appendItems } = useOptimisticArticleList(items, belongs)
   const [cursor, setCursor] = useState(nextCursor)
-  const [syncedFrom, setSyncedFrom] = useState(items)
-  if (items !== syncedFrom) {
-    setSyncedFrom(items)
-    setLocalItems(items)
+  const [syncedCursorFrom, setSyncedCursorFrom] = useState(items)
+  if (items !== syncedCursorFrom) {
+    setSyncedCursorFrom(items)
     setCursor(nextCursor)
-  }
-
-  function updateItem(id: string, patch: Partial<ArticleItem>) {
-    setLocalItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
-  }
-
-  function removeItem(id: string) {
-    setLocalItems((prev) => prev.filter((item) => item.id !== id))
+    // A new filter/page load replaces the list wholesale — stale
+    // selection referring to ids that may no longer even be on screen.
+    setSelectedIds(new Set())
+    setConfirmingDelete(false)
   }
 
   function navigate(patch: Partial<ArticlesFilters>) {
-    router.push(buildUrl({ ...filters, ...patch }))
+    router.push(buildUrl(basePath, { ...filters, ...patch }))
   }
 
   function commitSearch() {
     if (queryDraft.trim() !== filters.query) navigate({ query: queryDraft.trim() })
+  }
+
+  function toggleSelect(id: string) {
+    setConfirmingDelete(false)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setConfirmingDelete(false)
+    setSelectedIds((prev) =>
+      prev.size === localItems.length ? new Set() : new Set(localItems.map((item) => item.id))
+    )
+  }
+
+  async function handleBulkArchive() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setBulkPending(true)
+    setBulkError(null)
+    for (const id of ids) updateItem(id, { state: 'archived', archivedAt: new Date().toISOString() })
+    const result = await archiveArticlesBulk(ids)
+    setBulkPending(false)
+    setSelectedIds(new Set())
+    if (result.error) {
+      setBulkError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setBulkPending(true)
+    setBulkError(null)
+    for (const id of ids) removeItem(id)
+    const result = await purgeArticles(ids)
+    setBulkPending(false)
+    setSelectedIds(new Set())
+    setConfirmingDelete(false)
+    if (result.error) {
+      setBulkError(result.error)
+      return
+    }
+    router.refresh()
   }
 
   async function handleLoadMore() {
@@ -84,209 +176,234 @@ export default function ArticlesView({
     setLoadingMore(true)
     const filterArg: ArticlesPageFilters = {
       query: filters.query || undefined,
-      category: filters.category,
+      view: filters.view,
+      folderIds: filters.folderIds,
+      sourceFeedIds: filters.sourceFeedIds,
       tag: filters.tag,
-      savedOnly: filters.savedOnly,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
       cursor,
     }
     const result = await fetchArticlesPage(filterArg)
     setLoadingMore(false)
-    setLocalItems((prev) => [...prev, ...result.items])
+    appendItems(result.items)
     setCursor(result.nextCursor)
   }
 
-  async function handleSave(id: string) {
-    setPendingId(id)
-    setError(null)
-    updateItem(id, { state: 'saved' })
-    const result = await saveArticle(id)
-    setPendingId(null)
-    if (result.error) {
-      setErrorId(id)
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleIgnore(id: string) {
-    setPendingId(id)
-    setError(null)
-    removeItem(id)
-    const result = await ignoreArticle(id)
-    setPendingId(null)
-    if (result.error) {
-      setErrorId(id)
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
-  async function handleUnsave(id: string) {
-    setPendingId(id)
-    setError(null)
-    if (filters.savedOnly) {
-      removeItem(id)
-    } else {
-      updateItem(id, { state: null })
-    }
-    const result = await clearArticleState(id)
-    setPendingId(null)
-    if (result.error) {
-      setErrorId(id)
-      setError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
   const activeFilterCount =
-    (filters.query ? 1 : 0) + (filters.category ? 1 : 0) + (filters.tag ? 1 : 0) + (filters.savedOnly ? 1 : 0)
+    (filters.query ? 1 : 0) +
+    (filters.folderIds.length > 0 ? 1 : 0) +
+    (filters.sourceFeedIds.length > 0 ? 1 : 0) +
+    (filters.tag ? 1 : 0) +
+    (filters.dateFrom ? 1 : 0) +
+    (filters.dateTo ? 1 : 0)
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="search"
-          placeholder="Search articles…"
-          value={queryDraft}
-          onChange={(e) => setQueryDraft(e.target.value)}
-          onBlur={commitSearch}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commitSearch()
-          }}
-          className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-sm bg-background"
-        />
-        <select
-          value={filters.category ?? ''}
-          onChange={(e) => navigate({ category: e.target.value || null })}
-          className="border border-border px-3 py-2 text-sm bg-background"
-        >
-          <option value="">All categories</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-1.5 text-sm">
+      <div className="space-y-3 pb-4 border-b border-border-subtle">
+        <div className="flex flex-wrap items-center gap-3">
           <input
-            type="checkbox"
-            checked={filters.savedOnly}
-            onChange={(e) => navigate({ savedOnly: e.target.checked, tag: e.target.checked ? filters.tag : null })}
+            type="search"
+            placeholder="Search articles…"
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
+            onBlur={commitSearch}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitSearch()
+            }}
+            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-lg bg-background"
           />
-          Saved only
-        </label>
-      </div>
-
-      {savedTags.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => navigate({ tag: null })}
-            className={
-              filters.tag === null
-                ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
-                : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
-            }
-          >
-            All tags
-          </button>
-          {savedTags.map((tag) => (
+          <MultiSelectDropdown
+            label="All folders"
+            options={localFolders.map((f) => ({ id: f.id, label: f.label }))}
+            selectedIds={filters.folderIds}
+            onChange={(folderIds) => navigate({ folderIds })}
+            className="w-40"
+          />
+          <MultiSelectDropdown
+            label="All sources"
+            options={feedOptions.map((f) => ({ id: f.id, label: f.title ?? f.id }))}
+            selectedIds={filters.sourceFeedIds}
+            onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
+            className="w-48"
+          />
+          <label className="flex items-center gap-1.5 text-base text-muted">
+            From
+            <input
+              type="date"
+              value={filters.dateFrom ?? ''}
+              onChange={(e) => navigate({ dateFrom: e.target.value || null })}
+              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-base text-muted">
+            To
+            <input
+              type="date"
+              value={filters.dateTo ?? ''}
+              onChange={(e) => navigate({ dateTo: e.target.value || null })}
+              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+            />
+          </label>
+          <div className="flex items-center border border-border ml-auto">
             <button
-              key={tag}
               type="button"
-              onClick={() => navigate({ tag, savedOnly: true })}
+              onClick={() => navigate({ display: 'list' })}
+              aria-label="List view"
+              aria-pressed={filters.display === 'list'}
               className={
-                filters.tag === tag
+                'flex items-center justify-center w-8 h-8 transition-colors ' +
+                (filters.display === 'list'
+                  ? 'bg-foreground/10 text-foreground'
+                  : 'text-muted hover:text-foreground')
+              }
+            >
+              <LayoutList size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate({ display: 'card' })}
+              aria-label="Card view"
+              aria-pressed={filters.display === 'card'}
+              className={
+                'flex items-center justify-center w-8 h-8 border-l border-border transition-colors ' +
+                (filters.display === 'card'
+                  ? 'bg-foreground/10 text-foreground'
+                  : 'text-muted hover:text-foreground')
+              }
+            >
+              <LayoutGrid size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        {allTags.length > 0 && (
+          <div className="flex items-center gap-1.5 text-base overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => navigate({ tag: null })}
+              className={
+                filters.tag === null
                   ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
                   : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
               }
             >
-              {tag}
+              All tags
             </button>
-          ))}
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => navigate({ tag })}
+                className={
+                  filters.tag === tag
+                    ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
+                    : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
+                }
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {enableBulkActions && localItems.length > 0 && (
+        <div className="flex items-center gap-3 text-lg">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={selectedIds.size > 0 && selectedIds.size === localItems.length}
+              ref={(el) => {
+                if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < localItems.length
+              }}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-muted">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+            </span>
+          </label>
+          {selectedIds.size > 0 && (
+            <>
+              {filters.view !== 'archived' && (
+                <button
+                  type="button"
+                  disabled={bulkPending}
+                  onClick={handleBulkArchive}
+                  className="border border-border px-3 py-1.5 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+                >
+                  Archive selected
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={bulkPending}
+                onClick={handleBulkDelete}
+                className={
+                  confirmingDelete
+                    ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-sm transition-colors disabled:opacity-50'
+                    : 'border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50'
+                }
+              >
+                {confirmingDelete
+                  ? `Really delete ${selectedIds.size}? Click to confirm`
+                  : 'Delete selected'}
+              </button>
+              {confirmingDelete && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-sm text-muted hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {bulkError && <p className="text-base text-danger">{bulkError}</p>}
 
       {localItems.length === 0 ? (
-        <p className="text-sm text-muted">
-          {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
-        </p>
-      ) : (
-        <ul className="divide-y divide-border border border-border">
+        <div className="relative py-16 text-center">
+          <div className="empty-state-watermark" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/parable-mark.svg" alt="" className="w-40 h-40" />
+          </div>
+          <p className="relative text-lg text-muted">
+            {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
+          </p>
+        </div>
+      ) : filters.display === 'card' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {localItems.map((item) => (
-            <li key={item.id} className="p-4">
-              <div className="flex items-center gap-2 text-xs text-muted mb-0.5">
-                {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
-                {item.category && <span>{item.category}</span>}
-                {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
-              </div>
-              {item.link ? (
-                <a
-                  href={item.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium hover:text-accent hover:underline"
-                >
-                  {item.title}
-                </a>
-              ) : (
-                <p className="text-sm font-medium">{item.title}</p>
-              )}
-              {item.summary && (
-                <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.summary}</p>
-              )}
-              <div className="flex items-center gap-3 mt-1">
-                {item.state === 'saved' ? (
-                  <button
-                    type="button"
-                    disabled={pendingId === item.id}
-                    onClick={() => handleUnsave(item.id)}
-                    className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-                  >
-                    Unsave
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={pendingId === item.id}
-                    onClick={() => handleSave(item.id)}
-                    className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-                  >
-                    Save
-                  </button>
-                )}
-                {item.state !== 'ignored' && (
-                  <button
-                    type="button"
-                    disabled={pendingId === item.id}
-                    onClick={() => handleIgnore(item.id)}
-                    className="text-xs text-muted hover:text-accent transition-colors disabled:opacity-50"
-                  >
-                    Ignore
-                  </button>
-                )}
-              </div>
-              {item.state === 'saved' && (
-                <>
-                  <ArticleNoteEditor
-                    itemId={item.id}
-                    note={item.note}
-                    onChange={(note) => updateItem(item.id, { note })}
-                  />
-                  <ArticleTagEditor
-                    itemId={item.id}
-                    tags={item.tags}
-                    onChange={(tags) => updateItem(item.id, { tags })}
-                  />
-                </>
-              )}
-              {errorId === item.id && error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-            </li>
+            <ArticleCardGrid
+              key={item.id}
+              item={item}
+              onUpdate={updateItem}
+              onRemove={removeItem}
+              folders={localFolders}
+              onFolderCreated={handleFolderCreated}
+              showFolderPicker={showFolderPicker}
+              showDelete={showDelete}
+            />
+          ))}
+        </div>
+      ) : (
+        <ul className="card-elevated divide-y divide-border">
+          {localItems.map((item) => (
+            <ArticleCard
+              key={item.id}
+              item={item}
+              onUpdate={updateItem}
+              onRemove={removeItem}
+              folders={localFolders}
+              onFolderCreated={handleFolderCreated}
+              showFolderPicker={showFolderPicker}
+              showDelete={showDelete}
+              selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
+              onToggleSelect={enableBulkActions ? toggleSelect : undefined}
+            />
           ))}
         </ul>
       )}
@@ -297,7 +414,7 @@ export default function ArticlesView({
             type="button"
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="border border-border px-4 py-2 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
           >
             {loadingMore ? 'Loading…' : 'Load more'}
           </button>

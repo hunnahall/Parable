@@ -3,10 +3,15 @@ import he from 'he'
 import { franc } from 'franc'
 import langs from 'langs'
 import OpenAI from 'openai'
+import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000
 const SUMMARY_MAX_LENGTH = 500
+// Full-article bodies are far longer than a title/summary — capped well
+// under gpt-5-nano's context window to keep translate-on-open latency and
+// cost bounded for a single reading-view request.
+const BODY_MAX_LENGTH = 12_000
 
 export interface TranslatedArticle {
   original_language: string
@@ -71,8 +76,9 @@ export function stripHtml(html: string): string {
     .trim()
 }
 
-async function translateToEnglish(
-  texts: [string, string]
+async function translateToTargetLanguage(
+  texts: [string, string],
+  targetLanguage: string
 ): Promise<[string | null, string | null] | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
@@ -81,6 +87,7 @@ async function translateToEnglish(
   }
 
   const [title, summary] = texts
+  const targetName = languageLabel(targetLanguage)
   const client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS })
 
   try {
@@ -112,8 +119,7 @@ async function translateToEnglish(
       input: [
         {
           role: 'developer',
-          content:
-            'Translate the article title and summary into English. Preserve meaning and tone; do not add commentary or labels. If a field is already in English, return it unchanged.',
+          content: `Translate the article title and summary into ${targetName}. Preserve meaning and tone; do not add commentary or labels. If a field is already in ${targetName}, return it unchanged.`,
         },
         { role: 'user', content: `Title: ${title}\n\nSummary: ${summary}` },
       ],
@@ -133,9 +139,79 @@ async function translateToEnglish(
   }
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+// Wraps each line of plain translated text in its own <p> so the result
+// renders with the same paragraph structure as the extracted original,
+// without asking the model to preserve/re-emit HTML markup.
+function textToParagraphHtml(text: string): string {
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join('')
+}
+
+// Translate-on-open: a separate path from translateArticle's ingest-time
+// title/summary translation (which is unaffected by this). Only runs when
+// a user actually opens a reading view for an article not already in their
+// target language (see src/app/articles/[id]/page.tsx), operating on
+// Readability's extracted plain text rather than the raw HTML — simpler
+// and cheaper than asking the model to preserve markup, and
+// textToParagraphHtml above restores enough structure for a readable
+// result.
+export async function translateFullContent(
+  text: string,
+  targetLanguage: string = DEFAULT_LANGUAGE
+): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    console.error('translate: OPENAI_API_KEY not set, skipping full-content translation')
+    return null
+  }
+
+  const targetName = languageLabel(targetLanguage)
+  const truncated = text.slice(0, BODY_MAX_LENGTH)
+  const client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS })
+
+  try {
+    const response = await client.responses.create({
+      model: MODEL,
+      reasoning: { effort: 'minimal' },
+      text: { verbosity: 'low' },
+      max_output_tokens: 4000,
+      input: [
+        {
+          role: 'developer',
+          content: `Translate the following article body into ${targetName}. Preserve paragraph breaks (blank lines between paragraphs). Do not add commentary, labels, or a preamble — output only the translated text.`,
+        },
+        { role: 'user', content: truncated },
+      ],
+    })
+
+    const translated = response.output_text
+    if (!translated) {
+      console.error('translate: OpenAI returned no output text for full content')
+      return null
+    }
+
+    return textToParagraphHtml(translated)
+  } catch (err) {
+    console.error('translate: full-content OpenAI request failed', err)
+    return null
+  }
+}
+
 export async function translateArticle(
   rawTitle: string,
-  rawSummary: string
+  rawSummary: string,
+  targetLanguage: string = DEFAULT_LANGUAGE
 ): Promise<TranslatedArticle> {
   const title = stripHtml(rawTitle)
   const summary = stripHtml(rawSummary)
@@ -144,13 +220,13 @@ export async function translateArticle(
   const original_language =
     detected === 'und' ? 'und' : toTwoLetterCode(detected)
 
-  if (original_language === 'en' || detected === 'und') {
+  if (original_language === targetLanguage || detected === 'und') {
     return { original_language, title_en: null, summary_en: null }
   }
 
   const truncatedSummary = summary.slice(0, SUMMARY_MAX_LENGTH)
 
-  const translated = await translateToEnglish([title, truncatedSummary])
+  const translated = await translateToTargetLanguage([title, truncatedSummary], targetLanguage)
 
   if (!translated) {
     return { original_language, title_en: null, summary_en: null }

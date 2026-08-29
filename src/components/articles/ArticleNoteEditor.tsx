@@ -46,7 +46,7 @@ export default function ArticleNoteEditor({
             setEditing(false)
           }
         }}
-        className="w-full border border-border px-1.5 py-0.5 text-xs bg-background mt-1"
+        className="w-full border border-border px-1.5 py-0.5 text-base bg-background mt-1"
       />
     )
   }
@@ -55,7 +55,7 @@ export default function ArticleNoteEditor({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="block text-left text-xs italic text-muted hover:text-accent transition-colors mt-1"
+      className="block text-left text-base italic text-muted hover:text-accent transition-colors mt-1"
     >
       {note}
     </button>
@@ -63,7 +63,7 @@ export default function ArticleNoteEditor({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="text-xs text-muted hover:text-accent transition-colors mt-1"
+      className="text-base text-muted hover:text-accent transition-colors mt-1"
     >
       + Note
     </button>

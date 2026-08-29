@@ -9,8 +9,12 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
+  --color-surface: var(--surface);
+  --color-surface-border: var(--surface-border);
 
   --font-heading: var(--font-hanken-grotesk);
   --font-label: var(--font-instrument-sans);
@@ -25,33 +29,61 @@
 /* Covenant Works design system: ink on paper, hairline rules, zero
    radius, one functional accent per surface — see
    ~/Downloads/Design System/covenant-works-design-system_updated.html.
-   Dark palette below is this app's own extrapolation (the source system
-   is light-only) following the same ink/paper-inversion + hairline +
-   single-accent discipline. */
+   Parable is dark-only (Reader branch dropped light mode/the theme
+   switcher) — these are the values that used to live in a
+   prefers-color-scheme/[data-theme="dark"] override, now the sole
+   palette. Surface sits brighter than the page behind it ("elevated"),
+   the same discipline the (now-removed) light mode followed, just
+   running the other direction — box shadows are close to invisible on a
+   dark background, so cards skip shadow-card entirely and rely on the
+   brighter surface tone + a light-on-dark hairline border instead;
+   floating panels (modals/drawers) sit over a dimmed backdrop where a
+   real shadow is visible again, so shadow-modal stays a true shadow. */
 :root {
-  --background: #ffffff;
-  --foreground: #131418;
-  --foreground-muted: #4a4d59;
-  --border: #d8d9de;
-  --border-subtle: #ebecef;
+  --background: #0b0c0f;
+  --foreground: #f4f5f7;
+  --foreground-muted: #b3b6c0;
+  --border: #33353d;
+  --border-subtle: #26272c;
 
-  /* Action blue: same hue as the Parable mark's brand blue, darkened for
-     AA-contrast text/icons/focus rings on white. Reserved as a true
-     accent (links, focus, active nav, a single chart series, primary
-     button borders) — never a decorative fill; see the button-styling
-     convention below. */
-  --accent: #2f6fb8;
-  --accent-foreground: #ffffff;
+  --surface: #17181c;
+  --surface-border: rgba(255, 255, 255, 0.09);
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.25);
+
+  /* Grain texture for the page background only (never cards — see
+     .card-elevated below, which sets no background-image of its own).
+     A self-contained feTurbulence SVG rather than a fetched asset — same
+     technique tools like fffuel's nnnoise generate, just authored inline
+     so there's no external asset/network dependency. Desaturated
+     (saturate 0) so it's neutral gray speckle, then the outer <rect>'s
+     opacity keeps it near-invisible (~4%) at normal viewing distance. The
+     tile is a fixed 180x180 px region with stitchTiles="stitch" so it
+     repeats seamlessly via the default CSS background-repeat. */
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+
+  /* Action blue: the Parable mark's own brand blue, reserved as a true
+     accent (links, focus, active nav, primary button borders) — never a
+     decorative fill; see the button-styling convention below. --brand
+     is the same hue/value as --accent here (there's no longer a
+     lighter/darker split between them now that light mode is gone), kept
+     as a separate token since call sites still reach for --brand
+     specifically for the mark/logo treatment. */
+  --accent: #92afd7;
+  --accent-foreground: #131418;
   --brand: #92afd7;
-  /* Brand blue is the same hue in both themes (it's the Parable mark's
-     own color, not a theme-adaptive accent), so unlike accent-foreground
-     this doesn't flip per theme — #92afd7 is light enough to need dark
-     ink text in light AND dark mode alike. */
   --brand-foreground: #131418;
+  /* Danger red: the design system's actual dark-mode red (Rose, #CC8B8C)
+     with dark ink text — see
+     ~/Downloads/Design System/covenant-works-design-system_updated.html.
+     Contrast checked: Rose+ink 6.70:1, comfortably passes AA. */
+  --danger: #cc8b8c;
+  --danger-foreground: #131418;
   /* "Label gray" from the design system's core neutrals — the app's
      existing secondary/de-emphasized text color, most call sites already
      use it via text-muted. */
-  --muted: #7c7f8c;
+  --muted: #9a9daa;
 
   /* Body font default (Inter) — the [data-font="..."] rules below
      override this. Defined on :root, not body, since Tailwind's preflight
@@ -67,32 +99,6 @@
   --motion-slow: 360ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: #131418;
-    --foreground: #f4f5f7;
-    --foreground-muted: #b3b6c0;
-    --border: #33353d;
-    --border-subtle: #26272c;
-    --accent: #92afd7;
-    --accent-foreground: #131418;
-    --brand: #92afd7;
-    --muted: #9a9daa;
-  }
-}
-
-:root[data-theme="dark"] {
-  --background: #131418;
-  --foreground: #f4f5f7;
-  --foreground-muted: #b3b6c0;
-  --border: #33353d;
-  --border-subtle: #26272c;
-  --accent: #92afd7;
-  --accent-foreground: #131418;
-  --brand: #92afd7;
-  --muted: #9a9daa;
-}
-
 /* Body font choice (Settings page) — Inter is the unset/default case, so
    it needs no rule of its own. Headings stay Hanken Grotesk regardless of
    this setting (see h1-h4 below) — the font preference only ever affects
@@ -104,6 +110,7 @@
 
 body {
   background-color: var(--background);
+  background-image: var(--grain-image);
   color: var(--foreground);
   /* Explicit rather than relying solely on Tailwind preflight's
      `--default-font-family` -> `--font-sans` chain — this is the one
@@ -117,6 +124,83 @@ h1, h2, h3, h4 {
   font-family: var(--font-heading);
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+/* Page-title scale: a deliberately confident jump above body/caption
+   text (design-instructions.md #6 — type-scale contrast as a graphic
+   element, not just a label). Bare <h1> only, so a page's title picks
+   this up automatically without a repeated size utility class per page;
+   an h1 that already carries its own Tailwind text-* class (e.g. the
+   reading view's article title) overrides it as normal, since a class
+   selector beats this element selector on specificity. */
+h1 {
+  font-size: clamp(2.25rem, 1.3rem + 2.75vw, 3rem);
+  line-height: 1.08;
+}
+
+/* Rest of the heading scale, tightened toward a dense/utilitarian
+   register (Linear/Titanium direction) rather than a marketing-page
+   jump between levels — h2 is a real section header, h3/h4 step down
+   into label-weight territory. Bare elements only, same rule as h1
+   above: any call site with its own Tailwind text-* class overrides
+   these via normal specificity, so existing compact `text-sm` section
+   headers (Settings, dialogs, etc.) are untouched — this is the
+   default for headings that don't opt into a specific size. */
+h2 {
+  font-size: 1.5rem; /* 24px */
+  line-height: 1.3;
+}
+h3 {
+  font-size: 1.125rem; /* 18px */
+  line-height: 1.4;
+}
+h4 {
+  font-size: 0.9375rem; /* 15px */
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Elevation system (design-instructions.md #2): one shared surface for
+   every card/panel/modal/popover instead of hand-tuning border+shadow
+   per component. Zero-radius stays — elevation here is purely
+   background/border/shadow, per this design system's existing
+   discipline. See globals.css :root for --surface/--shadow-card and the
+   dark-mode override (shadow-card is `none` there — see comment above
+   the dark tokens for why). */
+.card-elevated {
+  background-color: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-card);
+}
+
+/* Only for panels that are actually interactive (draggable/clickable) —
+   applying a hover-lift to static, non-interactive panels (e.g. a
+   Settings section) would communicate an affordance that isn't there. */
+.card-elevated-interactive {
+  transition:
+    box-shadow var(--motion-fast) ease-out,
+    transform var(--motion-fast) ease-out,
+    border-color var(--motion-fast) ease-out;
+}
+.card-elevated-interactive:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--surface-border) 60%, var(--foreground) 15%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-elevated-interactive:hover {
+    transform: none;
+  }
+}
+
+/* Modals/drawers/popovers — same surface, a taller shadow tier since
+   these float above a dimmed backdrop rather than sitting flush on the
+   page. */
+.card-modal {
+  background-color: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-modal);
 }
 
 /* Native checkboxes/radios (to-do items, indicator compare picks, watchlist
@@ -138,6 +222,54 @@ input[type="checkbox"], input[type="radio"] {
 
 .animate-landing-reveal {
   animation: landing-reveal var(--motion-slow) ease-in-out both;
+}
+
+/* The one deliberate motion "moment" this pass adds (design-instructions.md
+   #5 — one well-orchestrated moment, not effects scattered everywhere):
+   dashboard widgets fade/rise in with a slight stagger on first paint,
+   driven by each widget's own --reveal-delay custom property (set inline
+   per widget index in DashboardGrid.tsx) rather than nth-child, since
+   widget order can change via drag/remove.
+
+   Uses the standalone `translate` property, not `transform` — this
+   applies to WidgetCard's own inner element (not the outer div
+   react-grid-layout positions via `transform: translate(x,y)`, see
+   DashboardGrid.tsx), but that same inner element also has
+   .card-elevated-interactive's :hover transform for the lift effect. A
+   filled CSS animation (fill-mode both) keeps "owning" whatever property
+   it animates even after finishing, which would silently block a later
+   :hover rule from changing that same property. `translate` and
+   `transform` compose independently, so the reveal animation and the
+   hover lift never fight over the same property. */
+@keyframes widget-reveal {
+  from { opacity: 0; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+.animate-widget-reveal {
+  animation: widget-reveal var(--motion-slow) ease-out both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-widget-reveal {
+    animation: none;
+  }
+}
+
+/* Empty-state watermark (design-instructions.md #8): a large, pale outline
+   of the existing Parable mark behind empty-state copy, instead of
+   inventing new illustration. Position: relative on the container,
+   this absolutely-centered behind its text content (z-index left at
+   default stacking order — text is a later sibling so it paints on top). */
+.empty-state-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0.05;
 }
 
 @media (prefers-reduced-motion: reduce) {

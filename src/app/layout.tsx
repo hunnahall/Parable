@@ -4,9 +4,10 @@ import { Hanken_Grotesk, Inter, Work_Sans, Instrument_Sans, Lato } from 'next/fo
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { signOut } from '@/app/login/actions'
+import { getArticlesUnfiledCount } from '@/lib/dashboard/data'
 import ParableMark from '@/components/brand/ParableMark'
-import NavLinks from '@/components/layout/NavLinks'
+import Sidebar from '@/components/layout/Sidebar'
+import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
 import { PreferencesProvider } from '@/components/preferences/PreferencesProvider'
 
 const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken-grotesk' })
@@ -17,7 +18,7 @@ const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--fon
 
 export const metadata: Metadata = {
   title: 'Parable',
-  description: 'A personal dashboard with RSS feeds and economic indicators',
+  description: 'A personal dashboard for RSS feeds',
 }
 
 export default async function RootLayout({
@@ -26,47 +27,53 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const user = await getUser()
-  const prefs = await getUserPreferences()
+  // Independent of each other (both only need `user`, already resolved
+  // above and memoized by React's cache() for the rest of this request) —
+  // running them sequentially was paying for two round trips end-to-end
+  // on every single navigation, since this layout re-executes on every
+  // request (getUser() reads cookies(), which opts the whole tree out of
+  // Next.js's route-segment caching).
+  const [prefs, articlesUnfiledCount] = await Promise.all([
+    getUserPreferences(),
+    user ? getArticlesUnfiledCount() : Promise.resolve(0),
+  ])
 
   return (
     <html
       lang="en"
-      data-theme={prefs.theme === 'system' ? undefined : prefs.theme}
       data-font={prefs.font === 'inter' ? undefined : prefs.font}
       className={`${hankenGrotesk.variable} ${inter.variable} ${workSans.variable} ${instrumentSans.variable} ${lato.variable}`}
     >
       <body>
         <PreferencesProvider preferences={prefs}>
-          <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-sm">
-            {user ? (
-              <>
-                <div className="flex items-center gap-6">
-                  <Link href="/" aria-label="Parable">
-                    <ParableMark size={22} />
-                  </Link>
-                  <NavLinks />
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-muted">{user.email}</span>
-                  <form action={signOut}>
-                    <button type="submit" className="underline hover:text-muted transition-colors">
-                      Sign out
-                    </button>
-                  </form>
-                </div>
-              </>
-            ) : (
-              <>
+          {user ? (
+            <div className="flex min-h-screen">
+              <Sidebar
+                initialCollapsed={prefs.sidebarCollapsed}
+                userEmail={user.email ?? ''}
+                articlesUnfiledCount={articlesUnfiledCount}
+              />
+              <div className="flex-1 min-w-0 flex flex-col">
+                <MobileSidebarDrawer
+                  userEmail={user.email ?? ''}
+                  articlesUnfiledCount={articlesUnfiledCount}
+                />
+                <main className="flex-1 min-w-0">{children}</main>
+              </div>
+            </div>
+          ) : (
+            <>
+              <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-base">
                 <Link href="/" aria-label="Parable">
                   <ParableMark size={22} />
                 </Link>
                 <Link href="/login" className="underline hover:text-muted transition-colors">
                   Sign in
                 </Link>
-              </>
-            )}
-          </header>
-          {children}
+              </header>
+              {children}
+            </>
+          )}
         </PreferencesProvider>
       </body>
     </html>

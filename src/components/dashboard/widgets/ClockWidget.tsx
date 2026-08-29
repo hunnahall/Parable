@@ -118,7 +118,7 @@ export default function ClockWidget() {
         />
         <circle cx={CENTER} cy={CENTER} r={1.8} fill="currentColor" />
       </svg>
-      <span className="text-xs font-data tabular-nums text-muted shrink-0 mt-1">
+      <span className="text-base font-data tabular-nums text-muted shrink-0 mt-1">
         {formatTime(now, { timezone, clockFormat })}
       </span>
     </div>

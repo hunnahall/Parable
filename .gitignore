@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# browser automation scratch output
+/.playwright-mcp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

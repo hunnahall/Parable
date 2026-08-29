@@ -7,7 +7,7 @@ import 'react-grid-layout/css/styles.css'
 import { saveDashboardLayout, addWidget, removeWidget } from '@/lib/dashboard/actions'
 import type { WidgetInstance, WidgetType } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
-import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
+import type { FeedOption } from '@/lib/dashboard/data'
 import WidgetCard from './WidgetCard'
 import AddWidgetMenu from './AddWidgetMenu'
 
@@ -17,13 +17,11 @@ export default function DashboardGrid({
   initialWidgets,
   widgetData,
   feedOptions,
-  indicatorOptions,
   categoryOptions,
 }: {
   initialWidgets: WidgetInstance[]
   widgetData: DashboardWidgetData
   feedOptions: FeedOption[]
-  indicatorOptions: IndicatorOption[]
   categoryOptions: string[]
 }) {
   const [widgets, setWidgets] = useState(initialWidgets)
@@ -109,17 +107,22 @@ export default function DashboardGrid({
 
   return (
     <div>
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+      {error && <p className="text-lg text-danger mb-4">{error}</p>}
       <div className="flex justify-end mb-4">
         <AddWidgetMenu
           feedOptions={feedOptions}
-          indicatorOptions={indicatorOptions}
           categoryOptions={categoryOptions}
           onAdd={handleAdd}
         />
       </div>
       {widgets.length === 0 ? (
-        <p className="text-sm text-muted">No widgets yet — add one to get started.</p>
+        <div className="relative py-24 text-center">
+          <div className="empty-state-watermark" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/parable-mark.svg" alt="" className="w-56 h-56" />
+          </div>
+          <p className="relative text-lg text-muted">No widgets yet — add one to get started.</p>
+        </div>
       ) : (
         <GridLayout
           layout={layout}
@@ -130,9 +133,14 @@ export default function DashboardGrid({
           onDragStop={handleLayoutSettled}
           onResizeStop={handleLayoutSettled}
         >
-          {widgets.map((widget) => (
+          {widgets.map((widget, i) => (
             <div key={widget.id}>
-              <WidgetCard widget={widget} data={widgetData} onRemove={handleRemove} />
+              <WidgetCard
+                widget={widget}
+                data={widgetData}
+                onRemove={handleRemove}
+                revealDelayMs={Math.min(i, 10) * 40}
+              />
             </div>
           ))}
         </GridLayout>
