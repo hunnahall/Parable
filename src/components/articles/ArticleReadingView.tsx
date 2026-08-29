@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import type { ArticleItem } from '@/lib/dashboard/data'
 import {
   saveArticle,
@@ -16,7 +16,12 @@ import { getArticleContent } from '@/lib/articles/contentCache'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
 import ExportDialog from './ExportDialog'
+import ArticleSummaryDialog from './ArticleSummaryDialog'
 import type { FolderOption } from './ArticleCard'
+
+// A sentinel folder-select value distinct from both "" (no folder) and any
+// real folder id, so picking it can be told apart from an actual selection.
+const NEW_FOLDER_OPTION = '__new_folder__'
 
 function formatDate(dateString: string | null): string | null {
   if (!dateString) return null
@@ -47,6 +52,7 @@ export default function ArticleReadingView({
   const [addingFolder, setAddingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
+  const [summaryOpen, setSummaryOpen] = useState(false)
 
   // The slow part (live scrape + translate, up to ~35s worst case) is
   // fetched here, client-side, right after mount — decoupled from the
@@ -104,16 +110,6 @@ export default function ArticleReadingView({
   useEffect(() => {
     markArticleRead(article.id)
   }, [article.id])
-
-  async function handleSave() {
-    setPending(true)
-    setError(null)
-    setItem((prev) => ({ ...prev, state: 'saved', archivedAt: null }))
-    const result = await saveArticle(item.id)
-    setPending(false)
-    if (result.error) return setError(result.error)
-    router.refresh()
-  }
 
   async function handleArchive() {
     setPending(true)
@@ -201,7 +197,7 @@ export default function ArticleReadingView({
       )}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {item.state === 'saved' ? (
+        {item.state === 'saved' && (
           <button
             type="button"
             disabled={pending}
@@ -209,15 +205,6 @@ export default function ArticleReadingView({
             className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
           >
             Unsave
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleSave}
-            className="text-base text-muted hover:text-accent transition-colors disabled:opacity-50"
-          >
-            Save
           </button>
         )}
         {item.state === 'archived' ? (
@@ -248,21 +235,13 @@ export default function ArticleReadingView({
         >
           Export
         </button>
-      </div>
-
-      <div className="flex items-center gap-1 mb-2">
-        <select
-          value={item.folderId ?? ''}
-          onChange={(e) => handleFolderChange(e.target.value || null)}
-          className="border border-border px-2 py-1 text-base bg-background"
+        <button
+          type="button"
+          onClick={() => setSummaryOpen(true)}
+          className="text-base text-muted hover:text-accent transition-colors"
         >
-          <option value="">No folder</option>
-          {localFolders.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+          Summarize this
+        </button>
         {addingFolder ? (
           <input
             type="text"
@@ -281,15 +260,25 @@ export default function ArticleReadingView({
             className="w-28 border border-border px-2 py-1 text-base bg-background"
           />
         ) : (
-          <button
-            type="button"
-            onClick={() => setAddingFolder(true)}
-            aria-label="Add folder"
-            title="Add folder"
-            className="text-muted hover:text-accent transition-colors"
+          <select
+            value={item.folderId ?? ''}
+            onChange={(e) => {
+              if (e.target.value === NEW_FOLDER_OPTION) {
+                setAddingFolder(true)
+                return
+              }
+              handleFolderChange(e.target.value || null)
+            }}
+            className="border border-border px-2 py-1 text-base bg-background"
           >
-            <Plus size={14} strokeWidth={1.75} />
-          </button>
+            <option value="">No folder</option>
+            {localFolders.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+            <option value={NEW_FOLDER_OPTION}>+ New folder</option>
+          </select>
         )}
       </div>
 
@@ -324,7 +313,7 @@ export default function ArticleReadingView({
 
       {content.status !== 'loading' && content.contentHtml && (
         <div
-          className="prose-reading text-[21px] leading-relaxed [&>p]:mb-4 [&>h1]:font-heading [&>h1]:font-bold [&>h1]:text-3xl [&>h1]:mb-3 [&>h1]:mt-6 [&>h2]:font-heading [&>h2]:font-bold [&>h2]:text-2xl [&>h2]:mb-3 [&>h2]:mt-6 [&>blockquote]:border-l-2 [&>blockquote]:border-border [&>blockquote]:pl-4 [&>blockquote]:text-muted [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&_a]:text-accent [&_a]:hover:underline [&_img]:max-w-full"
+          className="prose-reading text-[20px] leading-relaxed [&>p]:mb-4 [&>h1]:font-heading [&>h1]:font-bold [&>h1]:text-3xl [&>h1]:mb-3 [&>h1]:mt-6 [&>h2]:font-heading [&>h2]:font-bold [&>h2]:text-2xl [&>h2]:mb-3 [&>h2]:mt-6 [&>blockquote]:border-l-2 [&>blockquote]:border-border [&>blockquote]:pl-4 [&>blockquote]:text-muted [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&_a]:text-accent [&_a]:hover:underline [&_img]:max-w-full"
           dangerouslySetInnerHTML={{ __html: content.contentHtml }}
         />
       )}
@@ -346,6 +335,10 @@ export default function ArticleReadingView({
           contentHtml={content.contentHtml}
           onClose={() => setExportOpen(false)}
         />
+      )}
+
+      {summaryOpen && (
+        <ArticleSummaryDialog articleId={item.id} onClose={() => setSummaryOpen(false)} />
       )}
     </div>
   )
