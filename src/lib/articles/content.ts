@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
-import { fetchAndExtractContent } from './extract'
+import { fetchAndExtractContent, fetchHeaderImage } from './extract'
 
 export interface ArticleContent {
   contentHtml: string | null
@@ -145,6 +145,28 @@ export async function prewarmArticleContent(
     await fetchAndPersistArticleContent(feedItemId, link, 1, supabase)
   } catch (err) {
     console.error(`articles/prewarmArticleContent: feed_item ${feedItemId}`, err)
+  }
+}
+
+// The image-only counterpart to prewarmArticleContent above — called from
+// runIngest for a translate-enabled feed's brand-new items (which skip the
+// full content prewarm to avoid pre-caching content translate-on-open
+// would otherwise redo) so they still get a real cover image instead of
+// sitting on the favicon fallback until someone happens to open them.
+// Never throws — best-effort, same as prewarmArticleContent.
+export async function prewarmArticleImage(
+  supabase: SupabaseClient,
+  feedItemId: string,
+  link: string
+): Promise<void> {
+  try {
+    const imageUrl = await fetchHeaderImage(link)
+    if (!imageUrl) return
+
+    const { error } = await supabase.from('feed_items').update({ image_url: imageUrl }).eq('id', feedItemId)
+    logQueryError('articles/prewarmArticleImage', error)
+  } catch (err) {
+    console.error(`articles/prewarmArticleImage: feed_item ${feedItemId}`, err)
   }
 }
 

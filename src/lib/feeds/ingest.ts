@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import Parser from 'rss-parser'
 import { stripHtml, translateArticle } from '@/lib/translate'
 import { summarizeArticle } from '@/lib/summarize'
-import { prewarmArticleContent } from '@/lib/articles/content'
+import { prewarmArticleContent, prewarmArticleImage } from '@/lib/articles/content'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
 import { detectArticles } from './buildFeed'
@@ -203,7 +203,12 @@ async function processItem(
   guid: string,
   targetLanguage: string,
   autoDeleteKeywords: string[]
-): Promise<{ inserted: boolean; autoDeleted: boolean; prewarm: PrewarmTarget | null }> {
+): Promise<{
+  inserted: boolean
+  autoDeleted: boolean
+  prewarm: PrewarmTarget | null
+  prewarmImage: PrewarmTarget | null
+}> {
   try {
     const rawTitle = item.title ?? ''
     const rawSummary = item.content ?? item.summary ?? item.contentSnippet ?? ''
@@ -227,7 +232,7 @@ async function processItem(
     // second OpenAI call).
     const titleForMatching = title_en ?? stripHtml(rawTitle)
     if (matchedAutoDeleteKeyword(titleForMatching, autoDeleteKeywords)) {
-      return { inserted: false, autoDeleted: true, prewarm: null }
+      return { inserted: false, autoDeleted: true, prewarm: null, prewarmImage: null }
     }
 
     // Off by default per feed (see FeedRow.summarize_articles) — the
@@ -289,8 +294,16 @@ async function processItem(
       !feed.translate_enabled && insertedId && item.link
         ? { feedItemId: insertedId, link: item.link }
         : null
+    // A translate-enabled feed skips the full prewarm above, but a cover
+    // image has no OpenAI cost either way — fetch just the header image
+    // for these too (unless the RSS item already carried its own image),
+    // rather than leaving every item on the favicon fallback until opened.
+    const prewarmImage: PrewarmTarget | null =
+      feed.translate_enabled && !item.imageUrl && insertedId && item.link
+        ? { feedItemId: insertedId, link: item.link }
+        : null
 
-    return { inserted: true, autoDeleted: false, prewarm }
+    return { inserted: true, autoDeleted: false, prewarm, prewarmImage }
   } catch (itemErr) {
     // A single malformed item (missing/garbage fields) or a one-off insert
     // failure shouldn't sink the rest of an otherwise-healthy feed.
@@ -298,12 +311,18 @@ async function processItem(
       `ingest-feeds: skipping item guid=${guid} in feed ${feed.id} (${feed.url})`,
       itemErr
     )
-    return { inserted: false, autoDeleted: false, prewarm: null }
+    return { inserted: false, autoDeleted: false, prewarm: null, prewarmImage: null }
   }
 }
 
 type FeedResult =
-  | { ok: true; itemsInserted: number; itemsAutoDeleted: number; prewarmTargets: PrewarmTarget[] }
+  | {
+      ok: true
+      itemsInserted: number
+      itemsAutoDeleted: number
+      prewarmTargets: PrewarmTarget[]
+      prewarmImageTargets: PrewarmTarget[]
+    }
   | { ok: false; failure: FeedFailure }
 
 // Fetches+parses the feed's raw item list, before dedup/cutoff filtering.
@@ -411,6 +430,7 @@ async function processFeed(
     const itemsInserted = results.filter((r) => r.inserted).length
     const itemsAutoDeleted = results.filter((r) => r.autoDeleted).length
     const prewarmTargets = results.flatMap((r) => (r.prewarm ? [r.prewarm] : []))
+    const prewarmImageTargets = results.flatMap((r) => (r.prewarmImage ? [r.prewarmImage] : []))
 
     const { error: updateError } = await supabase
       .from('feeds')
@@ -421,7 +441,7 @@ async function processFeed(
       throw new Error(`Failed to update last_fetched_at: ${updateError.message}`)
     }
 
-    return { ok: true, itemsInserted, itemsAutoDeleted, prewarmTargets }
+    return { ok: true, itemsInserted, itemsAutoDeleted, prewarmTargets, prewarmImageTargets }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
@@ -480,6 +500,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
   let itemsAutoDeleted = 0
   const feedsFailed: FeedFailure[] = []
   const prewarmTargets: PrewarmTarget[] = []
+  const prewarmImageTargets: PrewarmTarget[] = []
 
   for (const result of results) {
     if (result.ok) {
@@ -487,6 +508,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
       itemsInserted += result.itemsInserted
       itemsAutoDeleted += result.itemsAutoDeleted
       prewarmTargets.push(...result.prewarmTargets)
+      prewarmImageTargets.push(...result.prewarmImageTargets)
     } else {
       feedsFailed.push(result.failure)
     }
@@ -502,6 +524,19 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
     after(() =>
       mapWithConcurrency(prewarmTargets, PREWARM_CONCURRENCY, (target) =>
         prewarmArticleContent(supabase, target.feedItemId, target.link)
+      )
+    )
+  }
+
+  // Same deferred-after-response treatment as the full-content prewarm
+  // above, kept as a separate pass since it targets a different (usually
+  // larger) set of items — every translate-enabled feed's new items, not
+  // just translate-disabled ones — and is cheap enough on its own not to
+  // need folding into that pass's concurrency budget.
+  if (prewarmImageTargets.length > 0) {
+    after(() =>
+      mapWithConcurrency(prewarmImageTargets, PREWARM_CONCURRENCY, (target) =>
+        prewarmArticleImage(supabase, target.feedItemId, target.link)
       )
     )
   }

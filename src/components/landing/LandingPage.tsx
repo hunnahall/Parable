@@ -1,12 +1,10 @@
 import Link from 'next/link'
-import { Rss, Clock, LayoutGrid, Bookmark } from 'lucide-react'
+import { Rss, Bookmark } from 'lucide-react'
 import ParableLogo from '@/components/brand/ParableLogo'
 import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
 
 const FEATURES = [
   { icon: Rss, label: 'Read RSS feeds' },
-  { icon: Clock, label: 'Calendar & clock' },
-  { icon: LayoutGrid, label: 'Arrange your dashboard' },
   { icon: Bookmark, label: 'Save what matters' },
 ]
 
@@ -25,7 +23,7 @@ export default function LandingPage() {
         >
           Sign in to get started
         </Link>
-        <ul className="inline-grid grid-cols-2 gap-x-8 gap-y-4">
+        <ul className="inline-flex items-center gap-8">
           {FEATURES.map(({ icon: Icon, label }) => (
             <li key={label} className="flex items-center gap-2 text-base font-bold uppercase tracking-[0.14em] font-label text-muted">
               <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
