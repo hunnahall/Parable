@@ -20,6 +20,10 @@ export interface ArticleItem {
   // Card view (ArticleCardGrid) falls back to a favicon derived from
   // `link`'s origin when this is null.
   imageUrl: string | null
+  // True only when `summary` above is the AI-generated summary (not the
+  // feed's raw or translated text) — drives the "AI Summary" badge, so
+  // users can tell the three summary sources apart at a glance.
+  isAiSummary: boolean
 }
 
 export interface FeedOption {
@@ -36,17 +40,24 @@ function bestTitle(item: { title: string; title_en: string | null }): string {
   return item.title_en ?? item.title
 }
 
-function bestSummary(item: {
-  summary: string
-  summary_en: string | null
-  summary_ai: string | null
-}): string | null {
+// `summarizeArticles` is the feed's CURRENT toggle state, not just
+// whatever happens to be stored in summary_ai — a feed can have its
+// toggle off today but still carry summary_ai values written while it
+// was on (see retention.ts: summary_ai is deliberately never cleared by
+// background jobs). Gating here means the toggle takes effect
+// immediately for every already-ingested article, not just future ones.
+function bestSummary(
+  item: { summary: string; summary_en: string | null; summary_ai: string | null },
+  summarizeArticles: boolean
+): string | null {
+  if (!summarizeArticles) return item.summary_en ?? item.summary
   return item.summary_ai ?? item.summary_en ?? item.summary
 }
 
 interface FeedMeta {
   title: string | null
   category: string | null
+  summarizeArticles: boolean
 }
 
 async function attachFeedMeta<T extends { feed_id: string }>(
@@ -58,12 +69,15 @@ async function attachFeedMeta<T extends { feed_id: string }>(
 
   const { data: feeds, error } = await supabase
     .from('feeds')
-    .select('id, title, category')
+    .select('id, title, category, summarize_articles')
     .in('id', feedIds)
   logQueryError('dashboard/attachFeedMeta', error)
 
   return new Map(
-    (feeds ?? []).map((feed) => [feed.id, { title: feed.title, category: feed.category }])
+    (feeds ?? []).map((feed) => [
+      feed.id,
+      { title: feed.title, category: feed.category, summarizeArticles: feed.summarize_articles },
+    ])
   )
 }
 
@@ -174,11 +188,15 @@ function toArticleItem(
 ): ArticleItem {
   const info = states.get(item.id)
   const meta = feedMeta.get(item.feed_id)
+  const summarizeArticles = meta?.summarizeArticles ?? false
   return {
     id: item.id,
     title: bestTitle(item),
     link: item.link,
-    summary: bestSummary(item),
+    summary: bestSummary(item, summarizeArticles),
+    // True only when the summary actually shown is the AI-generated one
+    // (not the raw/translated feed text) — drives the "AI Summary" badge.
+    isAiSummary: summarizeArticles && item.summary_ai !== null,
     published_at: item.published_at,
     feed_title: meta?.title ?? null,
     category: meta?.category ?? null,

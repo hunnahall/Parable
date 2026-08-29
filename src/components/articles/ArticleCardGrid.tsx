@@ -70,7 +70,19 @@ export default function ArticleCardGrid({
         >
           {item.title}
         </Link>
-        {item.summary && <p className="text-sm text-muted mt-0.5">{item.summary}</p>}
+        {item.summary && (
+          <p className="text-sm text-muted mt-0.5">
+            {item.isAiSummary && (
+              <span
+                title="AI-generated summary"
+                className="inline-block align-middle mr-1.5 text-[10px] font-medium uppercase tracking-wider border border-border-subtle text-muted px-1 py-0.5"
+              >
+                AI
+              </span>
+            )}
+            {item.summary}
+          </p>
+        )}
         <div className="mt-auto pt-2">
           <ArticleCardActionsRow
             item={item}

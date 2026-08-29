@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { logQueryError } from '@/lib/supabase/logError'
 import { runIngest, type IngestSummary } from './ingest'
 import { generateFeedsOpml } from './opmlExport'
 import { detectArticles, type BuildFeedPreview } from './buildFeed'
@@ -173,6 +174,22 @@ export async function setFeedSummarizeArticles(
     .eq('id', id)
 
   if (error) return { error: error.message }
+
+  // Toggling off: clear stale AI summaries so the DB itself reflects "no
+  // AI summary" rather than relying purely on the read-time gate in
+  // bestSummary() (src/lib/dashboard/data.ts) to hide a value that's
+  // still sitting there. Narrow, deliberate exception to retention.ts's
+  // "summary_ai is kept forever" policy — scoped to exactly this field,
+  // triggered by exactly the user action that should invalidate it.
+  // Best-effort: a failure here doesn't fail the toggle itself, since the
+  // read-time gate already makes the bug invisible regardless.
+  if (!enabled) {
+    const { error: clearError } = await supabase
+      .from('feed_items')
+      .update({ summary_ai: null })
+      .eq('feed_id', id)
+    logQueryError('feeds/setFeedSummarizeArticles (clear summary_ai)', clearError)
+  }
 
   revalidatePath('/feeds')
   return { error: null }
