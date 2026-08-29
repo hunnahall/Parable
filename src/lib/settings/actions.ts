@@ -13,9 +13,9 @@ const DELETE_BATCH_SIZE = 200
 
 // Wipes every feed, article, and piece of per-article curation (saved,
 // archived, tags, notes, read state, folder placement) plus every other
-// per-user setting (preferences, dashboard/indicator widget layout, key
-// dates, tasks) — everything except the auth account itself, so the app
-// comes back looking like a brand new signup.
+// per-user setting (preferences, dashboard widget layout, key dates,
+// tasks) — everything except the auth account itself, so the app comes
+// back looking like a brand new signup.
 //
 // feeds/folders/categories have no per-user ownership column (a known
 // schema gap — see removeFeed in src/lib/feeds/actions.ts, which already

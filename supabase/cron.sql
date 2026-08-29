@@ -37,24 +37,6 @@ select cron.schedule(
   $$
 );
 
--- FRED series are daily at their most frequent (many are monthly or
--- quarterly), so once a day comfortably catches new readings without
--- hammering the FRED API for no reason.
-select cron.schedule(
-  'fetch-indicators',
-  '0 6 * * *',
-  $$
-  select net.http_post(
-    url := '<YOUR_DEPLOYED_URL>/api/cron/fetch-indicators',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret',
-      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
-    )
-  );
-  $$
-);
-
 -- Sweeps every unread article (no article_states row yet) older than 48h
 -- into 'archived' for every user — see auto_archive_stale_articles() in the
 -- database and src/lib/feeds/retention.ts. Hourly keeps the lag between

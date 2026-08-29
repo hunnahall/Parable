@@ -7,7 +7,7 @@ import 'react-grid-layout/css/styles.css'
 import { saveDashboardLayout, addWidget, removeWidget } from '@/lib/dashboard/actions'
 import type { WidgetInstance, WidgetType } from '@/lib/dashboard/widgets'
 import type { DashboardWidgetData } from '@/lib/dashboard/types'
-import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
+import type { FeedOption } from '@/lib/dashboard/data'
 import WidgetCard from './WidgetCard'
 import AddWidgetMenu from './AddWidgetMenu'
 
@@ -17,13 +17,11 @@ export default function DashboardGrid({
   initialWidgets,
   widgetData,
   feedOptions,
-  indicatorOptions,
   categoryOptions,
 }: {
   initialWidgets: WidgetInstance[]
   widgetData: DashboardWidgetData
   feedOptions: FeedOption[]
-  indicatorOptions: IndicatorOption[]
   categoryOptions: string[]
 }) {
   const [widgets, setWidgets] = useState(initialWidgets)
@@ -113,7 +111,6 @@ export default function DashboardGrid({
       <div className="flex justify-end mb-4">
         <AddWidgetMenu
           feedOptions={feedOptions}
-          indicatorOptions={indicatorOptions}
           categoryOptions={categoryOptions}
           onAdd={handleAdd}
         />

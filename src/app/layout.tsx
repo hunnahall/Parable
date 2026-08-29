@@ -18,7 +18,7 @@ const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--fon
 
 export const metadata: Metadata = {
   title: 'Parable',
-  description: 'A personal dashboard with RSS feeds and economic indicators',
+  description: 'A personal dashboard for RSS feeds',
 }
 
 export default async function RootLayout({

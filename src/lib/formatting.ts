@@ -1,10 +1,9 @@
 // Shared date/time formatting, aware of the user's timezone/clock-format
 // preferences (src/lib/preferences/data.ts) — replaces the several
 // near-identical inline `formatDate` helpers that used to live in
-// ArticleList.tsx, FeedManager.tsx, IndicatorManager.tsx, etc. An empty
-// `timezone` means "auto" — omitting the `timeZone` option is already
-// exactly today's (and the browser's default) behavior, so no branch is
-// needed for that case.
+// ArticleList.tsx, FeedManager.tsx, etc. An empty `timezone` means "auto"
+// — omitting the `timeZone` option is already exactly today's (and the
+// browser's default) behavior, so no branch is needed for that case.
 
 export interface FormattingPrefs {
   timezone: string

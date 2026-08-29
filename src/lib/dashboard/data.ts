@@ -1,6 +1,5 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
-import { isNotableMove, outlierFlags } from '@/lib/indicators/notable'
 import type { ArticleCuration } from '@/lib/articles/actions'
 
 export interface ArticleItem {
@@ -23,32 +22,7 @@ export interface FeedOption {
   title: string | null
 }
 
-export interface IndicatorOption {
-  id: string
-  display_name: string | null
-}
-
-export interface IndicatorData {
-  id: string
-  display_name: string | null
-  series_code: string
-  latest_value: number | null
-  previous_value: number | null
-  readings: { date: string; value: number; notable: boolean }[]
-  notable: boolean
-}
-
-export interface WatchlistEntry {
-  id: string
-  display_name: string | null
-  series_code: string
-  latest_value: number | null
-  previous_value: number | null
-  notable: boolean
-}
-
 const HEADLINES_LIMIT = 20
-const READINGS_LIMIT = 30
 
 // title_en/summary_ai etc. are only populated once translation/summarization
 // succeed for a given item (see src/lib/translate.ts, src/lib/summarize.ts) —
@@ -537,108 +511,9 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   return { items, nextCursor }
 }
 
-export async function getIndicatorsData(
-  indicatorId: string
-): Promise<IndicatorData | null> {
-  const supabase = await createClient()
-
-  const { data: indicator, error: indicatorError } = await supabase
-    .from('indicators')
-    .select('id, display_name, series_code')
-    .eq('id', indicatorId)
-    .single()
-  if (indicatorError && indicatorError.code !== 'PGRST116') {
-    logQueryError('dashboard/getIndicatorsData (indicator lookup)', indicatorError)
-  }
-
-  if (!indicator) return null
-
-  const { data: readings, error: readingsError } = await supabase
-    .from('indicator_readings')
-    .select('reading_date, value')
-    .eq('indicator_id', indicatorId)
-    .order('reading_date', { ascending: false })
-    .limit(READINGS_LIMIT)
-  logQueryError('dashboard/getIndicatorsData (readings)', readingsError)
-
-  // Fetched newest-first (for a cheap "limit to most recent N" query) but
-  // charted/reported oldest-first.
-  const ordered = (readings ?? []).slice().reverse()
-  const flags = outlierFlags(ordered.map((r) => r.value))
-
-  return {
-    id: indicator.id,
-    display_name: indicator.display_name,
-    series_code: indicator.series_code,
-    latest_value: ordered.at(-1)?.value ?? null,
-    previous_value: ordered.at(-2)?.value ?? null,
-    readings: ordered.map((r, i) => ({ date: r.reading_date, value: r.value, notable: flags[i] })),
-    notable: flags.at(-1) ?? false,
-  }
-}
-
-// Not shown in the UI (the watchlist only renders latest/previous/notable)
-// but isNotableMove wants a reasonable sample to compute a meaningful
-// z-score from, so this matches READINGS_LIMIT rather than the bare
-// minimum the flag needs.
-const WATCHLIST_READINGS_LIMIT = READINGS_LIMIT
-
-// One dense row per tracked indicator instead of one full widget each —
-// a "vitals check" glance across everything at once, flagging any reading
-// that's a real outlier via the same isNotableMove signal getIndicatorsData
-// uses for the single-indicator widget.
-export async function getWatchlistData(): Promise<WatchlistEntry[]> {
-  const supabase = await createClient()
-
-  const { data: indicators, error: indicatorsError } = await supabase
-    .from('indicators')
-    .select('id, display_name, series_code')
-    .order('display_name')
-  logQueryError('dashboard/getWatchlistData (indicators)', indicatorsError)
-  if (!indicators || indicators.length === 0) return []
-
-  // One bounded query per indicator (mirroring getIndicatorsData) rather
-  // than one unbounded query across all indicators capped in JS afterward
-  // — the latter pulled every reading for every indicator over the network
-  // (tens of thousands of rows at this app's actual data volume) on every
-  // single dashboard refresh, since this runs whenever *any* widget on the
-  // page mutates, not just the watchlist itself.
-  return Promise.all(
-    indicators.map(async (indicator) => {
-      const { data: readings, error: readingsError } = await supabase
-        .from('indicator_readings')
-        .select('value')
-        .eq('indicator_id', indicator.id)
-        .order('reading_date', { ascending: false })
-        .limit(WATCHLIST_READINGS_LIMIT)
-      logQueryError('dashboard/getWatchlistData (readings)', readingsError)
-
-      const ordered = (readings ?? []).map((r) => r.value).reverse()
-      return {
-        id: indicator.id,
-        display_name: indicator.display_name,
-        series_code: indicator.series_code,
-        latest_value: ordered.at(-1) ?? null,
-        previous_value: ordered.at(-2) ?? null,
-        notable: isNotableMove(ordered),
-      }
-    })
-  )
-}
-
 export async function listFeeds(): Promise<FeedOption[]> {
   const supabase = await createClient()
   const { data, error } = await supabase.from('feeds').select('id, title').order('title')
   logQueryError('dashboard/listFeeds', error)
-  return data ?? []
-}
-
-export async function listIndicators(): Promise<IndicatorOption[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('indicators')
-    .select('id, display_name')
-    .order('display_name')
-  logQueryError('dashboard/listIndicators', error)
   return data ?? []
 }

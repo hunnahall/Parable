@@ -4,8 +4,6 @@ import {
   Bookmark,
   Archive,
   Rss,
-  LineChart,
-  SlidersHorizontal,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -22,17 +20,11 @@ export const SIDEBAR_NAV: SidebarNavEntry[] = [
   { type: 'link', href: '/archive', label: 'Archive', icon: Archive },
   { type: 'link', href: '/feeds', label: 'Manage Feeds', icon: Rss },
   { type: 'divider' },
-  { type: 'link', href: '/indicators', label: 'Indicators', icon: LineChart },
-  { type: 'link', href: '/indicators/manage', label: 'Manage Indicators', icon: SlidersHorizontal },
-  { type: 'divider' },
   { type: 'link', href: '/settings', label: 'Settings', icon: Settings },
 ]
 
-// Exact match for "/" (every route starts with it); prefix match otherwise
-// — but /indicators must NOT prefix-match /indicators/manage (they're
-// different nav items), so it gets its own exact check too.
+// Exact match for "/" (every route starts with it); prefix match otherwise.
 export function isNavEntryActive(href: string, pathname: string): boolean {
   if (href === '/') return pathname === '/'
-  if (href === '/indicators') return pathname === '/indicators'
   return pathname === href || pathname.startsWith(`${href}/`)
 }

@@ -3,29 +3,25 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { WIDGET_LABELS, WIDGET_DEFAULT_SIZE, type WidgetType } from '@/lib/dashboard/widgets'
-import type { FeedOption, IndicatorOption } from '@/lib/dashboard/data'
+import type { FeedOption } from '@/lib/dashboard/data'
 
 const WIDGET_TYPES: WidgetType[] = [
   'headlines',
   'feed',
-  'indicators',
   'saved',
   'feed-category',
   'clock',
   'calendar',
   'todo',
-  'watchlist',
   'key-dates',
 ]
 
 export default function AddWidgetMenu({
   feedOptions,
-  indicatorOptions,
   categoryOptions,
   onAdd,
 }: {
   feedOptions: FeedOption[]
-  indicatorOptions: IndicatorOption[]
   categoryOptions: string[]
   onAdd: (
     widgetType: WidgetType,
@@ -36,16 +32,13 @@ export default function AddWidgetMenu({
   const [open, setOpen] = useState(false)
   const [widgetType, setWidgetType] = useState<WidgetType>('headlines')
   const [feedId, setFeedId] = useState(feedOptions[0]?.id ?? '')
-  const [indicatorId, setIndicatorId] = useState(indicatorOptions[0]?.id ?? '')
   const [category, setCategory] = useState(categoryOptions[0] ?? '')
   const [submitting, setSubmitting] = useState(false)
 
   const needsFeed = widgetType === 'feed'
-  const needsIndicator = widgetType === 'indicators'
   const needsCategory = widgetType === 'feed-category'
   const canSubmit =
     (!needsFeed || feedId) &&
-    (!needsIndicator || indicatorId) &&
     (!needsCategory || category) &&
     !submitting
 
@@ -54,7 +47,6 @@ export default function AddWidgetMenu({
     setSubmitting(true)
     const config: Record<string, string> = {}
     if (needsFeed) config.feed_id = feedId
-    if (needsIndicator) config.indicator_id = indicatorId
     if (needsCategory) config.category = category
     await onAdd(widgetType, config, WIDGET_DEFAULT_SIZE[widgetType])
     setSubmitting(false)
@@ -103,26 +95,6 @@ export default function AddWidgetMenu({
           </select>
         ) : (
           <span className="text-muted">No feeds yet — add one to the feeds table first.</span>
-        )
-      )}
-
-      {needsIndicator && (
-        indicatorOptions.length > 0 ? (
-          <select
-            value={indicatorId}
-            onChange={(e) => setIndicatorId(e.target.value)}
-            className="border border-border px-2 py-1 bg-background"
-          >
-            {indicatorOptions.map((indicator) => (
-              <option key={indicator.id} value={indicator.id}>
-                {indicator.display_name ?? indicator.id}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-muted">
-            No indicators yet — add one to the indicators table first.
-          </span>
         )
       )}
 

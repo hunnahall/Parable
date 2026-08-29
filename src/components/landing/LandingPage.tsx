@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { Rss, LineChart, LayoutGrid, Bookmark } from 'lucide-react'
+import { Rss, Clock, LayoutGrid, Bookmark } from 'lucide-react'
 import ParableLogo from '@/components/brand/ParableLogo'
 import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
 
 const FEATURES = [
   { icon: Rss, label: 'Read RSS feeds' },
-  { icon: LineChart, label: 'Track economic indicators' },
+  { icon: Clock, label: 'Calendar, tasks & clock' },
   { icon: LayoutGrid, label: 'Arrange your dashboard' },
   { icon: Bookmark, label: 'Save what matters' },
 ]
@@ -17,7 +17,7 @@ export default function LandingPage() {
         <h1 className="sr-only">Parable</h1>
         <ParableLogo height={144} />
         <p className="text-xl text-muted mt-6 mb-10">
-          A simple dashboard for feeds and indicators.
+          A simple dashboard for your feeds.
         </p>
         <Link
           href="/login"

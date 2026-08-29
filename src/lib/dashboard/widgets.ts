@@ -1,13 +1,11 @@
 export type WidgetType =
   | 'headlines'
-  | 'indicators'
   | 'feed'
   | 'saved'
   | 'feed-category'
   | 'clock'
   | 'calendar'
   | 'todo'
-  | 'watchlist'
   | 'key-dates'
 
 export interface WidgetInstance {
@@ -23,13 +21,11 @@ export interface WidgetInstance {
 export const WIDGET_LABELS: Record<WidgetType, string> = {
   headlines: 'Latest headlines',
   feed: 'Single feed',
-  indicators: 'Economic indicator',
   saved: 'Saved articles',
   'feed-category': 'Feeds by category',
   clock: 'Clock',
   calendar: 'Calendar',
   todo: 'To-do list',
-  watchlist: 'Indicator watchlist',
   'key-dates': 'Key dates',
 }
 
@@ -39,7 +35,6 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
 export const WIDGET_DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
   clock: { w: 3, h: 3 },
   calendar: { w: 4, h: 5 },
-  watchlist: { w: 6, h: 5 },
   'key-dates': { w: 4, h: 5 },
 }
 
