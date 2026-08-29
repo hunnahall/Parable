@@ -1,15 +1,8 @@
 import { redirect, notFound } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getArticleById } from '@/lib/dashboard/data'
-import { getOrFetchArticleContent, saveTranslatedContent } from '@/lib/articles/content'
-import { translateFullContent } from '@/lib/translate'
 import { listFolderOptions } from '@/lib/folders/data'
-import { getUserPreferences } from '@/lib/preferences/data'
 import ArticleReadingView from '@/components/articles/ArticleReadingView'
-
-// jsdom (used by the content extractor) needs real Node APIs, not the edge
-// runtime.
-export const runtime = 'nodejs'
 
 export default async function ArticleReadingPage({
   params,
@@ -20,46 +13,21 @@ export default async function ArticleReadingPage({
   if (!user) redirect('/login')
 
   const { id } = await params
-  // Independent of article/content below — kicked off now instead of
-  // after that chain resolves, so it overlaps instead of adding its own
-  // sequential round trip.
-  const foldersPromise = listFolderOptions()
-  const prefsPromise = getUserPreferences()
-
-  const article = await getArticleById(id)
+  // Independent of each other — fetched together instead of paying for
+  // two sequential round trips. Note there's no content fetch here at
+  // all anymore: the scrape+translate chain (up to ~35s worst case) used
+  // to block this whole page from rendering. It's now fetched
+  // client-side by ArticleReadingView right after the shell mounts (see
+  // /api/articles/[id]/content), so the title/metadata/buttons render
+  // immediately and only the article body shows a brief loading state.
+  const [article, folders] = await Promise.all([getArticleById(id), listFolderOptions()])
   if (!article) notFound()
 
-  const content = await getOrFetchArticleContent(id, article.link)
-  const prefs = await prefsPromise
-
-  // Translate-on-open: only for articles not already in the user's target
-  // language, only once (cached in content_en_html thereafter), and only
-  // when extraction actually succeeded — separate from translateArticle's
-  // ingest-time title/summary translation, which this never touches.
-  let contentEnHtml = content.contentEnHtml
-  if (
-    !contentEnHtml &&
-    content.contentText &&
-    article.originalLanguage &&
-    article.originalLanguage !== prefs.language &&
-    article.originalLanguage !== 'und'
-  ) {
-    const translated = await translateFullContent(content.contentText, prefs.language)
-    if (translated) {
-      await saveTranslatedContent(id, translated)
-      contentEnHtml = translated
-    }
-  }
-
-  const folders = await foldersPromise
-
-  return (
-    <ArticleReadingView
-      article={article}
-      contentHtml={contentEnHtml ?? content.contentHtml}
-      extractionError={content.extractionError}
-      isTranslated={!!contentEnHtml}
-      folders={folders}
-    />
-  )
+  // Keyed on id so navigating client-side from one article straight to
+  // another (Next reuses the component instance across a route param
+  // change in the same tree position) fully remounts rather than reusing
+  // state — ArticleReadingView's content-fetch effect relies on a fresh
+  // mount to reset for the new article instead of a synchronous setState
+  // inside the effect body.
+  return <ArticleReadingView key={id} article={article} folders={folders} />
 }

@@ -118,7 +118,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
   return (
     <div className="space-y-6">
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Font</h2>
+        <h2 className="text-base font-bold font-heading">Font</h2>
         <select
           value={prefs.font}
           onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
@@ -133,7 +133,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Timezone</h2>
+        <h2 className="text-base font-bold font-heading">Timezone</h2>
         <select
           value={prefs.timezone}
           onChange={(e) => applyChange({ timezone: e.target.value })}
@@ -149,7 +149,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Clock</h2>
+        <h2 className="text-base font-bold font-heading">Clock</h2>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-1.5">
             <input
@@ -173,7 +173,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Language</h2>
+        <h2 className="text-base font-bold font-heading">Language</h2>
         <p className="text-xs text-muted">
           Titles and summaries are translated into this language automatically. Other content is
           translated when opened.
@@ -192,7 +192,7 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       </div>
 
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium font-heading">Auto-delete by keyword</h2>
+        <h2 className="text-base font-bold font-heading">Auto-delete by keyword</h2>
         <p className="text-xs text-muted">
           New articles with these keywords in the title will be automatically discarded.
         </p>

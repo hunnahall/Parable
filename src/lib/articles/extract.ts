@@ -2,16 +2,16 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import sanitizeHtml from 'sanitize-html'
 
-// Shorter than the ingest pipeline's fetch-timeout convention (see
-// FEED_FETCH_TIMEOUT_MS in src/lib/feeds/ingest.ts, still 15s — that one
-// runs in the background, this one blocks a user staring at a reading
-// view) — a slow source shouldn't hang the reading view indefinitely.
-// Most successful extractions complete in low single-digit seconds, so
-// 10s still comfortably covers normal sites without extending the
-// worst-case wait as far as 15s did.
-const FETCH_TIMEOUT_MS = 10_000
+// This no longer blocks the reading view's initial paint (see
+// src/app/api/articles/[id]/content/route.ts — the page renders
+// immediately and this fetch happens client-side, after mount), so it
+// can afford to be generous rather than trading false "aborted" failures
+// for a few saved seconds on an already-off-critical-path request.
+const FETCH_TIMEOUT_MS = 20_000
 
-export type ExtractResult = { html: string; text: string } | { error: string }
+export type ExtractResult =
+  | { html: string; text: string; imageUrl: string | null }
+  | { error: string }
 
 // Readability's output is cleaner than raw publisher HTML but still
 // untrusted third-party markup, so it goes through the same sanitize-html
@@ -27,6 +27,17 @@ const ALLOWED_TAGS = [
   'figure', 'figcaption',
   'strong', 'em', 'b', 'i', 'br', 'hr', 'span',
 ]
+
+// The RSS-provided image (enclosure/media:content/media:thumbnail — see
+// ingest.ts) is often just the feed's own logo/icon repeated on every
+// item, not the article's own header image. og:image/twitter:image are
+// what publishers actually set to represent a specific article, and the
+// page is already being parsed here anyway — nearly free to also read.
+function extractHeaderImage(document: Document): string | null {
+  const og = document.querySelector('meta[property="og:image"]')?.getAttribute('content')
+  const twitter = document.querySelector('meta[name="twitter:image"]')?.getAttribute('content')
+  return og || twitter || null
+}
 
 function sanitizeContent(html: string): string {
   return sanitizeHtml(html, {
@@ -62,6 +73,9 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     const html = await response.text()
 
     const dom = new JSDOM(html, { url })
+    // Read the header image before Readability's .parse() below, which
+    // mutates/strips the document as it extracts the article body.
+    const imageUrl = extractHeaderImage(dom.window.document)
     const article = new Readability(dom.window.document).parse()
     if (!article?.content) {
       return { error: 'Could not extract readable content from this page.' }
@@ -70,6 +84,7 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     return {
       html: sanitizeContent(article.content),
       text: article.textContent?.trim() ?? '',
+      imageUrl,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

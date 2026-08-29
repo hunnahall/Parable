@@ -8,7 +8,7 @@ export interface EngagementRate {
 }
 
 // Rolling 7-day (reads / produced) per feed, recomputed live on every
-// Manage Feeds page load — this app's data volume (dozens of feeds/items)
+// Feeds page load — this app's data volume (dozens of feeds/items)
 // makes a materialized view unnecessary.
 export async function getEngagementRates(): Promise<Map<string, EngagementRate>> {
   const user = await getUser()

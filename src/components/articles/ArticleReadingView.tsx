@@ -24,17 +24,18 @@ function formatDate(dateString: string | null): string | null {
   return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-export default function ArticleReadingView({
-  article,
-  contentHtml,
-  extractionError,
-  isTranslated,
-  folders,
-}: {
-  article: ArticleItem & { originalLanguage: string | null }
+interface ContentState {
+  status: 'loading' | 'ready' | 'error'
   contentHtml: string | null
   extractionError: string | null
   isTranslated: boolean
+}
+
+export default function ArticleReadingView({
+  article,
+  folders,
+}: {
+  article: ArticleItem & { originalLanguage: string | null }
   folders: FolderOption[]
 }) {
   const router = useRouter()
@@ -45,6 +46,54 @@ export default function ArticleReadingView({
   const [addingFolder, setAddingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
+
+  // The slow part (live scrape + translate, up to ~35s worst case) is
+  // fetched here, client-side, right after mount — decoupled from the
+  // page's initial render entirely, so the title/metadata/buttons above
+  // are interactive immediately instead of waiting on this. See
+  // /api/articles/[id]/content.
+  const [content, setContent] = useState<ContentState>({
+    status: 'loading',
+    contentHtml: null,
+    extractionError: null,
+    isTranslated: false,
+  })
+
+  useEffect(() => {
+    // No reset-to-loading here: the initial useState value above already
+    // covers first mount, and ArticleReadingView is remounted (fresh
+    // state) per article via `key={id}` in page.tsx — so this effect
+    // never actually needs to re-run for a *changed* article.id on an
+    // already-mounted instance.
+    let cancelled = false
+    fetch(`/api/articles/${article.id}/content`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (data.error) {
+          setContent({ status: 'error', contentHtml: null, extractionError: data.error, isTranslated: false })
+          return
+        }
+        setContent({
+          status: 'ready',
+          contentHtml: data.contentHtml,
+          extractionError: data.extractionError,
+          isTranslated: data.isTranslated,
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setContent({
+          status: 'error',
+          contentHtml: null,
+          extractionError: 'Failed to load article content.',
+          isTranslated: false,
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [article.id])
 
   // Display-only read tracking — never touches archived_at/the 48h timer.
   useEffect(() => {
@@ -128,7 +177,7 @@ export default function ArticleReadingView({
         {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
         {item.category && <span>{item.category}</span>}
         {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
-        {isTranslated && (
+        {content.isTranslated && (
           <span className="border border-border-subtle px-1.5 py-0.5">Translated</span>
         )}
       </div>
@@ -187,8 +236,10 @@ export default function ArticleReadingView({
         )}
         <button
           type="button"
+          disabled={!content.contentHtml}
           onClick={() => setExportOpen(true)}
-          className="text-sm text-muted hover:text-accent transition-colors"
+          title={content.contentHtml ? undefined : 'Waiting for article content to load'}
+          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
         >
           Export
         </button>
@@ -256,14 +307,26 @@ export default function ArticleReadingView({
 
       <hr className="border-border-subtle mb-6" />
 
-      {contentHtml ? (
+      {content.status === 'loading' && (
+        <div className="space-y-3 animate-pulse" aria-label="Loading article content">
+          <div className="h-4 w-full bg-surface-border" />
+          <div className="h-4 w-full bg-surface-border" />
+          <div className="h-4 w-5/6 bg-surface-border" />
+          <div className="h-4 w-full bg-surface-border" />
+          <div className="h-4 w-3/4 bg-surface-border" />
+        </div>
+      )}
+
+      {content.status !== 'loading' && content.contentHtml && (
         <div
           className="prose-reading text-[17px] leading-relaxed [&>p]:mb-4 [&>h1]:font-heading [&>h1]:font-bold [&>h1]:text-xl [&>h1]:mb-3 [&>h1]:mt-6 [&>h2]:font-heading [&>h2]:font-bold [&>h2]:text-lg [&>h2]:mb-3 [&>h2]:mt-6 [&>blockquote]:border-l-2 [&>blockquote]:border-border [&>blockquote]:pl-4 [&>blockquote]:text-muted [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&_a]:text-accent [&_a]:hover:underline [&_img]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: contentHtml }}
+          dangerouslySetInnerHTML={{ __html: content.contentHtml }}
         />
-      ) : (
+      )}
+
+      {content.status !== 'loading' && !content.contentHtml && (
         <p className="text-sm text-muted">
-          {extractionError ?? 'Content unavailable.'}{' '}
+          {content.extractionError ?? 'Content unavailable.'}{' '}
           {item.link && (
             <a href={item.link} target="_blank" rel="noopener noreferrer" className="underline">
               Read the original
@@ -275,7 +338,7 @@ export default function ArticleReadingView({
       {exportOpen && (
         <ExportDialog
           title={item.title}
-          contentHtml={contentHtml}
+          contentHtml={content.contentHtml}
           onClose={() => setExportOpen(false)}
         />
       )}

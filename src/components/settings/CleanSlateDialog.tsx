@@ -71,7 +71,7 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
         className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md p-5"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold">Clean slate</h2>
+          <h2 className="text-base font-bold">Clean slate</h2>
           <button
             type="button"
             onClick={() => !pending && onClose()}

@@ -85,6 +85,21 @@ export async function getOrFetchArticleContent(
   })
   logQueryError('articles/getOrFetchArticleContent (upsert, success)', error)
 
+  // The scraped page's own og:image/twitter:image is the article's real
+  // header image — more reliable than whatever the RSS feed's enclosure/
+  // media tags provided (often just the feed's logo repeated on every
+  // item, see ingest.ts). Overwrite feed_items.image_url with it so Card
+  // view picks up the correct image the next time this article's row is
+  // rendered. Best-effort: this is a nice-to-have, not worth failing the
+  // request over.
+  if (result.imageUrl) {
+    const { error: imageError } = await supabase
+      .from('feed_items')
+      .update({ image_url: result.imageUrl })
+      .eq('id', feedItemId)
+    logQueryError('articles/getOrFetchArticleContent (image_url update)', imageError)
+  }
+
   return { contentHtml: result.html, contentText: result.text, contentEnHtml: null, extractionError: null }
 }
 

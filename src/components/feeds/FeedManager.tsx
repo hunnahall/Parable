@@ -196,7 +196,7 @@ export default function FeedManager({
     <div className="space-y-6">
       <div className="flex items-center justify-between pb-6 border-b border-border">
         <div>
-          <h2 className="text-sm font-medium">Run ingest now</h2>
+          <h2 className="text-base font-bold">Run ingest now</h2>
           <p className="text-xs text-muted mt-0.5">
             Fetches new items published in the last 24 hours for every feed, instead of waiting
             for the cron job.
@@ -241,7 +241,7 @@ export default function FeedManager({
 
       <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium">Add a feed</h2>
+          <h2 className="text-base font-bold">Add a feed</h2>
           <OpmlImport />
         </div>
         <div className="flex flex-wrap gap-3">

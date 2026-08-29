@@ -21,7 +21,7 @@ function faviconFor(link: string | null): string | null {
   if (!link) return null
   try {
     const origin = new URL(link).origin
-    return `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(origin)}`
+    return `https://www.google.com/s2/favicons?sz=256&domain=${encodeURIComponent(origin)}`
   } catch {
     return null
   }
@@ -49,15 +49,28 @@ export default function ArticleCardGrid({
   showDelete?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
+  // A real header image (captured on first open — see extract.ts/
+  // content.ts) fills the tile full-bleed; a favicon is just a small
+  // per-site icon, not a photo, so stretching it to fill the same box
+  // reads as blurry/broken — shown small and centered instead, on a
+  // neutral ground, until the article's actually been opened once.
+  const hasRealImage = !!item.imageUrl
   const imageSrc = item.imageUrl ?? faviconFor(item.link)
 
   return (
     <div className="card-elevated flex flex-col overflow-hidden">
-      <Link href={`/articles/${item.id}`} className="block aspect-[16/9] bg-surface-border shrink-0">
-        {imageSrc && (
-          // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
-          <img src={imageSrc} alt="" className="w-full h-full object-cover" />
-        )}
+      <Link
+        href={`/articles/${item.id}`}
+        className="flex items-center justify-center aspect-[16/9] bg-surface-border shrink-0"
+      >
+        {imageSrc &&
+          (hasRealImage ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
+            <img src={imageSrc} alt="" className="w-full h-full object-cover" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
+            <img src={imageSrc} alt="" className="w-10 h-10 object-contain opacity-70" />
+          ))}
       </Link>
       <div className="p-3 flex-1 flex flex-col min-w-0">
         <div className="flex items-center gap-2 text-xs text-muted mb-0.5">

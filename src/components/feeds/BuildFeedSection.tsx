@@ -89,7 +89,7 @@ export default function BuildFeedSection({
   return (
     <>
       <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-sm font-medium">Build a Feed</h2>
+        <h2 className="text-base font-bold">Build a Feed</h2>
         <p className="text-xs text-muted">
           Parable can detect articles in websites that don&rsquo;t offer RSS feeds.
         </p>
@@ -116,7 +116,7 @@ export default function BuildFeedSection({
             className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold">Build a Feed</h2>
+              <h2 className="text-base font-bold">Build a Feed</h2>
               <button
                 type="button"
                 onClick={close}

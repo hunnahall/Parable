@@ -18,7 +18,7 @@ export const SIDEBAR_NAV: SidebarNavEntry[] = [
   { type: 'link', href: '/articles', label: 'Articles', icon: Newspaper, badge: 'articles' },
   { type: 'link', href: '/saved', label: 'Saved', icon: Bookmark },
   { type: 'link', href: '/archive', label: 'Archive', icon: Archive },
-  { type: 'link', href: '/feeds', label: 'Manage Feeds', icon: Rss },
+  { type: 'link', href: '/feeds', label: 'Feeds', icon: Rss },
   { type: 'divider' },
   { type: 'link', href: '/settings', label: 'Settings', icon: Settings },
 ]

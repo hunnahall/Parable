@@ -34,7 +34,7 @@ export default function SidebarNavList({
             aria-current={active ? 'page' : undefined}
             title={collapsed ? entry.label : undefined}
             className={
-              'flex items-center gap-3 px-3 py-1.5 text-sm font-label transition-colors ' +
+              'flex items-center gap-3 px-3 py-2 text-base font-bold font-label transition-colors ' +
               (active
                 ? 'text-foreground border-l-2 border-accent bg-foreground/5'
                 : 'text-muted hover:text-foreground border-l-2 border-transparent')
