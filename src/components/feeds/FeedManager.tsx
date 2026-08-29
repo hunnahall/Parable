@@ -15,12 +15,14 @@ import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import type { EngagementRate } from '@/lib/feeds/engagement'
+import type { TagCount } from '@/lib/tags/data'
 import { usePreferences } from '@/components/preferences/PreferencesProvider'
 import { formatDateTime } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import OpmlImport from './OpmlImport'
 import BuildFeedSection from './BuildFeedSection'
+import TagManager from './TagManager'
 
 const NO_FOLDER = 'No folder'
 
@@ -40,11 +42,13 @@ export default function FeedManager({
   folders,
   folderRows,
   engagement,
+  tags,
 }: {
   feeds: FeedRow[]
   folders: { id: string; label: string }[]
   folderRows: FolderRow[]
   engagement: Record<string, EngagementRate>
+  tags: TagCount[]
 }) {
   const router = useRouter()
   const { timezone, clockFormat } = usePreferences()
@@ -305,6 +309,8 @@ export default function FeedManager({
       {error && <p className="text-lg text-danger">{error}</p>}
 
       <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
+
+      <TagManager tags={tags} />
 
       <FolderManager folders={folderRows} />
 
