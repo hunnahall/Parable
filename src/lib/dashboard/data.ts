@@ -259,7 +259,7 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
     p_exclude_states: ['archived'],
   })
     .select(ARTICLE_SELECT)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getHeadlinesData', error)
   if (!items) return []
@@ -297,7 +297,7 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
   })
     .select(ARTICLE_SELECT)
     .eq('feed_id', feedId)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getFeedData', error)
   if (!items) return []
@@ -343,7 +343,7 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   })
     .select(ARTICLE_SELECT)
     .in('feed_id', feedIds)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getFeedCategoryData', error)
   if (!items) return []
@@ -368,7 +368,7 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
     .from('feed_items')
     .select(ARTICLE_SELECT)
     .in('id', savedIds)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
   logQueryError('dashboard/getSavedArticlesData', error)
 
   if (!items) return []
@@ -527,7 +527,9 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     query = query.or(orParts.join(','))
   }
 
-  query = query.order('published_at', { ascending: false }).order('id', { ascending: false })
+  query = query
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
 
   // Cursor values round-trip through the client (URL/form state) between
   // requests, so they're validated before being interpolated into a raw
