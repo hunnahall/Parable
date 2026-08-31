@@ -11,43 +11,33 @@
 --     'Auth header value for Supabase Cron calling Parable API routes'
 --   );
 --
--- Before running the schedule calls below, replace <YOUR_DEPLOYED_URL>
--- with the app's real deployed URL (e.g. https://parable-yourname.vercel.app).
--- These jobs call out over the network, so they only work once the app is
--- deployed somewhere Supabase's Postgres can reach — not localhost.
+-- Deployed URL for the retention jobs below.
+--
+-- ingest-feeds is deliberately NOT scheduled here. It's triggered instead
+-- by .github/workflows/cron.yml, which builds and runs the app inside the
+-- Actions runner and calls its own localhost — that keeps it off Vercel's
+-- Serverless Function duration cap entirely (Hobby: 10s, fixed, regardless
+-- of the route's own maxDuration). Calling the deployed /api/ingest-feeds
+-- from here would put it back behind that cap, since pg_net's http_post
+-- still lands on the same Vercel function no matter what triggers it. The
+-- retention routes below are cheap DB-only queries, well under any cap
+-- Vercel would impose, so triggering them here instead of from GitHub
+-- Actions is a clean simplification, not a workaround.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- RSS feeds change frequently enough that a 30-minute interval is a
--- reasonable balance between freshness and load on OpenAI (each new
--- article triggers a translate + summarize call).
-select cron.schedule(
-  'ingest-feeds',
-  '*/30 * * * *',
-  $$
-  select net.http_post(
-    url := '<YOUR_DEPLOYED_URL>/api/ingest-feeds',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret',
-      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
-    )
-  );
-  $$
-);
-
 -- Sweeps every unread article (no article_states row yet) older than 48h
 -- into 'archived' for every user — see auto_archive_stale_articles() in the
 -- database and src/lib/feeds/retention.ts. Hourly keeps the lag between
--- "should be archived" and "is archived" small without meaningfully
--- competing with ingest-feeds' 30-minute cadence.
+-- "should be archived" and "is archived" small; cheap enough not to
+-- meaningfully compete with the (separately scheduled) ingest-feeds run.
 select cron.schedule(
   'auto-archive-articles',
   '0 * * * *',
   $$
   select net.http_post(
-    url := '<YOUR_DEPLOYED_URL>/api/cron/auto-archive-articles',
+    url := 'https://parable-rss.vercel.app/api/cron/auto-archive-articles',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',
@@ -67,7 +57,7 @@ select cron.schedule(
   '15 5 * * *',
   $$
   select net.http_post(
-    url := '<YOUR_DEPLOYED_URL>/api/cron/purge-article-content',
+    url := 'https://parable-rss.vercel.app/api/cron/purge-article-content',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',
@@ -91,7 +81,7 @@ select cron.schedule(
   '30 5 * * *',
   $$
   select net.http_post(
-    url := '<YOUR_DEPLOYED_URL>/api/cron/purge-unengaged-articles',
+    url := 'https://parable-rss.vercel.app/api/cron/purge-unengaged-articles',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',
@@ -103,4 +93,4 @@ select cron.schedule(
 
 -- To change a schedule later: re-run the matching cron.schedule() call
 -- above with a new cron expression (same job name updates it in place).
--- To remove a job: select cron.unschedule('ingest-feeds');
+-- To remove a job: select cron.unschedule('auto-archive-articles');

@@ -1,37 +1,25 @@
 name: Cron
 
+# Ingest only. Retention (auto-archive, purge-article-content,
+# purge-unengaged-articles) runs via Supabase Cron instead — see
+# supabase/cron.sql — since those are cheap DB-only queries with no
+# reason to leave the Supabase stack.
+#
 # Vercel Hobby caps Serverless Function duration at 10s regardless of the
-# maxDuration set in each route, no matter what triggers the request. The
-# retention routes are fast DB-only queries, so they're triggered the simple
-# way: curl the deployed Vercel routes. ingest-feeds is not fast (per-item
-# OpenAI translate/summarize calls, see its own file for the details), so
-# its job instead builds and runs the app inside this runner and hits its
-# own localhost — same route code, same `after()` semantics (needs a real
-# request scope, which a bare script calling runIngest() directly would not
-# have), but no Vercel function or its duration cap in the path at all.
+# maxDuration set in each route, no matter what triggers the request.
+# ingest-feeds is not fast (per-item OpenAI translate/summarize calls, see
+# its own file for the details), so this job builds and runs the app
+# inside the runner and hits its own localhost — same route code, same
+# `after()` semantics (needs a real request scope, which a bare script
+# calling runIngest() directly would not have), but no Vercel function or
+# its duration cap in the path at all.
 on:
   schedule:
-    # Ingest, hourly.
     - cron: '0 * * * *'
-    # Retention sweep (archive/purge), once daily at 03:00 UTC.
-    - cron: '0 3 * * *'
   workflow_dispatch:
-    inputs:
-      job:
-        description: 'Which job to run'
-        type: choice
-        default: all
-        options:
-          - all
-          - ingest
-          - retention
-
-env:
-  BASE_URL: https://parable-rss.vercel.app
 
 jobs:
   ingest:
-    if: github.event.schedule == '0 * * * *' || github.event.inputs.job == 'ingest' || github.event.inputs.job == 'all'
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -73,23 +61,3 @@ jobs:
 
           kill "$SERVER_PID"
           exit $status
-
-  retention:
-    if: github.event.schedule == '0 3 * * *' || github.event.inputs.job == 'retention' || github.event.inputs.job == 'all'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Auto-archive articles
-        run: |
-          curl --fail --silent --show-error --max-time 60 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "$BASE_URL/api/cron/auto-archive-articles"
-      - name: Purge article content
-        run: |
-          curl --fail --silent --show-error --max-time 60 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "$BASE_URL/api/cron/purge-article-content"
-      - name: Purge unengaged articles
-        run: |
-          curl --fail --silent --show-error --max-time 60 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "$BASE_URL/api/cron/purge-unengaged-articles"
