@@ -22,6 +22,7 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
     .select(
       'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, translate_enabled, consecutive_failures'
     )
+    .is('deleted_at', null)
     .order('title')
   logQueryError('feeds/listFeedsDetailed', error)
   const feeds = data ?? []

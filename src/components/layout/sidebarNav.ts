@@ -4,6 +4,7 @@ import {
   Bookmark,
   Archive,
   Rss,
+  ScrollText,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ export const SIDEBAR_NAV: SidebarNavEntry[] = [
   { type: 'link', href: '/saved', label: 'Saved', icon: Bookmark },
   { type: 'link', href: '/archive', label: 'Archive', icon: Archive },
   { type: 'link', href: '/feeds', label: 'Feeds', icon: Rss },
+  { type: 'link', href: '/log', label: 'Log', icon: ScrollText },
   { type: 'divider' },
   { type: 'link', href: '/settings', label: 'Settings', icon: Settings },
 ]

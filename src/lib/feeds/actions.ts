@@ -222,19 +222,54 @@ export async function setFeedTranslateEnabled(
   return { error: null }
 }
 
+// feed_items.feed_id cascades on feed deletion at the DB level, which would
+// wipe out saved articles along with the feed — saved articles are kept
+// forever per the retention policy (see retention.ts), so a feed removal
+// must never be able to take them with it. Two-step: hard-delete this
+// feed's non-saved items (nothing else is worth keeping once its feed is
+// gone), then soft-delete the feed itself (mark deleted_at) instead of
+// actually deleting the row, so the remaining saved feed_items keep a live
+// FK to it — attachFeedMeta (src/lib/dashboard/data.ts) still resolves
+// their title/category from it. Every "active feeds" read path filters on
+// deleted_at is null so a soft-deleted feed disappears from ingest, the
+// feed list, and source/category filters.
 export async function removeFeed(id: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
 
-  // Delete dependent feed_items explicitly rather than relying on an
-  // assumed ON DELETE CASCADE on the feed_items.feed_id FK, since this
-  // repo has no schema file to confirm that constraint exists.
-  const { error: itemsError } = await supabase.from('feed_items').delete().eq('feed_id', id)
-  if (itemsError) return { error: itemsError.message }
+  const { data: items, error: itemsFetchError } = await supabase
+    .from('feed_items')
+    .select('id')
+    .eq('feed_id', id)
+  if (itemsFetchError) return { error: itemsFetchError.message }
 
-  const { error } = await supabase.from('feeds').delete().eq('id', id)
+  const itemIds = (items ?? []).map((item) => item.id)
+  let savedIds: string[] = []
+  if (itemIds.length > 0) {
+    const { data: savedStates, error: savedError } = await supabase
+      .from('article_states')
+      .select('feed_item_id')
+      .eq('state', 'saved')
+      .in('feed_item_id', itemIds)
+    if (savedError) return { error: savedError.message }
+    savedIds = (savedStates ?? []).map((row) => row.feed_item_id)
+  }
+
+  const idsToDelete = itemIds.filter((itemId) => !savedIds.includes(itemId))
+  if (idsToDelete.length > 0) {
+    const { error: deleteItemsError } = await supabase
+      .from('feed_items')
+      .delete()
+      .in('id', idsToDelete)
+    if (deleteItemsError) return { error: deleteItemsError.message }
+  }
+
+  const { error } = await supabase
+    .from('feeds')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
   if (error) return { error: error.message }
 
   revalidatePath('/feeds')

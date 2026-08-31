@@ -71,7 +71,7 @@ export default async function Home() {
         feedOptions={feedOptions}
         categoryOptions={categoryOptions}
       />
-      <CovenantWorksCredit />
+      <CovenantWorksCredit className="mt-16" />
     </div>
   )
 }

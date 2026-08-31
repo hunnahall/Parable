@@ -15,7 +15,7 @@ export default function LandingPage() {
         <h1 className="sr-only">Parable</h1>
         <ParableLogo height={144} />
         <p className="text-3xl text-muted mt-6 mb-10">
-          A simple dashboard for your feeds.
+          Your feeds in one place.
         </p>
         <Link
           href="/login"

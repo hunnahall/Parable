@@ -8,7 +8,6 @@ import { getArticlesUnfiledCount } from '@/lib/dashboard/data'
 import ParableMark from '@/components/brand/ParableMark'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
-import HeaderSignInLink from '@/components/layout/HeaderSignInLink'
 import { PreferencesProvider } from '@/components/preferences/PreferencesProvider'
 
 const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken-grotesk' })
@@ -64,11 +63,10 @@ export default async function RootLayout({
             </div>
           ) : (
             <>
-              <header className="flex items-center justify-between gap-4 p-4 border-b border-border text-base">
+              <header className="flex items-center gap-4 p-4 border-b border-border text-base">
                 <Link href="/" aria-label="Parable">
                   <ParableMark size={22} />
                 </Link>
-                <HeaderSignInLink />
               </header>
               {children}
             </>

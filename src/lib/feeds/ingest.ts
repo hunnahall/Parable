@@ -483,7 +483,8 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
     await Promise.all([
       supabase
         .from('feeds')
-        .select('id, url, title, is_scraped, summarize_articles, translate_enabled, consecutive_failures'),
+        .select('id, url, title, is_scraped, summarize_articles, translate_enabled, consecutive_failures')
+        .is('deleted_at', null),
       loadIngestPreferences(supabase),
     ])
 

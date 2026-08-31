@@ -285,6 +285,7 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
     .from('feeds')
     .select('id')
     .eq('id', feedId)
+    .is('deleted_at', null)
     .single()
   // .single() reports "no row" as an error too (PGRST116), which is the
   // expected/common case here (a deleted feed) — only log unexpected ones.
@@ -339,6 +340,7 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
     .from('feeds')
     .select('id')
     .eq('category', category)
+    .is('deleted_at', null)
   logQueryError('dashboard/getFeedCategoryData (feeds lookup)', feedsInCategoryError)
   const feedIds = (feedsInCategory ?? []).map((feed) => feed.id)
   if (feedIds.length === 0) return []
@@ -568,7 +570,11 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
 
 export async function listFeeds(): Promise<FeedOption[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase.from('feeds').select('id, title').order('title')
+  const { data, error } = await supabase
+    .from('feeds')
+    .select('id, title')
+    .is('deleted_at', null)
+    .order('title')
   logQueryError('dashboard/listFeeds', error)
   return data ?? []
 }

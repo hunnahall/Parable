@@ -18,37 +18,48 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
   const { id } = await params
-  const supabase = await createClient()
-  const [{ data: item, error }, cacheCheck, prefs] = await Promise.all([
-    supabase
-      .from('feed_items')
-      .select('title, title_en, summary, summary_en, link')
-      .eq('id', id)
-      .maybeSingle(),
-    checkArticleContentCache(id),
-    getUserPreferences(),
-  ])
 
-  if (error || !item) {
-    return NextResponse.json({ error: 'Article not found' }, { status: 404 })
+  // Same rationale as the sibling content route: guarantee a JSON response
+  // even if something in this chain throws unexpectedly, so the dialog
+  // that calls this (ArticleSummaryDialog) always has an actual message to
+  // show instead of a raw fetch/parse failure.
+  try {
+    const supabase = await createClient()
+    const [{ data: item, error }, cacheCheck, prefs] = await Promise.all([
+      supabase
+        .from('feed_items')
+        .select('title, title_en, summary, summary_en, link')
+        .eq('id', id)
+        .maybeSingle(),
+      checkArticleContentCache(id),
+      getUserPreferences(),
+    ])
+
+    if (error || !item) {
+      return NextResponse.json({ error: 'Article not found' }, { status: 404 })
+    }
+
+    const content = cacheCheck.hit
+      ? cacheCheck.content
+      : await fetchAndPersistArticleContent(id, item.link, cacheCheck.attemptCount)
+
+    // Full extracted body when available; the feed's own (short) summary as a
+    // fallback for articles whose content extraction failed.
+    const bodyText = content.contentText ?? item.summary_en ?? item.summary
+    if (!bodyText) {
+      return NextResponse.json({ error: 'No article text available to summarize.' }, { status: 422 })
+    }
+
+    const title = item.title_en ?? item.title
+    const summary = await summarizeArticleContent(title, bodyText, prefs.language)
+    if (!summary) {
+      return NextResponse.json({ error: 'Summary generation failed.' }, { status: 502 })
+    }
+
+    return NextResponse.json({ summary })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`articles/[id]/summarize: unhandled error for ${id}:`, message)
+    return NextResponse.json({ error: 'Failed to generate summary.' }, { status: 500 })
   }
-
-  const content = cacheCheck.hit
-    ? cacheCheck.content
-    : await fetchAndPersistArticleContent(id, item.link, cacheCheck.attemptCount)
-
-  // Full extracted body when available; the feed's own (short) summary as a
-  // fallback for articles whose content extraction failed.
-  const bodyText = content.contentText ?? item.summary_en ?? item.summary
-  if (!bodyText) {
-    return NextResponse.json({ error: 'No article text available to summarize.' }, { status: 422 })
-  }
-
-  const title = item.title_en ?? item.title
-  const summary = await summarizeArticleContent(title, bodyText, prefs.language)
-  if (!summary) {
-    return NextResponse.json({ error: 'Summary generation failed.' }, { status: 502 })
-  }
-
-  return NextResponse.json({ summary })
 }
