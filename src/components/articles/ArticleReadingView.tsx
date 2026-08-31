@@ -240,7 +240,7 @@ export default function ArticleReadingView({
           onClick={() => setSummaryOpen(true)}
           className="text-base text-muted hover:text-accent transition-colors"
         >
-          Summarize this
+          Summarize
         </button>
         {addingFolder ? (
           <input

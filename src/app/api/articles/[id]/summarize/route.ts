@@ -6,8 +6,9 @@ import { getUserPreferences } from '@/lib/preferences/data'
 
 // jsdom (via the content extractor, on a cache miss) needs real Node APIs.
 export const runtime = 'nodejs'
-// Worst case pays for a live scrape (up to 20s) plus the OpenAI call —
-// same budget as the sibling content route this reuses.
+// Worst case pays for a live scrape (up to 8s, see extract.ts) plus the
+// OpenAI call — same budget as the sibling content route this reuses, and
+// the same real-platform-cap caveat (see that route's comment).
 export const maxDuration = 60
 
 // User-triggered only (the "Summarize this" button in ArticleReadingView) —
