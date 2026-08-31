@@ -11,12 +11,13 @@ import { getUserPreferences } from '@/lib/preferences/data'
 
 // jsdom (via the content extractor) needs real Node APIs.
 export const runtime = 'nodejs'
-// A cache-miss scrape (up to 8s, see extract.ts) followed by a
+// A cache-miss scrape (up to 20s, see extract.ts) followed by a
 // translation call (up to 15s, see translate.ts) can take longer than a
 // typical serverless default — this route is called client-side, off the
-// initial page-load critical path, so it can afford to, up to whatever the
-// hosting plan actually enforces (Vercel Hobby hard-caps every function at
-// 10s regardless of this setting — see .github/workflows/cron.yml).
+// initial page-load critical path, so it can afford to. Fluid Compute is
+// confirmed on for this Vercel project (Settings → Functions), which
+// gives Hobby-plan functions up to 300s, well clear of this budget — see
+// supabase/cron.sql for how that was verified.
 export const maxDuration = 60
 
 // The reading view's slow part, split out of the page's initial render

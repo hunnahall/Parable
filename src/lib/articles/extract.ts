@@ -4,17 +4,17 @@ import sanitizeHtml from 'sanitize-html'
 
 // This no longer blocks the reading view's initial paint (see
 // src/app/api/articles/[id]/content/route.ts — the page renders
-// immediately and this fetch happens client-side, after mount), but it
-// still has to fit inside the content route's *real* budget: Vercel
-// Hobby caps a Serverless Function at 10s regardless of the route's own
-// `maxDuration` (see .github/workflows/cron.yml's comment on the same
-// constraint) — a scrape that ran past that got hard-killed mid-request,
-// which returned a non-JSON platform error page and surfaced client-side
-// as the generic, undiagnosable "Failed to load article content." (see
-// contentCache.ts's fetchContent). Kept comfortably under 10s, leaving
-// headroom for the route's own auth/DB work, so a slow origin now fails
-// as a clean {error} response instead.
-const FETCH_TIMEOUT_MS = 8_000
+// immediately and this fetch happens client-side, after mount), so it
+// can afford to be generous rather than trading false "aborted" failures
+// for a few saved seconds on an already-off-critical-path request. The
+// route itself has ~300s of real budget (Fluid Compute is confirmed on
+// for this Vercel project — see supabase/cron.sql), so this is a UX
+// choice (how long to make a live user wait on a slow site before giving
+// up), not a platform workaround — a genuinely slow origin (e.g. a
+// foreign news site that took 20s+ to respond, seen in article_content's
+// extraction_error column as "This operation was aborted") should fail
+// cleanly here rather than hang the reading view indefinitely.
+const FETCH_TIMEOUT_MS = 20_000
 
 export type ExtractResult =
   | { html: string; text: string; imageUrl: string | null }

@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runIngest } from '@/lib/feeds/ingest'
 
-// Cron-triggered background job, not user-facing — always run fresh,
-// and force the Node.js runtime since rss-parser and the Supabase admin
-// client both need Node APIs (this also keeps it off any edge runtime
-// default). maxDuration raises the platform's function-timeout ceiling
-// (it does NOT guarantee this much runtime on every plan/tier — Vercel
-// Hobby still caps at 10s regardless) — a full multi-feed cycle can pay
-// for up to two sequential OpenAI calls per new item (translate +
-// summarize) at ITEM_CONCURRENCY=5, which the ingest pipeline's own
-// comments already flag as ~30s+ even at a modest item count.
+// Triggered every 4 hours by Supabase Cron (see supabase/cron.sql), which
+// calls this deployed route directly — no separate runner involved.
+// Not user-facing (see FeedManager's "Run ingest now" for the on-demand,
+// user-triggered equivalent) — always run fresh, and force the Node.js
+// runtime since rss-parser and the Supabase admin client both need Node
+// APIs (this also keeps it off any edge runtime default). maxDuration
+// raises the platform's function-timeout ceiling; Fluid Compute is
+// confirmed on for this Vercel project, which gives this a real 300s
+// budget on the Hobby plan — matches this route's own maxDuration exactly,
+// and matches the timeout_milliseconds the Supabase Cron job explicitly
+// passes so Postgres doesn't give up waiting before this finishes. A full
+// multi-feed cycle can pay for up to two sequential OpenAI calls per new
+// item (translate + summarize) at ITEM_CONCURRENCY=5, which the ingest
+// pipeline's own comments already flag as ~30s+ even at a modest item
+// count — comfortably inside the real budget, but still worth knowing.
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300

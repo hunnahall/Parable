@@ -11,30 +11,58 @@
 --     'Auth header value for Supabase Cron calling Parable API routes'
 --   );
 --
--- Deployed URL for the retention jobs below.
+-- Deployed URL for every job below.
 --
--- ingest-feeds is deliberately NOT scheduled here. It's triggered instead
--- by .github/workflows/cron.yml, which builds and runs the app inside the
--- Actions runner and calls its own localhost — that keeps it off Vercel's
--- Serverless Function duration cap entirely (Hobby: 10s, fixed, regardless
--- of the route's own maxDuration). Calling the deployed /api/ingest-feeds
--- from here would put it back behind that cap, since pg_net's http_post
--- still lands on the same Vercel function no matter what triggers it. The
--- retention routes below are cheap DB-only queries, well under any cap
--- Vercel would impose, so triggering them here instead of from GitHub
--- Actions is a clean simplification, not a workaround.
-
+-- ingest-feeds runs here too, directly against the deployed URL, same as
+-- the retention jobs — it used to be routed through a separate GitHub
+-- Actions workflow to dodge what was believed to be a hard 10s Vercel
+-- Hobby function-duration cap. That premise was wrong for this project:
+-- Vercel enables Fluid Compute by default for every project created after
+-- April 23, 2025 (this one was created new, well after that), which raises
+-- Hobby's function duration to 300s — confirmed both via `vercel project
+-- inspect` and directly in the dashboard (Settings → Functions). The
+-- /api/ingest-feeds route's own `maxDuration = 300` fits that ceiling
+-- exactly, so it can run as a normal Vercel function like everything else.
+--
+-- One real, unrelated gotcha: net.http_post's own `timeout_milliseconds`
+-- defaults to 5000ms — nothing to do with Vercel, just how long Postgres
+-- itself will wait for a response before giving up. The retention jobs
+-- below never noticed since they're sub-second DB queries, but a full
+-- ingest run needs far longer, so ingest-feeds passes `timeout_milliseconds
+-- := 300000` explicitly to match Vercel's own ceiling — confirmed this
+-- isn't clamped when calling net.http_post directly (as this file already
+-- does), only the Supabase dashboard's cron-job wizard enforces 5s.
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
+-- Fetches new items for every feed, translates/summarizes/scrapes as
+-- configured — see src/lib/feeds/ingest.ts. Every 4 hours: frequent enough
+-- to keep feeds reasonably fresh without needing to fire on the hour.
+-- Independent of the "Run ingest now" button (src/lib/feeds/actions.ts),
+-- which still runs on demand regardless of this schedule.
+select cron.schedule(
+  'ingest-feeds',
+  '0 */4 * * *',
+  $$
+  select net.http_post(
+    url := 'https://parable-rss.vercel.app/api/ingest-feeds',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
+    ),
+    timeout_milliseconds := 300000
+  );
+  $$
+);
+
 -- Sweeps every unread article (no article_states row yet) older than 48h
 -- into 'archived' for every user — see auto_archive_stale_articles() in the
--- database and src/lib/feeds/retention.ts. Hourly keeps the lag between
--- "should be archived" and "is archived" small; cheap enough not to
--- meaningfully compete with the (separately scheduled) ingest-feeds run.
+-- database and src/lib/feeds/retention.ts. Every 4 hours, offset 20
+-- minutes after ingest-feeds so the two don't fire in the same instant.
 select cron.schedule(
   'auto-archive-articles',
-  '0 * * * *',
+  '20 */4 * * *',
   $$
   select net.http_post(
     url := 'https://parable-rss.vercel.app/api/cron/auto-archive-articles',
