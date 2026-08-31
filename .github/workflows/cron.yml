@@ -1,11 +1,14 @@
 name: Cron
 
 # Vercel Hobby caps Serverless Function duration at 10s regardless of the
-# maxDuration set in each route, no matter what triggers the request — this
-# workflow just supplies the schedule, it does not raise that ceiling. See
-# src/app/api/ingest-feeds/route.ts for the ITEM_CONCURRENCY/duration notes;
-# if ingest-feeds starts failing/timing out here, that's a plan-tier problem,
-# not a workflow problem.
+# maxDuration set in each route, no matter what triggers the request. The
+# retention routes are fast DB-only queries, so they're triggered the simple
+# way: curl the deployed Vercel routes. ingest-feeds is not fast (per-item
+# OpenAI translate/summarize calls, see its own file for the details), so
+# its job instead builds and runs the app inside this runner and hits its
+# own localhost — same route code, same `after()` semantics (needs a real
+# request scope, which a bare script calling runIngest() directly would not
+# have), but no Vercel function or its duration cap in the path at all.
 on:
   schedule:
     # Ingest, hourly.
@@ -30,12 +33,46 @@ jobs:
   ingest:
     if: github.event.schedule == '0 * * * *' || github.event.inputs.job == 'ingest' || github.event.inputs.job == 'all'
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      - name: Trigger ingest-feeds
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Start app and run ingest
         run: |
-          curl --fail --silent --show-error --max-time 320 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "$BASE_URL/api/ingest-feeds"
+          npm run start &
+          SERVER_PID=$!
+
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/login -o /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "App did not become ready in time" >&2
+            kill "$SERVER_PID"
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --max-time 1800 \
+            -H "x-cron-secret: $CRON_SECRET" \
+            http://localhost:3000/api/ingest-feeds
+          status=$?
+
+          kill "$SERVER_PID"
+          exit $status
 
   retention:
     if: github.event.schedule == '0 3 * * *' || github.event.inputs.job == 'retention' || github.event.inputs.job == 'all'
