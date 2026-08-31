@@ -1,0 +1,58 @@
+name: Cron
+
+# Vercel Hobby caps Serverless Function duration at 10s regardless of the
+# maxDuration set in each route, no matter what triggers the request — this
+# workflow just supplies the schedule, it does not raise that ceiling. See
+# src/app/api/ingest-feeds/route.ts for the ITEM_CONCURRENCY/duration notes;
+# if ingest-feeds starts failing/timing out here, that's a plan-tier problem,
+# not a workflow problem.
+on:
+  schedule:
+    # Ingest, hourly.
+    - cron: '0 * * * *'
+    # Retention sweep (archive/purge), once daily at 03:00 UTC.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run'
+        type: choice
+        default: all
+        options:
+          - all
+          - ingest
+          - retention
+
+env:
+  BASE_URL: https://parable-rss.vercel.app
+
+jobs:
+  ingest:
+    if: github.event.schedule == '0 * * * *' || github.event.inputs.job == 'ingest' || github.event.inputs.job == 'all'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ingest-feeds
+        run: |
+          curl --fail --silent --show-error --max-time 320 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/ingest-feeds"
+
+  retention:
+    if: github.event.schedule == '0 3 * * *' || github.event.inputs.job == 'retention' || github.event.inputs.job == 'all'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto-archive articles
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/auto-archive-articles"
+      - name: Purge article content
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/purge-article-content"
+      - name: Purge unengaged articles
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/purge-unengaged-articles"
