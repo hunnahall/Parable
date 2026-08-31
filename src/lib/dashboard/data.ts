@@ -46,11 +46,17 @@ function bestTitle(item: { title: string; title_en: string | null }): string {
 // was on (see retention.ts: summary_ai is deliberately never cleared by
 // background jobs). Gating here means the toggle takes effect
 // immediately for every already-ingested article, not just future ones.
+//
+// No raw/translated fallback when the toggle is off: list views render
+// every unfiled article, so a teaser shown by default there scales with
+// total article volume rather than actual reading — cut entirely to keep
+// that cost down. A summary is still one click away via "Summarize this"
+// in the reading view (see ArticleReadingView + /api/articles/[id]/summarize).
 function bestSummary(
   item: { summary: string; summary_en: string | null; summary_ai: string | null },
   summarizeArticles: boolean
 ): string | null {
-  if (!summarizeArticles) return item.summary_en ?? item.summary
+  if (!summarizeArticles) return null
   return item.summary_ai ?? item.summary_en ?? item.summary
 }
 
@@ -259,7 +265,7 @@ export async function getHeadlinesData(): Promise<ArticleItem[]> {
     p_exclude_states: ['archived'],
   })
     .select(ARTICLE_SELECT)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getHeadlinesData', error)
   if (!items) return []
@@ -297,7 +303,7 @@ export async function getFeedData(feedId: string): Promise<ArticleItem[] | null>
   })
     .select(ARTICLE_SELECT)
     .eq('feed_id', feedId)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getFeedData', error)
   if (!items) return []
@@ -343,7 +349,7 @@ export async function getFeedCategoryData(category: string): Promise<ArticleItem
   })
     .select(ARTICLE_SELECT)
     .in('feed_id', feedIds)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(HEADLINES_LIMIT)
   logQueryError('dashboard/getFeedCategoryData', error)
   if (!items) return []
@@ -368,7 +374,7 @@ export async function getSavedArticlesData(): Promise<ArticleItem[]> {
     .from('feed_items')
     .select(ARTICLE_SELECT)
     .in('id', savedIds)
-    .order('published_at', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
   logQueryError('dashboard/getSavedArticlesData', error)
 
   if (!items) return []
@@ -527,7 +533,9 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     query = query.or(orParts.join(','))
   }
 
-  query = query.order('published_at', { ascending: false }).order('id', { ascending: false })
+  query = query
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
 
   // Cursor values round-trip through the client (URL/form state) between
   // requests, so they're validated before being interpolated into a raw

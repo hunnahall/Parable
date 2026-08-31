@@ -263,6 +263,15 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
         </div>
       </div>
 
+      <div className="card-elevated p-4 space-y-2">
+        <h2 className="text-lg font-bold font-heading">Rulebook</h2>
+        <ul className="text-base text-muted list-disc pl-5 space-y-1">
+          <li>Untouched articles auto-archive 48 hours after they arrive.</li>
+          <li>Articles never opened, saved, or tagged are permanently deleted 45 days after publication.</li>
+          <li>Items in a folder are saved — they&apos;re kept forever and never auto-archived or deleted.</li>
+        </ul>
+      </div>
+
       <ExportFeedsButton />
 
       <CleanSlateSection />
