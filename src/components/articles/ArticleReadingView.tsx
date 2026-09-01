@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import type { ArticleItem } from '@/lib/dashboard/data'
 import {
@@ -166,13 +165,14 @@ export default function ArticleReadingView({
 
   return (
     <div className="max-w-2xl mx-auto p-8">
-      <Link
-        href="/articles"
+      <button
+        type="button"
+        onClick={() => router.back()}
         className="inline-flex items-center gap-1.5 text-base text-muted hover:text-accent transition-colors mb-6"
       >
         <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-        Back to Articles
-      </Link>
+        Back
+      </button>
 
       <div className="flex items-center gap-2 text-base text-muted mb-2">
         {item.feed_title && <span className="font-medium">{item.feed_title}</span>}

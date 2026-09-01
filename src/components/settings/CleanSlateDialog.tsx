@@ -53,7 +53,7 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
       setError(result.error)
       return
     }
-    router.push('/articles')
+    router.push('/inbox')
     router.refresh()
   }
 

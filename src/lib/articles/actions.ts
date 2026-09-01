@@ -1,10 +1,24 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/dashboard/data'
+import { getUserPreferences } from '@/lib/preferences/data'
+import { mapWithConcurrency } from '@/lib/concurrency'
+import {
+  checkArticleContentCache,
+  fetchAndPersistArticleContent,
+  ensureArticleContentTranslated,
+} from '@/lib/articles/content'
 
-export type ArticleCuration = 'saved' | 'archived'
+// Bounded, same spirit as ingest.ts's PREWARM_CONCURRENCY — moveToReader's
+// background job below is a live scrape (+ possibly a translate call) per
+// item, so a large bulk "Read" selection shouldn't hammer several hosts
+// (or OpenAI) all at once.
+const READER_TRANSLATE_CONCURRENCY = 3
+
+export type ArticleCuration = 'saved' | 'archived' | 'reading'
 
 // Thin server-action wrapper around getArticlesPage — the Articles page's
 // client component (for "Load more") can't call data.ts functions
@@ -77,6 +91,62 @@ export async function deleteArticle(feedItemId: string): Promise<{ error: string
   return clearArticleState(feedItemId)
 }
 
+// Moves one or more Inbox articles to Reader — the bulk "Read" toolbar
+// button and each card's "Add to Reader" button both call this (with one
+// or many ids). Full-body translation is fetched eagerly in the
+// background right after the state upsert (not awaited — this action
+// returns as soon as the upsert succeeds), reusing the exact same
+// scrape/translate chain the reading view's lazy on-open path uses (see
+// ensureArticleContentTranslated in src/lib/articles/content.ts), so an
+// article opened on the Reader page usually already has its translated
+// body cached instead of paying for the scrape+translate live.
+export async function moveToReader(feedItemIds: string[]): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (feedItemIds.length === 0) return { error: null }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('article_states').upsert(
+    feedItemIds.map((feedItemId) => ({
+      user_id: user.id,
+      feed_item_id: feedItemId,
+      state: 'reading' as const,
+      archived_at: null,
+    })),
+    { onConflict: 'user_id,feed_item_id' }
+  )
+  if (error) return { error: error.message }
+
+  // Resolved up front rather than inside the deferred after() callback —
+  // each item's link/original_language and the user's target language are
+  // all this job needs, and after() runs post-response, so there's
+  // nothing left to gain by deferring these reads too.
+  const [{ data: items }, prefs] = await Promise.all([
+    supabase.from('feed_items').select('id, link, original_language').in('id', feedItemIds),
+    getUserPreferences(),
+  ])
+  const targetLanguage = prefs.language
+
+  after(() =>
+    mapWithConcurrency(items ?? [], READER_TRANSLATE_CONCURRENCY, async (item) => {
+      if (!item.link) return
+      try {
+        const cacheCheck = await checkArticleContentCache(item.id)
+        const content = cacheCheck.hit
+          ? cacheCheck.content
+          : await fetchAndPersistArticleContent(item.id, item.link, cacheCheck.attemptCount, supabase)
+        await ensureArticleContentTranslated(item.id, content, item.original_language, targetLanguage)
+      } catch (err) {
+        console.error(`articles/moveToReader: feed_item ${item.id}`, err)
+      }
+    })
+  )
+
+  revalidatePath('/inbox')
+  revalidatePath('/reader')
+  return { error: null }
+}
+
 // Bulk version of archiveArticle — one upsert instead of N sequential
 // ones, for the Articles/Saved pages' multi-select toolbar (not shown on
 // Archive, where every item is already archived — see ArticlesView).
@@ -127,7 +197,7 @@ export async function purgeArticles(feedItemIds: string[]): Promise<{ error: str
   return { error: null }
 }
 
-// Display-only read tracking (see src/app/articles/[id]/page.tsx) — must
+// Display-only read tracking (see src/app/reader/[id]/page.tsx) — must
 // never touch article_states/archived_at, since read state is explicitly
 // independent of the 48h auto-archive timer.
 export async function markArticleRead(feedItemId: string): Promise<{ error: string | null }> {

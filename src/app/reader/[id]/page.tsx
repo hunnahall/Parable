@@ -20,6 +20,8 @@ export default async function ArticleReadingPage({
   // client-side by ArticleReadingView right after the shell mounts (see
   // /api/articles/[id]/content), so the title/metadata/buttons render
   // immediately and only the article body shows a brief loading state.
+  // Reachable for Saved/Archive/Reader articles alike — getArticleById has
+  // no state filtering, since this one route serves all three.
   const [article, folders] = await Promise.all([getArticleById(id), listFolderOptions()])
   if (!article) notFound()
 

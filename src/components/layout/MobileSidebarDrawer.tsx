@@ -9,10 +9,12 @@ import { signOut } from '@/app/login/actions'
 
 export default function MobileSidebarDrawer({
   userEmail,
-  articlesUnfiledCount,
+  inboxCount,
+  readerCount,
 }: {
   userEmail: string
-  articlesUnfiledCount: number
+  inboxCount: number
+  readerCount: number
 }) {
   const [open, setOpen] = useState(false)
 
@@ -67,7 +69,8 @@ export default function MobileSidebarDrawer({
             </div>
             <div className="flex-1 overflow-y-auto px-2">
               <SidebarNavList
-                articlesUnfiledCount={articlesUnfiledCount}
+                inboxCount={inboxCount}
+                readerCount={readerCount}
                 onNavigate={() => setOpen(false)}
               />
             </div>

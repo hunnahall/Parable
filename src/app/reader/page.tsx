@@ -5,7 +5,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { listAllTags } from '@/lib/tags/data'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
-export default async function ArticlesPage({
+export default async function ReaderPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -24,7 +24,7 @@ export default async function ArticlesPage({
   const params = await searchParams
   const filters: ArticlesFilters = {
     query: params.q ?? '',
-    view: 'unfiled',
+    view: 'reading',
     folderIds: params.folder ? params.folder.split(',').filter(Boolean) : [],
     sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
     tag: params.tag ?? null,
@@ -50,9 +50,9 @@ export default async function ArticlesPage({
 
   return (
     <div className={filters.display === 'card' ? 'p-8 max-w-6xl mx-auto' : 'p-8 max-w-3xl mx-auto'}>
-      <h1 className="mb-4">Articles</h1>
+      <h1 className="mb-4">Reader</h1>
       <ArticlesView
-        basePath="/articles"
+        basePath="/reader"
         items={page.items}
         nextCursor={page.nextCursor}
         folders={folders}
@@ -60,6 +60,7 @@ export default async function ArticlesPage({
         allTags={allTags.map((t) => t.tag)}
         filters={filters}
         showFolderPicker
+        showDelete
         enableBulkActions
       />
     </div>

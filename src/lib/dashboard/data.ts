@@ -215,7 +215,7 @@ function toArticleItem(
   }
 }
 
-// Single-article lookup for the reading view (src/app/articles/[id]/page.tsx)
+// Single-article lookup for the reading view (src/app/reader/[id]/page.tsx)
 // — same toArticleItem shape as the list views, plus original_language
 // (needed there to decide whether translate-on-open should run).
 export async function getArticleById(
@@ -400,19 +400,35 @@ export async function getArticlesUnfiledCount(): Promise<number> {
   // return a Content-Range count header for a HEAD request against an RPC
   // endpoint (only plain table queries), so that combination silently came
   // back with count === null here — the badge was always rendering as 0.
-  // The inbox is bounded (excludes saved/archived), so fetching ids and
-  // counting them client-side is cheap and actually works.
+  // The inbox is bounded (excludes saved/archived/reading), so fetching ids
+  // and counting them client-side is cheap and actually works.
   const { data, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
     p_user_id: user.id,
-    p_exclude_states: ['saved', 'archived'],
+    p_exclude_states: ['saved', 'archived', 'reading'],
   }).select('id')
   logQueryError('dashboard/getArticlesUnfiledCount', error)
   return data?.length ?? 0
 }
 
+// Sidebar badge for the Reader nav entry — same pattern as
+// getArticlesUnfiledCount above, just against the 'reading' state directly
+// instead of an exclusion set.
+export async function getReaderCount(): Promise<number> {
+  const user = await getUser()
+  if (!user) return 0
+
+  const supabase = await createClient()
+  const { data, error } = await feedItemsRpc(supabase, 'feed_items_with_state', {
+    p_user_id: user.id,
+    p_state: 'reading',
+  }).select('id')
+  logQueryError('dashboard/getReaderCount', error)
+  return data?.length ?? 0
+}
+
 export interface ArticlesPageFilters {
   query?: string
-  view?: 'unfiled' | 'saved' | 'archived'
+  view?: 'unfiled' | 'saved' | 'archived' | 'reading'
   folderIds?: string[]
   sourceFeedIds?: string[]
   tag?: string | null
@@ -480,7 +496,7 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   } else if (view === 'unfiled') {
     query = feedItemsRpc(supabase, 'feed_items_excluding_states', {
       p_user_id: user.id,
-      p_exclude_states: ['saved', 'archived'],
+      p_exclude_states: ['saved', 'archived', 'reading'],
     }).select(ARTICLE_SELECT)
   } else {
     query = feedItemsRpc(supabase, 'feed_items_with_state', {

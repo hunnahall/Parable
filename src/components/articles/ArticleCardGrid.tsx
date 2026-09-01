@@ -40,6 +40,9 @@ export default function ArticleCardGrid({
   onFolderCreated,
   showFolderPicker = false,
   showDelete = false,
+  showReaderLink = true,
+  selected,
+  onToggleSelect,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -48,6 +51,11 @@ export default function ArticleCardGrid({
   onFolderCreated?: (folder: FolderOption) => void
   showFolderPicker?: boolean
   showDelete?: boolean
+  // False only on the Inbox page — see ArticleCard's identical prop.
+  showReaderLink?: boolean
+  // Only the Inbox page's bulk toolbar passes these — mirrors ArticleCard.
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   // A real header image (captured on first open — see extract.ts/
@@ -57,38 +65,67 @@ export default function ArticleCardGrid({
   // neutral ground, until the article's actually been opened once.
   const hasRealImage = !!item.imageUrl
   const imageSrc = item.imageUrl ?? faviconFor(item.link)
+  const metaParts = [item.feed_title, formatDate(item.published_at)].filter(
+    (part): part is string => !!part
+  )
+
+  const image = imageSrc && (
+    hasRealImage ? (
+      // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
+      <img src={imageSrc} alt="" className="w-full h-full object-cover" />
+    ) : (
+      // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
+      <img src={imageSrc} alt="" className="w-10 h-10 object-contain opacity-70" />
+    )
+  )
 
   return (
     <div className="card-elevated flex flex-col overflow-hidden">
-      <Link
-        href={`/articles/${item.id}`}
-        onMouseDown={() => prefetchArticleContent(item.id)}
-        onTouchStart={() => prefetchArticleContent(item.id)}
-        className="flex items-center justify-center aspect-[16/9] bg-surface-border shrink-0"
-      >
-        {imageSrc &&
-          (hasRealImage ? (
-            // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
-            <img src={imageSrc} alt="" className="w-full h-full object-cover" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
-            <img src={imageSrc} alt="" className="w-10 h-10 object-contain opacity-70" />
-          ))}
-      </Link>
+      <div className="relative aspect-[16/9] shrink-0">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={() => onToggleSelect(item.id)}
+            aria-label={`Select ${item.title}`}
+            className="absolute top-2 left-2 z-10"
+          />
+        )}
+        {showReaderLink ? (
+          <Link
+            href={`/reader/${item.id}`}
+            onMouseDown={() => prefetchArticleContent(item.id)}
+            onTouchStart={() => prefetchArticleContent(item.id)}
+            className="flex items-center justify-center w-full h-full bg-surface-border"
+          >
+            {image}
+          </Link>
+        ) : (
+          <div className="flex items-center justify-center w-full h-full bg-surface-border">{image}</div>
+        )}
+      </div>
       <div className="p-3 flex-1 flex flex-col min-w-0">
         <div className="flex items-center gap-2 text-base text-muted mb-0.5">
-          {item.feed_title && <span className="font-medium truncate">{item.feed_title}</span>}
-          {formatDate(item.published_at) && <span className="shrink-0">{formatDate(item.published_at)}</span>}
+          {metaParts.map((part, i) => (
+            <span key={i} className="flex items-center gap-2 min-w-0">
+              {i > 0 && <span aria-hidden="true">|</span>}
+              <span className={i === 0 ? 'font-medium truncate' : 'shrink-0'}>{part}</span>
+            </span>
+          ))}
         </div>
-        <Link
-          href={`/articles/${item.id}`}
-          onMouseDown={() => prefetchArticleContent(item.id)}
-          onTouchStart={() => prefetchArticleContent(item.id)}
-          onFocus={() => prefetchArticleContent(item.id)}
-          className="text-lg font-medium hover:text-accent hover:underline break-words"
-        >
-          {item.title}
-        </Link>
+        {showReaderLink ? (
+          <Link
+            href={`/reader/${item.id}`}
+            onMouseDown={() => prefetchArticleContent(item.id)}
+            onTouchStart={() => prefetchArticleContent(item.id)}
+            onFocus={() => prefetchArticleContent(item.id)}
+            className="text-lg font-medium hover:text-accent hover:underline break-words"
+          >
+            {item.title}
+          </Link>
+        ) : (
+          <span className="text-lg font-medium break-words">{item.title}</span>
+        )}
         {item.summary && (
           <p className="text-lg text-muted mt-0.5">
             {item.isAiSummary && (
@@ -109,6 +146,7 @@ export default function ArticleCardGrid({
             folders={folders}
             showFolderPicker={showFolderPicker}
             showDelete={showDelete}
+            showAddToReader={!showReaderLink}
           />
         </div>
         {actions.error && <p className="text-base text-danger mt-1">{actions.error}</p>}

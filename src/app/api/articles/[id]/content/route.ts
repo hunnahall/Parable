@@ -3,10 +3,9 @@ import { createClient, getUser } from '@/lib/supabase/server'
 import {
   checkArticleContentCache,
   fetchAndPersistArticleContent,
-  saveTranslatedContent,
+  ensureArticleContentTranslated,
   type ArticleContent,
 } from '@/lib/articles/content'
-import { translateFullContent } from '@/lib/translate'
 import { getUserPreferences } from '@/lib/preferences/data'
 
 // jsdom (via the content extractor) needs real Node APIs.
@@ -21,7 +20,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 // The reading view's slow part, split out of the page's initial render
-// (see src/app/articles/[id]/page.tsx and ArticleReadingView.tsx) so
+// (see src/app/reader/[id]/page.tsx and ArticleReadingView.tsx) so
 // opening an article shows the title/metadata/buttons immediately instead
 // of blocking on a live scrape+translate chain — this is fetched
 // client-side right after the shell mounts.
@@ -47,7 +46,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const [{ data: item, error }, cacheCheck, prefs] = await Promise.all([
       supabase
         .from('feed_items')
-        .select('link, original_language, translate_enabled')
+        .select('link, original_language')
         .eq('id', id)
         .maybeSingle(),
       checkArticleContentCache(id),
@@ -63,25 +62,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       : await fetchAndPersistArticleContent(id, item.link, cacheCheck.attemptCount)
 
     // Translate-on-open: only for articles not already in the user's target
-    // language, only once (cached in content_en_html thereafter), only when
-    // extraction actually succeeded, and only when this item's feed hasn't
-    // opted out of translation entirely (translate_enabled, copied onto the
-    // row at ingest time — see runIngest in src/lib/feeds/ingest.ts).
-    let contentEnHtml = content.contentEnHtml
-    if (
-      item.translate_enabled &&
-      !contentEnHtml &&
-      content.contentText &&
-      item.original_language &&
-      item.original_language !== prefs.language &&
-      item.original_language !== 'und'
-    ) {
-      const translated = await translateFullContent(content.contentText, prefs.language)
-      if (translated) {
-        await saveTranslatedContent(id, translated)
-        contentEnHtml = translated
-      }
-    }
+    // language, only once (cached in content_en_html thereafter), and only
+    // when extraction actually succeeded.
+    const contentEnHtml = await ensureArticleContentTranslated(
+      id,
+      content,
+      item.original_language,
+      prefs.language
+    )
 
     return NextResponse.json({
       contentHtml: contentEnHtml ?? content.contentHtml,

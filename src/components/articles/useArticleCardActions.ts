@@ -2,7 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveArticle, archiveArticle, clearArticleState, deleteArticle } from '@/lib/articles/actions'
+import {
+  saveArticle,
+  archiveArticle,
+  clearArticleState,
+  deleteArticle,
+  moveToReader,
+} from '@/lib/articles/actions'
 import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
 import type { ArticleItem } from '@/lib/dashboard/data'
 import type { FolderOption } from './ArticleCard'
@@ -34,6 +40,19 @@ export function useArticleCardActions({
     setError(null)
     onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString() })
     const result = await archiveArticle(item.id)
+    setPending(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleAddToReader() {
+    setPending(true)
+    setError(null)
+    onUpdate(item.id, { state: 'reading', archivedAt: null })
+    const result = await moveToReader([item.id])
     setPending(false)
     if (result.error) {
       setError(result.error)
@@ -112,6 +131,7 @@ export function useArticleCardActions({
     newFolderName,
     setNewFolderName,
     handleArchive,
+    handleAddToReader,
     handleUnfile,
     handleDelete,
     handleFolderChange,

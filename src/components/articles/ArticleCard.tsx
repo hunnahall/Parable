@@ -37,6 +37,7 @@ export default function ArticleCard({
   compact = false,
   selected,
   onToggleSelect,
+  showReaderLink = true,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -51,9 +52,18 @@ export default function ArticleCard({
   // rendering the checkbox column.
   selected?: boolean
   onToggleSelect?: (id: string) => void
+  // False only on the Inbox page: Inbox articles have no full reading view
+  // (see the plan for the Reader feature) — the title renders as plain
+  // text and "Add to Reader" replaces it as the way to open one.
+  showReaderLink?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showEditors = item.state === 'saved' || item.state === 'archived'
+  const metaParts = [
+    item.feed_title,
+    !compact ? item.category : null,
+    formatDate(item.published_at),
+  ].filter((part): part is string => !!part)
 
   return (
     <li className={compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'p-4'}>
@@ -69,19 +79,26 @@ export default function ArticleCard({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-base text-muted mb-0.5">
-            {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
-            {!compact && item.category && <span>{item.category}</span>}
-            {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
+            {metaParts.map((part, i) => (
+              <span key={i} className="flex items-center gap-2">
+                {i > 0 && <span aria-hidden="true">|</span>}
+                <span className={i === 0 ? 'font-medium' : undefined}>{part}</span>
+              </span>
+            ))}
           </div>
-          <Link
-            href={`/articles/${item.id}`}
-            onMouseDown={() => prefetchArticleContent(item.id)}
-            onTouchStart={() => prefetchArticleContent(item.id)}
-            onFocus={() => prefetchArticleContent(item.id)}
-            className="text-lg font-medium hover:text-accent hover:underline break-words"
-          >
-            {item.title}
-          </Link>
+          {showReaderLink ? (
+            <Link
+              href={`/reader/${item.id}`}
+              onMouseDown={() => prefetchArticleContent(item.id)}
+              onTouchStart={() => prefetchArticleContent(item.id)}
+              onFocus={() => prefetchArticleContent(item.id)}
+              className="text-lg font-medium hover:text-accent hover:underline break-words"
+            >
+              {item.title}
+            </Link>
+          ) : (
+            <span className="text-lg font-medium break-words">{item.title}</span>
+          )}
           {item.summary && (
             <p className="text-lg text-muted mt-0.5">
               {item.isAiSummary && (
@@ -101,6 +118,7 @@ export default function ArticleCard({
             folders={folders}
             showFolderPicker={showFolderPicker}
             showDelete={showDelete}
+            showAddToReader={!showReaderLink}
           />
           {showEditors && (
             <>

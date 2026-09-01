@@ -8,11 +8,13 @@ import CountBadge from './CountBadge'
 
 export default function SidebarNavList({
   collapsed = false,
-  articlesUnfiledCount,
+  inboxCount,
+  readerCount,
   onNavigate,
 }: {
   collapsed?: boolean
-  articlesUnfiledCount: number
+  inboxCount: number
+  readerCount: number
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
@@ -24,7 +26,8 @@ export default function SidebarNavList({
 
         const active = isNavEntryActive(entry.href, pathname)
         const Icon = entry.icon
-        const badgeCount = entry.badge === 'articles' ? articlesUnfiledCount : 0
+        const badgeCount =
+          entry.badge === 'inbox' ? inboxCount : entry.badge === 'reader' ? readerCount : 0
 
         return (
           <Link

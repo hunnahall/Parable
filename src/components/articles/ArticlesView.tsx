@@ -4,13 +4,18 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutList, LayoutGrid } from 'lucide-react'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/dashboard/data'
-import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
+import {
+  fetchArticlesPage,
+  archiveArticlesBulk,
+  purgeArticles,
+  moveToReader,
+} from '@/lib/articles/actions'
 import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
 import ArticleCardGrid from './ArticleCardGrid'
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
 
-export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
+export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived' | 'reading'
 export type ArticlesDisplayMode = 'list' | 'card'
 
 export interface ArticlesFilters {
@@ -37,11 +42,13 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   return qs ? `${basePath}?${qs}` : basePath
 }
 
-// Powers the Articles, Saved, and Archive pages — each passes its own
+// Powers the Inbox, Reader, Saved, and Archive pages — each passes its own
 // `view` (which server-side query getArticlesPage runs) and `basePath` (so
 // filter navigation stays on that page). Save/Archive/Delete affordances
-// per card are the same shared ArticleCard; only Saved shows the folder
-// picker and Delete button, per the plan's explicit Saved-page requirement.
+// per card are the same shared ArticleCard; only Saved and Reader show the
+// folder picker and Delete button. Inbox is the odd one out: its cards
+// have no reading-view link (showReaderLink={false} below) and get an
+// "Add to Reader" action instead, plus the toolbar's bulk "Read" button.
 export default function ArticlesView({
   basePath,
   items,
@@ -63,12 +70,13 @@ export default function ArticlesView({
   filters: ArticlesFilters
   showFolderPicker?: boolean
   showDelete?: boolean
-  // Multi-select toolbar (select all, bulk archive, bulk delete) —
-  // Articles/Saved/Archive all opt in. "Archive selected" is hidden on
-  // the archived view (nothing to do there); "Delete selected" is a full
-  // purge (see purgeArticles) on every view it's shown on, including
-  // Saved and Archive — this can permanently delete an article someone
-  // explicitly saved, by design, per the caller's request.
+  // Multi-select toolbar (select all, plus whichever bulk action fits the
+  // current view) — Inbox/Reader/Saved/Archive all opt in. "Archive
+  // selected" shows on every view except Archive itself (nothing to do
+  // there); "Read selected" only on Inbox (the only view with unfiled,
+  // state===null items to move to Reader); "Delete selected" is a full
+  // purge (see purgeArticles) and only shown on Archive — the one place
+  // permanently discarding a selection in bulk makes sense.
   enableBulkActions?: boolean
 }) {
   const router = useRouter()
@@ -141,6 +149,22 @@ export default function ArticlesView({
     setBulkError(null)
     for (const id of ids) updateItem(id, { state: 'archived', archivedAt: new Date().toISOString() })
     const result = await archiveArticlesBulk(ids)
+    setBulkPending(false)
+    setSelectedIds(new Set())
+    if (result.error) {
+      setBulkError(result.error)
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleBulkRead() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setBulkPending(true)
+    setBulkError(null)
+    for (const id of ids) updateItem(id, { state: 'reading', archivedAt: null })
+    const result = await moveToReader(ids)
     setBulkPending(false)
     setSelectedIds(new Set())
     if (result.error) {
@@ -330,25 +354,37 @@ export default function ArticlesView({
                   type="button"
                   disabled={bulkPending}
                   onClick={handleBulkArchive}
-                  className="border border-border px-3 py-1.5 text-sm hover:bg-foreground/5 transition-colors disabled:opacity-50"
+                  className="border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50"
                 >
                   Archive selected
                 </button>
               )}
-              <button
-                type="button"
-                disabled={bulkPending}
-                onClick={handleBulkDelete}
-                className={
-                  confirmingDelete
-                    ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-sm transition-colors disabled:opacity-50'
-                    : 'border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50'
-                }
-              >
-                {confirmingDelete
-                  ? `Really delete ${selectedIds.size}? Click to confirm`
-                  : 'Delete selected'}
-              </button>
+              {filters.view === 'unfiled' && (
+                <button
+                  type="button"
+                  disabled={bulkPending}
+                  onClick={handleBulkRead}
+                  className="border border-accent text-accent px-3 py-1.5 text-sm hover:bg-accent/10 transition-colors disabled:opacity-50"
+                >
+                  Read selected
+                </button>
+              )}
+              {filters.view === 'archived' && (
+                <button
+                  type="button"
+                  disabled={bulkPending}
+                  onClick={handleBulkDelete}
+                  className={
+                    confirmingDelete
+                      ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-sm transition-colors disabled:opacity-50'
+                      : 'border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50'
+                  }
+                >
+                  {confirmingDelete
+                    ? `Really delete ${selectedIds.size}? Click to confirm`
+                    : 'Delete selected'}
+                </button>
+              )}
               {confirmingDelete && (
                 <button
                   type="button"
@@ -386,6 +422,9 @@ export default function ArticlesView({
               onFolderCreated={handleFolderCreated}
               showFolderPicker={showFolderPicker}
               showDelete={showDelete}
+              showReaderLink={filters.view !== 'unfiled'}
+              selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
+              onToggleSelect={enableBulkActions ? toggleSelect : undefined}
             />
           ))}
         </div>
@@ -401,6 +440,7 @@ export default function ArticlesView({
               onFolderCreated={handleFolderCreated}
               showFolderPicker={showFolderPicker}
               showDelete={showDelete}
+              showReaderLink={filters.view !== 'unfiled'}
               selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
               onToggleSelect={enableBulkActions ? toggleSelect : undefined}
             />

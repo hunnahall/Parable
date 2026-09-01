@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X } from 'lucide-react'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
-import { runAutoDeleteRulesNow } from '@/lib/settings/actions'
 import { SUPPORTED_LANGUAGES } from '@/lib/languages'
 import ExportFeedsButton from './ExportFeedsButton'
 import CleanSlateSection from './CleanSlateSection'
@@ -33,9 +31,6 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
   const [prefs, setPrefs] = useState(initialPreferences)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [keywordInput, setKeywordInput] = useState('')
-  const [runningRules, setRunningRules] = useState(false)
-  const [rulesRunResult, setRulesRunResult] = useState<string | null>(null)
 
   // Computed only after mount, not during render — Intl.supportedValuesOf's
   // zone list and the resolved default zone both come from the runtime's own
@@ -78,40 +73,6 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
     // layout (a Server Component) — a client-only state update can't
     // reach those, so this needs the real page refresh other mutations in
     // this app avoid.
-    router.refresh()
-  }
-
-  function addKeyword() {
-    const trimmed = keywordInput.trim()
-    if (!trimmed) return
-    setKeywordInput('')
-    if (prefs.autoDeleteKeywords.some((word) => word.toLowerCase() === trimmed.toLowerCase())) return
-    setRulesRunResult(null)
-    applyChange({ autoDeleteKeywords: [...prefs.autoDeleteKeywords, trimmed] })
-  }
-
-  function removeKeyword(word: string) {
-    setRulesRunResult(null)
-    applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
-  }
-
-  async function handleRunRulesNow() {
-    setRunningRules(true)
-    setRulesRunResult(null)
-    const result = await runAutoDeleteRulesNow()
-    setRunningRules(false)
-    if (result.error !== null) {
-      setRulesRunResult(result.error)
-      return
-    }
-    setRulesRunResult(
-      result.deletedCount === 0
-        ? 'No matching articles found.'
-        : `Deleted ${result.deletedCount} article${result.deletedCount === 1 ? '' : 's'}.`
-    )
-    // Removed articles affect the Articles list and the sidebar's unread
-    // count, both server-rendered — a client-only state update can't reach
-    // either.
     router.refresh()
   }
 
@@ -189,78 +150,6 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
             </option>
           ))}
         </select>
-      </div>
-
-      <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-lg font-bold font-heading">Auto-delete by keyword</h2>
-        <p className="text-base text-muted">
-          New articles with these keywords in the title will be automatically discarded.
-        </p>
-        <label className="flex items-center gap-1.5 text-base">
-          <input
-            type="checkbox"
-            checked={prefs.autoDeleteEnabled}
-            onChange={(e) => applyChange({ autoDeleteEnabled: e.target.checked })}
-          />
-          Enabled
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addKeyword()
-              }
-            }}
-            placeholder="e.g. soccer"
-            className="flex-1 border border-border px-3 py-2 text-lg bg-background"
-          />
-          <button
-            type="button"
-            onClick={addKeyword}
-            className="border border-border px-3 py-2 text-base hover:bg-foreground/5 transition-colors"
-          >
-            Add
-          </button>
-        </div>
-        {prefs.autoDeleteKeywords.length > 0 && (
-          <ul className="flex flex-wrap gap-2">
-            {prefs.autoDeleteKeywords.map((word) => (
-              <li
-                key={word}
-                className="flex items-center gap-1 border border-border px-2 py-1 text-base"
-              >
-                {word}
-                <button
-                  type="button"
-                  onClick={() => removeKeyword(word)}
-                  aria-label={`Remove ${word}`}
-                  className="text-muted hover:text-foreground transition-colors"
-                >
-                  <X size={12} strokeWidth={1.75} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div>
-          <button
-            type="button"
-            onClick={handleRunRulesNow}
-            disabled={runningRules || prefs.autoDeleteKeywords.length === 0}
-            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
-          >
-            {runningRules ? 'Running…' : 'Run rules now'}
-          </button>
-          <p className="text-base text-muted mt-1">
-            Deletes any article currently in your Articles inbox whose title matches one of these
-            keywords. Saved and archived articles are left alone.
-          </p>
-          {rulesRunResult && <p className="text-base text-muted mt-1">{rulesRunResult}</p>}
-        </div>
       </div>
 
       <div className="card-elevated p-4 space-y-2">

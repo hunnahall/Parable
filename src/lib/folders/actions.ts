@@ -22,7 +22,8 @@ export async function addFolder(input: {
   if (error) return { id: null, error: error.message }
 
   revalidatePath('/feeds')
-  revalidatePath('/articles')
+  revalidatePath('/inbox')
+  revalidatePath('/reader')
   revalidatePath('/saved')
   revalidatePath('/archive')
   return { id: data.id, error: null }
@@ -127,6 +128,7 @@ export async function assignArticleToFolder(
     if (error) return { error: error.message }
   }
 
+  revalidatePath('/reader')
   revalidatePath('/saved')
   revalidatePath('/archive')
   return { error: null }

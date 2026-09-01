@@ -34,7 +34,8 @@ async function rewriteTagAcrossArticles(
     if (error) return { error: error.message }
   }
 
-  revalidatePath('/articles')
+  revalidatePath('/inbox')
+  revalidatePath('/reader')
   revalidatePath('/saved')
   revalidatePath('/archive')
   revalidatePath('/feeds')

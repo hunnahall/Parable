@@ -7,6 +7,7 @@ import { prewarmArticleContent, prewarmArticleImage } from '@/lib/articles/conte
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
 import { detectArticles } from './buildFeed'
+import { mapWithConcurrency } from '@/lib/concurrency'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
 // Some feeds put the full article body in <content:encoded>/<description>
@@ -41,32 +42,12 @@ const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https:/
 // per-connection rate limits.
 const FEED_CONCURRENCY = 6
 const ITEM_CONCURRENCY = 5
-// The background content-prewarm pass (see the translate_enabled branch in
+// The background content-prewarm pass (see the needsTranslation branch in
 // processItem/runIngest below) is a live scrape of an external site per
 // item, same as the reading view's own lazy fetch — kept low so an ingest
-// run with a lot of new items on translate-disabled feeds doesn't hammer
+// run with a lot of new items in the user's own language doesn't hammer
 // several hosts at once.
 const PREWARM_CONCURRENCY = 3
-
-// Runs `fn` over `items` with at most `limit` calls in flight at once.
-// Order of results matches `items`; order of completion doesn't.
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length)
-  let nextIndex = 0
-  async function worker() {
-    for (;;) {
-      const i = nextIndex++
-      if (i >= items.length) return
-      results[i] = await fn(items[i])
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
-  return results
-}
 
 // rss-parser's underlying XML parser (sax-js) always reports a parse
 // failure with "Line: N" and "Column: N" in the message — a distinctive
@@ -153,13 +134,6 @@ type FeedRow = {
   title: string | null
   is_scraped: boolean
   summarize_articles: boolean
-  // Per-feed opt-out from all translation (ingest-time title/summary and
-  // reading-view full-content alike) — see setFeedTranslateEnabled in
-  // src/lib/feeds/actions.ts and the checkbox in FeedManager.tsx. Off
-  // guarantees this feed's articles never trigger an OpenAI translate
-  // call, which is what makes eagerly pre-caching their content below
-  // safe (no speculative API cost, only a scrape).
-  translate_enabled: boolean
   consecutive_failures: number
 }
 // Deliberately a small structural subset rather than rss-parser's own Item
@@ -216,14 +190,15 @@ async function processItem(
     // translateArticle() re-strips these same raw strings internally —
     // passing it the same raw HTML that stripHtml() cleans here keeps the
     // stored title/summary and the detected/translated text based on
-    // identical input. Skipped entirely for a translate_enabled=false
-    // feed — see the FeedRow.translate_enabled comment above — rather
-    // than just letting franc's language detection decide, since a
-    // false-positive detection on short/ambiguous text would otherwise
-    // still trigger a translate-on-open attempt later.
-    const { original_language, title_en, summary_en } = feed.translate_enabled
-      ? await translateArticle(rawTitle, rawSummary, targetLanguage)
-      : { original_language: null, title_en: null, summary_en: null }
+    // identical input. Always attempted (no per-feed opt-out) — it does
+    // its own local language detection and skips the OpenAI call entirely
+    // whenever the detected language already matches the target, so this
+    // never pays for a translation nothing needed.
+    const { original_language, title_en, summary_en } = await translateArticle(
+      rawTitle,
+      rawSummary,
+      targetLanguage
+    )
 
     // Auto-delete runs after translation (so a keyword typed in the user's
     // target language matches a title that's now in that language,
@@ -270,12 +245,6 @@ async function processItem(
           summary_en,
           summary_ai,
           image_url: item.imageUrl ?? null,
-          // Copied from the feed at insert time rather than looked up
-          // per-open — same pattern as summary_ai/feed.summarize_articles
-          // above. A later toggle of the feed's checkbox only affects
-          // items ingested after that point, not ones already sitting in
-          // the inbox.
-          translate_enabled: feed.translate_enabled,
         },
         { onConflict: 'feed_id,guid', ignoreDuplicates: true }
       )
@@ -286,20 +255,26 @@ async function processItem(
     }
 
     // Only set on a genuine insert (upserted is empty when ignoreDuplicates
-    // skipped a same-run race — see the comment above) and only for a
-    // translate_enabled=false feed, since that's what guarantees the
-    // prewarm scrape below can't be followed by a wasted OpenAI call.
+    // skipped a same-run race — see the comment above) and only when this
+    // item's own detected language already matches the target (or
+    // couldn't be detected), since that's what guarantees the prewarm
+    // scrape below can't be followed by a wasted OpenAI call. Full-body
+    // translation itself never runs at ingest time — only lazily on open
+    // (see /api/articles/[id]/content) or eagerly once an article is moved
+    // to Reader (see moveToReader in src/lib/articles/actions.ts).
     const insertedId = upserted?.[0]?.id as string | undefined
+    const needsTranslation = original_language !== targetLanguage && original_language !== 'und'
     const prewarm: PrewarmTarget | null =
-      !feed.translate_enabled && insertedId && item.link
+      !needsTranslation && insertedId && item.link
         ? { feedItemId: insertedId, link: item.link }
         : null
-    // A translate-enabled feed skips the full prewarm above, but a cover
-    // image has no OpenAI cost either way — fetch just the header image
-    // for these too (unless the RSS item already carried its own image),
-    // rather than leaving every item on the favicon fallback until opened.
+    // An item needing translation skips the full prewarm above, but a
+    // cover image has no OpenAI cost either way — fetch just the header
+    // image for these too (unless the RSS item already carried its own
+    // image), rather than leaving every item on the favicon fallback
+    // until opened.
     const prewarmImage: PrewarmTarget | null =
-      feed.translate_enabled && !item.imageUrl && insertedId && item.link
+      needsTranslation && !item.imageUrl && insertedId && item.link
         ? { feedItemId: insertedId, link: item.link }
         : null
 
@@ -483,7 +458,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
     await Promise.all([
       supabase
         .from('feeds')
-        .select('id, url, title, is_scraped, summarize_articles, translate_enabled, consecutive_failures')
+        .select('id, url, title, is_scraped, summarize_articles, consecutive_failures')
         .is('deleted_at', null),
       loadIngestPreferences(supabase),
     ])

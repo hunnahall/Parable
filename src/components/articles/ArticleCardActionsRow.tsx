@@ -19,12 +19,16 @@ export default function ArticleCardActionsRow({
   folders,
   showFolderPicker = false,
   showDelete = false,
+  showAddToReader = false,
 }: {
   item: ArticleItem
   actions: ReturnType<typeof useArticleCardActions>
   folders?: FolderOption[]
   showFolderPicker?: boolean
   showDelete?: boolean
+  // Inbox only — moves this one article to Reader. See ArticleCard/
+  // ArticleCardGrid's showReaderLink prop, which this is tied to.
+  showAddToReader?: boolean
 }) {
   const {
     pending,
@@ -33,6 +37,7 @@ export default function ArticleCardActionsRow({
     newFolderName,
     setNewFolderName,
     handleArchive,
+    handleAddToReader,
     handleUnfile,
     handleDelete,
     handleFolderChange,
@@ -41,6 +46,16 @@ export default function ArticleCardActionsRow({
 
   return (
     <div className="flex items-center gap-3 mt-1 flex-wrap">
+      {showAddToReader && item.state === null && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleAddToReader}
+          className="text-sm text-accent hover:opacity-80 transition-colors disabled:opacity-50"
+        >
+          Read
+        </button>
+      )}
       {item.state === 'saved' && (
         <button
           type="button"
@@ -65,12 +80,12 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleArchive}
-          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
         >
           Archive
         </button>
       )}
-      {showDelete && item.state === 'saved' && (
+      {showDelete && (item.state === 'saved' || item.state === 'reading') && (
         <button
           type="button"
           disabled={pending}

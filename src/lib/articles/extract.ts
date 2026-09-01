@@ -47,12 +47,12 @@ function extractHeaderImage(document: Document): string | null {
 }
 
 // Cheap header-image-only fetch — used to eagerly populate
-// feed_items.image_url for a newly ingested item regardless of the feed's
-// translate_enabled setting (see ingest.ts). fetchAndExtractContent below
-// is reserved for translate-disabled feeds since it also runs Readability
-// and persists the full article body; this skips both, so a
-// translate-enabled feed still gets a real cover image without paying for
-// (or caching) content that the lazy open-time fetch will redo anyway.
+// feed_items.image_url for a newly ingested item regardless of whether it
+// needs translation (see ingest.ts). fetchAndExtractContent below is
+// reserved for items already in the target language since it also runs
+// Readability and persists the full article body; this skips both, so an
+// item needing translation still gets a real cover image without paying
+// for (or caching) content that a lazy open-time fetch will redo anyway.
 export async function fetchHeaderImage(url: string): Promise<string | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)

@@ -9,7 +9,6 @@ import {
   removeFeed,
   runIngestNow,
   setFeedSummarizeArticles,
-  setFeedTranslateEnabled,
 } from '@/lib/feeds/actions'
 import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
@@ -163,26 +162,6 @@ export default function FeedManager({
       setError(result.error)
       setLocalFeeds((prev) =>
         prev.map((f) => (f.id === feed.id ? { ...f, summarize_articles: feed.summarize_articles } : f))
-      )
-      return
-    }
-    router.refresh()
-  }
-
-  // Same pattern as handleToggleSummarize above — no Edit-mode round trip.
-  // Unchecking this is a promise that this feed never needs translation
-  // (see setFeedTranslateEnabled), which is also what lets runIngest
-  // safely pre-cache this feed's future articles.
-  async function handleToggleTranslate(feed: FeedRow) {
-    const next = !feed.translate_enabled
-    setLocalFeeds((prev) =>
-      prev.map((f) => (f.id === feed.id ? { ...f, translate_enabled: next } : f))
-    )
-    const result = await setFeedTranslateEnabled(feed.id, next)
-    if (result.error) {
-      setError(result.error)
-      setLocalFeeds((prev) =>
-        prev.map((f) => (f.id === feed.id ? { ...f, translate_enabled: feed.translate_enabled } : f))
       )
       return
     }
@@ -456,17 +435,6 @@ export default function FeedManager({
                               onChange={() => handleToggleSummarize(feed)}
                             />
                             AI summary
-                          </label>
-                          <label
-                            className="flex items-center gap-1.5 text-base text-muted"
-                            title="Uncheck if this feed's articles never need translation — lets Parable pre-cache new articles from it for faster opening"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={feed.translate_enabled}
-                              onChange={() => handleToggleTranslate(feed)}
-                            />
-                            Translate
                           </label>
                           <button
                             type="button"

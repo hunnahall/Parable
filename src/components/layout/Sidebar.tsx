@@ -12,11 +12,13 @@ import { signOut } from '@/app/login/actions'
 export default function Sidebar({
   initialCollapsed,
   userEmail,
-  articlesUnfiledCount,
+  inboxCount,
+  readerCount,
 }: {
   initialCollapsed: boolean
   userEmail: string
-  articlesUnfiledCount: number
+  inboxCount: number
+  readerCount: number
 }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const [, startTransition] = useTransition()
@@ -70,7 +72,7 @@ export default function Sidebar({
       )}
 
       <div className="flex-1 overflow-y-auto px-2">
-        <SidebarNavList collapsed={collapsed} articlesUnfiledCount={articlesUnfiledCount} />
+        <SidebarNavList collapsed={collapsed} inboxCount={inboxCount} readerCount={readerCount} />
       </div>
 
       <div className="border-t border-border-subtle p-3 text-base">

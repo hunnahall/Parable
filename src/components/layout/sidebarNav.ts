@@ -1,27 +1,29 @@
 import {
   LayoutGrid,
   Newspaper,
+  BookOpen,
   Bookmark,
   Archive,
   Rss,
-  ScrollText,
+  Filter,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
 
 export type SidebarNavEntry =
-  | { type: 'link'; href: string; label: string; icon: LucideIcon; badge?: 'articles' }
+  | { type: 'link'; href: string; label: string; icon: LucideIcon; badge?: 'inbox' | 'reader' }
   | { type: 'divider' }
 
 export const SIDEBAR_NAV: SidebarNavEntry[] = [
   { type: 'link', href: '/', label: 'Dashboard', icon: LayoutGrid },
   { type: 'divider' },
-  { type: 'link', href: '/articles', label: 'Articles', icon: Newspaper, badge: 'articles' },
+  { type: 'link', href: '/inbox', label: 'Inbox', icon: Newspaper, badge: 'inbox' },
+  { type: 'link', href: '/reader', label: 'Reader', icon: BookOpen, badge: 'reader' },
   { type: 'link', href: '/saved', label: 'Saved', icon: Bookmark },
   { type: 'link', href: '/archive', label: 'Archive', icon: Archive },
   { type: 'link', href: '/feeds', label: 'Feeds', icon: Rss },
-  { type: 'link', href: '/log', label: 'Log', icon: ScrollText },
   { type: 'divider' },
+  { type: 'link', href: '/filters', label: 'Filters', icon: Filter },
   { type: 'link', href: '/settings', label: 'Settings', icon: Settings },
 ]
 

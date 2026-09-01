@@ -4,7 +4,7 @@ import { Hanken_Grotesk, Inter, Work_Sans, Instrument_Sans, Lato } from 'next/fo
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getArticlesUnfiledCount } from '@/lib/dashboard/data'
+import { getArticlesUnfiledCount, getReaderCount } from '@/lib/dashboard/data'
 import ParableMark from '@/components/brand/ParableMark'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
@@ -33,9 +33,10 @@ export default async function RootLayout({
   // on every single navigation, since this layout re-executes on every
   // request (getUser() reads cookies(), which opts the whole tree out of
   // Next.js's route-segment caching).
-  const [prefs, articlesUnfiledCount] = await Promise.all([
+  const [prefs, inboxCount, readerCount] = await Promise.all([
     getUserPreferences(),
     user ? getArticlesUnfiledCount() : Promise.resolve(0),
+    user ? getReaderCount() : Promise.resolve(0),
   ])
 
   return (
@@ -51,12 +52,14 @@ export default async function RootLayout({
               <Sidebar
                 initialCollapsed={prefs.sidebarCollapsed}
                 userEmail={user.email ?? ''}
-                articlesUnfiledCount={articlesUnfiledCount}
+                inboxCount={inboxCount}
+                readerCount={readerCount}
               />
               <div className="flex-1 min-w-0 flex flex-col">
                 <MobileSidebarDrawer
                   userEmail={user.email ?? ''}
-                  articlesUnfiledCount={articlesUnfiledCount}
+                  inboxCount={inboxCount}
+                  readerCount={readerCount}
                 />
                 <main className="flex-1 min-w-0">{children}</main>
               </div>
