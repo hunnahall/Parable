@@ -4,8 +4,8 @@ import { useState } from 'react'
 import type { ArticleItem } from '@/lib/dashboard/data'
 
 // Shared optimistic-local-copy pattern used by every article list surface
-// (Articles/Saved/Archive pages, dashboard widgets) — router.refresh()
-// re-runs the whole page's server data, so gating a visible state change on
+// (Inbox/Reader/Saved/Archive pages) — router.refresh() re-runs the whole
+// page's server data, so gating a visible state change on
 // it makes a single save/archive/tag edit feel multi-second slow.
 //
 // `belongs` decides whether an item, after a patch, still matches this

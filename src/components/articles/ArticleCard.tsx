@@ -20,9 +20,9 @@ function formatDate(dateString: string | null): string | null {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// Shared card used by Articles/Saved/Archive pages and the dashboard's
-// article-list widgets — one place for the save/archive/tag button row
-// instead of duplicating it per surface. Save/Archive/Unsave always patch
+// Shared card used by the Inbox/Reader/Saved/Archive pages — one place for
+// the save/archive/tag button row instead of duplicating it per surface.
+// Save/Archive/Unsave always patch
 // via onUpdate; the caller's list (see useOptimisticArticleList) decides
 // whether the patched item still belongs in its current view and drops it
 // if not, so this component doesn't need to know what view it's in.
@@ -48,8 +48,7 @@ export default function ArticleCard({
   showDelete?: boolean
   compact?: boolean
   // Only the Articles page's bulk toolbar passes these — undefined
-  // elsewhere (Saved/Archive/dashboard widgets), which just skips
-  // rendering the checkbox column.
+  // elsewhere, which just skips rendering the checkbox column.
   selected?: boolean
   onToggleSelect?: (id: string) => void
   // False only on the Inbox page: Inbox articles have no full reading view

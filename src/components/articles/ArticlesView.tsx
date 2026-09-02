@@ -44,11 +44,13 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
 
 // Powers the Inbox, Reader, Saved, and Archive pages — each passes its own
 // `view` (which server-side query getArticlesPage runs) and `basePath` (so
-// filter navigation stays on that page). Save/Archive/Delete affordances
-// per card are the same shared ArticleCard; only Saved and Reader show the
-// folder picker and Delete button. Inbox is the odd one out: its cards
-// have no reading-view link (showReaderLink={false} below) and get an
-// "Add to Reader" action instead, plus the toolbar's bulk "Read" button.
+// filter navigation stays on that page). Save/Archive affordances per card
+// are the same shared ArticleCard; only Saved and Reader show the folder
+// picker. Inbox is the odd one out: its cards have no reading-view link
+// (showReaderLink={false} below) and get an "Add to Reader" action instead,
+// plus the toolbar's bulk "Read" button. Per-card deletion only exists on
+// Archive (showDelete) — everywhere else, deleting is a bulk-only action
+// scoped to Archive's "Delete selected".
 export default function ArticlesView({
   basePath,
   items,
@@ -59,6 +61,7 @@ export default function ArticlesView({
   filters,
   showFolderPicker = false,
   showDelete = false,
+  showDateFilters = true,
   enableBulkActions = false,
 }: {
   basePath: string
@@ -70,6 +73,10 @@ export default function ArticlesView({
   filters: ArticlesFilters
   showFolderPicker?: boolean
   showDelete?: boolean
+  // Archive keeps the From/To date pickers in its toolbar; Inbox, Reader,
+  // and Saved drop them so the search bar, folder/source dropdowns, and
+  // list/card toggle all fit on one aligned line.
+  showDateFilters?: boolean
   // Multi-select toolbar (select all, plus whichever bulk action fits the
   // current view) — Inbox/Reader/Saved/Archive all opt in. "Archive
   // selected" shows on every view except Archive itself (nothing to do
@@ -242,33 +249,37 @@ export default function ArticlesView({
             options={localFolders.map((f) => ({ id: f.id, label: f.label }))}
             selectedIds={filters.folderIds}
             onChange={(folderIds) => navigate({ folderIds })}
-            className="w-40"
+            className="w-32"
           />
           <MultiSelectDropdown
             label="All sources"
             options={feedOptions.map((f) => ({ id: f.id, label: f.title ?? f.id }))}
             selectedIds={filters.sourceFeedIds}
             onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
-            className="w-48"
+            className="w-36"
           />
-          <label className="flex items-center gap-1.5 text-base text-muted">
-            From
-            <input
-              type="date"
-              value={filters.dateFrom ?? ''}
-              onChange={(e) => navigate({ dateFrom: e.target.value || null })}
-              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
-            />
-          </label>
-          <label className="flex items-center gap-1.5 text-base text-muted">
-            To
-            <input
-              type="date"
-              value={filters.dateTo ?? ''}
-              onChange={(e) => navigate({ dateTo: e.target.value || null })}
-              className="border border-border px-3 py-2 text-lg bg-background text-foreground"
-            />
-          </label>
+          {showDateFilters && (
+            <>
+              <label className="flex items-center gap-1.5 text-base text-muted">
+                From
+                <input
+                  type="date"
+                  value={filters.dateFrom ?? ''}
+                  onChange={(e) => navigate({ dateFrom: e.target.value || null })}
+                  className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-base text-muted">
+                To
+                <input
+                  type="date"
+                  value={filters.dateTo ?? ''}
+                  onChange={(e) => navigate({ dateTo: e.target.value || null })}
+                  className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+                />
+              </label>
+            </>
+          )}
           <div className="flex items-center border border-border ml-auto">
             <button
               type="button"

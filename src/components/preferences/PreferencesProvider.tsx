@@ -9,7 +9,7 @@ const PreferencesContext = createContext<UserPreferences | null>(null)
 // src/app/layout.tsx (a Server Component, so they're flash-free on first
 // paint) — this context is only for the preferences nested client
 // components need at render time: timezone/clock-format for date
-// formatting, calendar view for CalendarWidget.
+// formatting.
 export function PreferencesProvider({
   preferences,
   children,

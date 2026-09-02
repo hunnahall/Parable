@@ -60,7 +60,7 @@ export default async function SavedPage({
         allTags={allTags.map((t) => t.tag)}
         filters={filters}
         showFolderPicker
-        showDelete
+        showDateFilters={false}
         enableBulkActions
       />
     </div>

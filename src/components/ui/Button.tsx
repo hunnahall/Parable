@@ -11,10 +11,9 @@ const SIZES: Record<ButtonSize, string> = {
   compact: 'px-2.5 py-1 text-sm',
 }
 
-// Direct systematization of patterns already in use across the app (e.g.
-// AddWidgetMenu's submit button, ArticlesView's delete button) — zero
-// new visual language, one place instead of N ad hoc classNames. Zero
-// corner radius throughout, matching the rest of the app.
+// Direct systematization of patterns already in use across the app —
+// zero new visual language, one place instead of N ad hoc classNames.
+// Zero corner radius throughout, matching the rest of the app.
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-foreground text-background hover:opacity-90',
   secondary: 'border border-border text-foreground hover:bg-foreground/5',

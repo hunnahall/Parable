@@ -1,5 +1,4 @@
 import {
-  LayoutGrid,
   Newspaper,
   BookOpen,
   Bookmark,
@@ -15,8 +14,6 @@ export type SidebarNavEntry =
   | { type: 'divider' }
 
 export const SIDEBAR_NAV: SidebarNavEntry[] = [
-  { type: 'link', href: '/', label: 'Dashboard', icon: LayoutGrid },
-  { type: 'divider' },
   { type: 'link', href: '/inbox', label: 'Inbox', icon: Newspaper, badge: 'inbox' },
   { type: 'link', href: '/reader', label: 'Reader', icon: BookOpen, badge: 'reader' },
   { type: 'link', href: '/saved', label: 'Saved', icon: Bookmark },
