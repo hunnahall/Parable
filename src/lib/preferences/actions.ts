@@ -14,8 +14,6 @@ export async function updatePreferences(
   const { error } = await supabase.from('user_preferences').upsert({
     user_id: user.id,
     font: prefs.font,
-    timezone: prefs.timezone,
-    clock_format: prefs.clockFormat,
     sidebar_collapsed: prefs.sidebarCollapsed,
     language: prefs.language,
     auto_delete_enabled: prefs.autoDeleteEnabled,

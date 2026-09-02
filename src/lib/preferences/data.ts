@@ -3,14 +3,9 @@ import { logQueryError } from '@/lib/supabase/logError'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 
 export type FontChoice = 'inter' | 'hanken-grotesk' | 'work-sans' | 'instrument-sans' | 'lato'
-export type ClockFormat = '12h' | '24h'
 
 export interface UserPreferences {
   font: FontChoice
-  // '' means auto-detect from the browser rather than an explicit
-  // IANA override — see src/lib/formatting.ts.
-  timezone: string
-  clockFormat: ClockFormat
   sidebarCollapsed: boolean
   // ISO 639-1 code (see src/lib/languages.ts) — the target language for
   // ingest-time title/summary translation and translate-on-open, not a UI
@@ -28,8 +23,6 @@ export interface UserPreferences {
 // branch), and dropping the column wasn't worth the extra schema churn.
 export const DEFAULT_PREFERENCES: UserPreferences = {
   font: 'inter',
-  timezone: '',
-  clockFormat: '24h',
   sidebarCollapsed: false,
   language: DEFAULT_LANGUAGE,
   autoDeleteEnabled: false,
@@ -46,9 +39,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('user_preferences')
-    .select(
-      'font, timezone, clock_format, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords'
-    )
+    .select('font, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords')
     .eq('user_id', user.id)
     .maybeSingle()
   logQueryError('preferences/getUserPreferences', error)
@@ -56,8 +47,6 @@ export async function getUserPreferences(): Promise<UserPreferences> {
 
   return {
     font: data.font as FontChoice,
-    timezone: data.timezone,
-    clockFormat: data.clock_format as ClockFormat,
     sidebarCollapsed: data.sidebar_collapsed,
     language: data.language,
     autoDeleteEnabled: data.auto_delete_enabled,

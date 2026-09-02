@@ -8,7 +8,6 @@ import { getArticlesUnfiledCount, getReaderCount } from '@/lib/dashboard/data'
 import ParableMark from '@/components/brand/ParableMark'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
-import { PreferencesProvider } from '@/components/preferences/PreferencesProvider'
 
 const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken-grotesk' })
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -46,35 +45,33 @@ export default async function RootLayout({
       className={`${hankenGrotesk.variable} ${inter.variable} ${workSans.variable} ${instrumentSans.variable} ${lato.variable}`}
     >
       <body>
-        <PreferencesProvider preferences={prefs}>
-          {user ? (
-            <div className="flex min-h-screen">
-              <Sidebar
-                initialCollapsed={prefs.sidebarCollapsed}
+        {user ? (
+          <div className="flex min-h-screen">
+            <Sidebar
+              initialCollapsed={prefs.sidebarCollapsed}
+              userEmail={user.email ?? ''}
+              inboxCount={inboxCount}
+              readerCount={readerCount}
+            />
+            <div className="flex-1 min-w-0 flex flex-col">
+              <MobileSidebarDrawer
                 userEmail={user.email ?? ''}
                 inboxCount={inboxCount}
                 readerCount={readerCount}
               />
-              <div className="flex-1 min-w-0 flex flex-col">
-                <MobileSidebarDrawer
-                  userEmail={user.email ?? ''}
-                  inboxCount={inboxCount}
-                  readerCount={readerCount}
-                />
-                <main className="flex-1 min-w-0">{children}</main>
-              </div>
+              <main className="flex-1 min-w-0">{children}</main>
             </div>
-          ) : (
-            <>
-              <header className="flex items-center gap-4 p-4 border-b border-border text-base">
-                <Link href="/" aria-label="Parable">
-                  <ParableMark size={22} />
-                </Link>
-              </header>
-              {children}
-            </>
-          )}
-        </PreferencesProvider>
+          </div>
+        ) : (
+          <>
+            <header className="flex items-center gap-4 p-4 border-b border-border text-base">
+              <Link href="/" aria-label="Parable">
+                <ParableMark size={22} />
+              </Link>
+            </header>
+            {children}
+          </>
+        )}
       </body>
     </html>
   )
