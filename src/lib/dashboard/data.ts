@@ -213,7 +213,7 @@ function toArticleItem(
   }
 }
 
-// Single-article lookup for the reading view (src/app/reader/[id]/page.tsx)
+// Single-article lookup for the reading view (src/app/read/[id]/page.tsx)
 // — same toArticleItem shape as the list views, plus original_language
 // (needed there to decide whether translate-on-open should run).
 export async function getArticleById(
@@ -289,7 +289,7 @@ export interface ArticlesPageFilters {
   view?: 'unfiled' | 'saved' | 'archived' | 'reading'
   folderIds?: string[]
   sourceFeedIds?: string[]
-  tag?: string | null
+  tagIds?: string[]
   dateFrom?: string | null
   dateTo?: string | null
   cursor?: { publishedAt: string; id: string } | null
@@ -311,9 +311,9 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 // it's immune to that. (published_at, id) as the cursor tuple because
 // published_at alone isn't unique; id is the tiebreaker for a total order.
 //
-// Powers all three lifecycle pages (Articles/Saved/Archive) via `view`:
+// Powers all three lifecycle pages (Articles/Save/Archive) via `view`:
 // 'unfiled' = no article_states row yet (default, the Articles page),
-// 'saved'/'archived' = state matches exactly (the Saved/Archive pages).
+// 'saved'/'archived' = state matches exactly (the Save/Archive pages).
 export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
   const user = await getUser()
   if (!user) return { items: [], nextCursor: null }
@@ -329,7 +329,8 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   // Unfiled articles never have a curation row, so they can never carry
   // tags — a tag filter combined with the unfiled view is definitionally
   // empty rather than a query worth running.
-  if (filters.tag && view === 'unfiled') {
+  const hasTagFilter = !!filters.tagIds && filters.tagIds.length > 0
+  if (hasTagFilter && view === 'unfiled') {
     return { items: [], nextCursor: null }
   }
 
@@ -339,11 +340,12 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   // which do the state membership test as a real SQL join instead of
   // interpolating every matching id into the request URL — that's what
   // broke once article_states grew past a few hundred rows (see the
-  // migration that added those functions).
+  // migration that added those functions). Multiple selected tags union
+  // together (OR), matching how folder/source multi-select already works.
   let includeIds: string[] | null = null
-  if (filters.tag) {
+  if (hasTagFilter) {
     includeIds = [...states.entries()]
-      .filter(([, info]) => info.state === view && info.tags.includes(filters.tag!))
+      .filter(([, info]) => info.state === view && filters.tagIds!.some((tag) => info.tags.includes(tag)))
       .map(([id]) => id)
   }
 

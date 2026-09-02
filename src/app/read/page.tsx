@@ -5,14 +5,14 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { listAllTags } from '@/lib/tags/data'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
-export default async function SavedPage({
+export default async function ReadPage({
   searchParams,
 }: {
   searchParams: Promise<{
     q?: string
     folder?: string
     source?: string
-    tag?: string
+    tags?: string
     from?: string
     to?: string
     display?: string
@@ -24,10 +24,10 @@ export default async function SavedPage({
   const params = await searchParams
   const filters: ArticlesFilters = {
     query: params.q ?? '',
-    view: 'saved',
+    view: 'reading',
     folderIds: params.folder ? params.folder.split(',').filter(Boolean) : [],
     sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
-    tag: params.tag ?? null,
+    tagIds: params.tags ? params.tags.split(',').filter(Boolean) : [],
     dateFrom: params.from ?? null,
     dateTo: params.to ?? null,
     display: params.display === 'card' ? 'card' : 'list',
@@ -39,7 +39,7 @@ export default async function SavedPage({
       view: filters.view,
       folderIds: filters.folderIds,
       sourceFeedIds: filters.sourceFeedIds,
-      tag: filters.tag,
+      tagIds: filters.tagIds,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
     }),
@@ -50,9 +50,9 @@ export default async function SavedPage({
 
   return (
     <div className={filters.display === 'card' ? 'p-8 max-w-6xl mx-auto' : 'p-8 max-w-3xl mx-auto'}>
-      <h1 className="mb-4">Saved</h1>
+      <h1 className="mb-4">Read</h1>
       <ArticlesView
-        basePath="/saved"
+        basePath="/read"
         items={page.items}
         nextCursor={page.nextCursor}
         folders={folders}
@@ -61,6 +61,7 @@ export default async function SavedPage({
         filters={filters}
         showFolderPicker
         showDateFilters={false}
+        showTagsDropdown
         enableBulkActions
       />
     </div>

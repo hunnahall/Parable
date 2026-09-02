@@ -12,7 +12,7 @@ export default async function ArticlesPage({
     q?: string
     folder?: string
     source?: string
-    tag?: string
+    tags?: string
     from?: string
     to?: string
     display?: string
@@ -27,7 +27,7 @@ export default async function ArticlesPage({
     view: 'unfiled',
     folderIds: params.folder ? params.folder.split(',').filter(Boolean) : [],
     sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
-    tag: params.tag ?? null,
+    tagIds: params.tags ? params.tags.split(',').filter(Boolean) : [],
     dateFrom: params.from ?? null,
     dateTo: params.to ?? null,
     display: params.display === 'card' ? 'card' : 'list',
@@ -39,7 +39,7 @@ export default async function ArticlesPage({
       view: filters.view,
       folderIds: filters.folderIds,
       sourceFeedIds: filters.sourceFeedIds,
-      tag: filters.tag,
+      tagIds: filters.tagIds,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
     }),

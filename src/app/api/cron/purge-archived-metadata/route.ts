@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runPurgeUnengagedFeedItems } from '@/lib/feeds/retention'
+import { runPurgeArchivedArticleMetadata } from '@/lib/feeds/retention'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,11 +22,11 @@ async function handle(request: NextRequest) {
   const dryRun = request.nextUrl.searchParams.get('dryRun') === 'true'
 
   try {
-    const summary = await runPurgeUnengagedFeedItems({ dryRun })
+    const summary = await runPurgeArchivedArticleMetadata({ dryRun })
     return NextResponse.json(summary)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error('purge-unengaged-articles: fatal error', message)
+    console.error('purge-archived-metadata: fatal error', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

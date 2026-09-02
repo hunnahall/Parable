@@ -105,7 +105,7 @@ export default function ArticleReadingView({
     }
   }, [article.id])
 
-  // Display-only read tracking — never touches archived_at/the 48h timer.
+  // Display-only read tracking — never touches archived_at/the 24h timer.
   useEffect(() => {
     markArticleRead(article.id)
   }, [article.id])
@@ -113,7 +113,13 @@ export default function ArticleReadingView({
   async function handleArchive() {
     setPending(true)
     setError(null)
-    setItem((prev) => ({ ...prev, state: 'archived', archivedAt: new Date().toISOString() }))
+    setItem((prev) => ({
+      ...prev,
+      state: 'archived',
+      archivedAt: new Date().toISOString(),
+      folderId: null,
+      tags: [],
+    }))
     const result = await archiveArticle(item.id)
     setPending(false)
     if (result.error) return setError(result.error)
@@ -161,7 +167,7 @@ export default function ArticleReadingView({
     await handleFolderChange(result.id)
   }
 
-  const showEditors = item.state === 'saved' || item.state === 'archived'
+  const showEditors = item.state === 'saved' || item.state === 'archived' || item.state === 'reading'
 
   return (
     <div className="max-w-2xl mx-auto p-8">
@@ -292,7 +298,16 @@ export default function ArticleReadingView({
           <ArticleTagEditor
             itemId={item.id}
             tags={item.tags}
-            onChange={(tags) => setItem((prev) => ({ ...prev, tags }))}
+            onChange={(tags) =>
+              setItem((prev) => {
+                const shouldSave = prev.tags.length === 0 && tags.length > 0 && prev.state !== 'saved'
+                return {
+                  ...prev,
+                  tags,
+                  ...(shouldSave ? { state: 'saved' as const, archivedAt: null } : {}),
+                }
+              })
+            }
           />
         </div>
       )}

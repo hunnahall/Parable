@@ -155,13 +155,10 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-lg font-bold font-heading">Rulebook</h2>
         <ul className="text-base text-muted list-disc pl-5 space-y-1">
-          <li>Untouched articles auto-archive 48 hours after they arrive.</li>
-          <li>An archived article&apos;s cached full text is cleared 7 days later — articles you&apos;ve saved keep theirs.</li>
-          <li>
-            Articles never opened, saved, tagged, foldered, or moved to Reader are permanently
-            deleted 45 days after publication.
-          </li>
-          <li>Items you&apos;ve saved or foldered are kept forever — never auto-archived or deleted.</li>
+          <li>Untouched articles auto-archive after 24 hours.</li>
+          <li>Archived articles&apos; cached full text is cleared after 7 days.</li>
+          <li>Archived articles&apos; metadata is cleared after 30 days.</li>
+          <li>Items in Read and Save are never auto-archived or deleted.</li>
         </ul>
       </div>
 

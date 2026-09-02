@@ -136,7 +136,7 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
           </button>
           <p className="text-base text-muted mt-1">
             Deletes any article currently in your Inbox whose title matches one of these filters.
-            Saved, archived, and Reader articles are left alone.
+            Save, Archive, and Read articles are left alone.
           </p>
           {rulesRunResult && <p className="text-base text-muted mt-1">{rulesRunResult}</p>}
         </div>

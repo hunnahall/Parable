@@ -38,7 +38,7 @@ export function useArticleCardActions({
   async function handleArchive() {
     setPending(true)
     setError(null)
-    onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString() })
+    onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString(), folderId: null, tags: [] })
     const result = await archiveArticle(item.id)
     setPending(false)
     if (result.error) {
@@ -58,7 +58,7 @@ export function useArticleCardActions({
       setError(result.error)
       return
     }
-    router.refresh()
+    router.push(`/read/${item.id}`)
   }
 
   async function handleUnfile() {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { X } from 'lucide-react'
 import { renameTagGlobally, deleteTagGlobally } from '@/lib/tags/actions'
 import type { TagCount } from '@/lib/tags/data'
@@ -81,7 +82,10 @@ export default function TagManager({ tags }: { tags: TagCount[] }) {
             ) : (
               <li key={tag} className="py-2 flex items-center justify-between gap-2 text-lg">
                 <span>
-                  {tag} <span className="text-base text-muted">({count})</span>
+                  <Link href={`/read?tags=${encodeURIComponent(tag)}`} className="hover:text-accent hover:underline">
+                    {tag}
+                  </Link>{' '}
+                  <span className="text-base text-muted">({count})</span>
                 </span>
                 <span className="flex items-center gap-3 shrink-0">
                   <button

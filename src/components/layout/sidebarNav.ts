@@ -15,8 +15,8 @@ export type SidebarNavEntry =
 
 export const SIDEBAR_NAV: SidebarNavEntry[] = [
   { type: 'link', href: '/inbox', label: 'Inbox', icon: Newspaper, badge: 'inbox' },
-  { type: 'link', href: '/reader', label: 'Reader', icon: BookOpen, badge: 'reader' },
-  { type: 'link', href: '/saved', label: 'Saved', icon: Bookmark },
+  { type: 'link', href: '/read', label: 'Read', icon: BookOpen, badge: 'reader' },
+  { type: 'link', href: '/save', label: 'Save', icon: Bookmark },
   { type: 'link', href: '/archive', label: 'Archive', icon: Archive },
   { type: 'link', href: '/feeds', label: 'Feeds', icon: Rss },
   { type: 'divider' },

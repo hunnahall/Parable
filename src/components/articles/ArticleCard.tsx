@@ -20,7 +20,7 @@ function formatDate(dateString: string | null): string | null {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// Shared card used by the Inbox/Reader/Saved/Archive pages — one place for
+// Shared card used by the Inbox/Read/Save/Archive pages — one place for
 // the save/archive/tag button row instead of duplicating it per surface.
 // Save/Archive/Unsave always patch
 // via onUpdate; the caller's list (see useOptimisticArticleList) decides
@@ -52,12 +52,12 @@ export default function ArticleCard({
   selected?: boolean
   onToggleSelect?: (id: string) => void
   // False only on the Inbox page: Inbox articles have no full reading view
-  // (see the plan for the Reader feature) — the title renders as plain
-  // text and "Add to Reader" replaces it as the way to open one.
+  // (see the plan for the Read feature) — the title renders as plain
+  // text and "Read" replaces it as the way to open one.
   showReaderLink?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
-  const showEditors = item.state === 'saved' || item.state === 'archived'
+  const showEditors = item.state === 'saved' || item.state === 'archived' || item.state === 'reading'
   const metaParts = [
     item.feed_title,
     !compact ? item.category : null,
@@ -87,7 +87,7 @@ export default function ArticleCard({
           </div>
           {showReaderLink ? (
             <Link
-              href={`/reader/${item.id}`}
+              href={`/read/${item.id}`}
               onMouseDown={() => prefetchArticleContent(item.id)}
               onTouchStart={() => prefetchArticleContent(item.id)}
               onFocus={() => prefetchArticleContent(item.id)}
@@ -129,7 +129,13 @@ export default function ArticleCard({
               <ArticleTagEditor
                 itemId={item.id}
                 tags={item.tags}
-                onChange={(tags) => onUpdate(item.id, { tags })}
+                onChange={(tags) => {
+                  const shouldSave = item.tags.length === 0 && tags.length > 0 && item.state !== 'saved'
+                  onUpdate(item.id, {
+                    tags,
+                    ...(shouldSave ? { state: 'saved' as const, archivedAt: null } : {}),
+                  })
+                }}
               />
             </>
           )}

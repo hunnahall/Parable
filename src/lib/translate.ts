@@ -161,7 +161,7 @@ function textToParagraphHtml(text: string): string {
 // Translate-on-open: a separate path from translateArticle's ingest-time
 // title/summary translation (which is unaffected by this). Only runs when
 // a user actually opens a reading view for an article not already in their
-// target language (see src/app/reader/[id]/page.tsx), operating on
+// target language (see src/app/read/[id]/page.tsx), operating on
 // Readability's extracted plain text rather than the raw HTML — simpler
 // and cheaper than asking the model to preserve markup, and
 // textToParagraphHtml above restores enough structure for a readable

@@ -199,10 +199,9 @@ export default function FeedManager({
     <div className="space-y-6">
       <div className="flex items-center justify-between pb-6 border-b border-border">
         <div>
-          <h2 className="text-lg font-bold">Run ingest now</h2>
+          <h2 className="text-lg font-bold">Sync now</h2>
           <p className="text-base text-muted mt-0.5">
-            Fetches new items published in the last 24 hours for every feed, instead of waiting
-            for the cron job.
+            Fetches new items published in the last 24 hours.
           </p>
           {ingestSummary && (
             <div className="text-base text-muted mt-1">
@@ -238,7 +237,7 @@ export default function FeedManager({
           disabled={ingesting}
           className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
         >
-          {ingesting ? 'Running…' : 'Run ingest now'}
+          {ingesting ? 'Syncing…' : 'Sync'}
         </button>
       </div>
 

@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation'
 import { login, signup } from './actions'
+import { getUser } from '@/lib/supabase/server'
 import ParableLogo from '@/components/brand/ParableLogo'
 
 export default async function LoginPage({
@@ -6,6 +8,9 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string; message?: string }>
 }) {
+  const user = await getUser()
+  if (user) redirect('/')
+
   const { error, message } = await searchParams
 
   return (

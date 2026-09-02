@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { X } from 'lucide-react'
 import { addFolder, updateFolder, removeFolder } from '@/lib/folders/actions'
 import type { FolderRow } from '@/lib/folders/data'
@@ -187,7 +188,11 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
               </li>
             ) : (
               <li key={folder.id} className="py-2 flex items-center justify-between gap-2 text-lg">
-                <span style={{ paddingLeft: depth * 16 }}>{folder.name}</span>
+                <span style={{ paddingLeft: depth * 16 }}>
+                  <Link href={`/read?folder=${folder.id}`} className="hover:text-accent hover:underline">
+                    {folder.name}
+                  </Link>
+                </span>
                 <span className="flex items-center gap-3 shrink-0">
                   <button
                     type="button"

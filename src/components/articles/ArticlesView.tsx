@@ -23,7 +23,7 @@ export interface ArticlesFilters {
   view: ArticlesViewMode
   folderIds: string[]
   sourceFeedIds: string[]
-  tag: string | null
+  tagIds: string[]
   dateFrom: string | null
   dateTo: string | null
   display: ArticlesDisplayMode
@@ -34,7 +34,7 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   if (filters.query) params.set('q', filters.query)
   if (filters.folderIds.length > 0) params.set('folder', filters.folderIds.join(','))
   if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
-  if (filters.tag) params.set('tag', filters.tag)
+  if (filters.tagIds.length > 0) params.set('tags', filters.tagIds.join(','))
   if (filters.dateFrom) params.set('from', filters.dateFrom)
   if (filters.dateTo) params.set('to', filters.dateTo)
   if (filters.display !== 'list') params.set('display', filters.display)
@@ -42,15 +42,15 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   return qs ? `${basePath}?${qs}` : basePath
 }
 
-// Powers the Inbox, Reader, Saved, and Archive pages — each passes its own
+// Powers the Inbox, Read, Save, and Archive pages — each passes its own
 // `view` (which server-side query getArticlesPage runs) and `basePath` (so
 // filter navigation stays on that page). Save/Archive affordances per card
-// are the same shared ArticleCard; only Saved and Reader show the folder
+// are the same shared ArticleCard; only Save and Read show the folder
 // picker. Inbox is the odd one out: its cards have no reading-view link
-// (showReaderLink={false} below) and get an "Add to Reader" action instead,
-// plus the toolbar's bulk "Read" button. Per-card deletion only exists on
-// Archive (showDelete) — everywhere else, deleting is a bulk-only action
-// scoped to Archive's "Delete selected".
+// (showReaderLink={false} below) and get a "Read" action instead, plus the
+// toolbar's bulk "Read" button. Per-card deletion only exists on Archive
+// (showDelete) — everywhere else, deleting is a bulk-only action scoped to
+// Archive's "Delete selected".
 export default function ArticlesView({
   basePath,
   items,
@@ -62,6 +62,7 @@ export default function ArticlesView({
   showFolderPicker = false,
   showDelete = false,
   showDateFilters = true,
+  showTagsDropdown = false,
   enableBulkActions = false,
 }: {
   basePath: string
@@ -73,23 +74,35 @@ export default function ArticlesView({
   filters: ArticlesFilters
   showFolderPicker?: boolean
   showDelete?: boolean
-  // Archive keeps the From/To date pickers in its toolbar; Inbox, Reader,
-  // and Saved drop them so the search bar, folder/source dropdowns, and
+  // Archive keeps the From/To date pickers in its toolbar; Inbox, Read,
+  // and Save drop them so the search bar, folder/source dropdowns, and
   // list/card toggle all fit on one aligned line.
   showDateFilters?: boolean
+  // Read and Save only — an "All tags" multi-select alongside folders/
+  // sources, replacing the single-select tag chips everywhere else used to
+  // share.
+  showTagsDropdown?: boolean
   // Multi-select toolbar (select all, plus whichever bulk action fits the
-  // current view) — Inbox/Reader/Saved/Archive all opt in. "Archive
-  // selected" shows on every view except Archive itself (nothing to do
-  // there); "Read selected" only on Inbox (the only view with unfiled,
-  // state===null items to move to Reader); "Delete selected" is a full
-  // purge (see purgeArticles) and only shown on Archive — the one place
-  // permanently discarding a selection in bulk makes sense.
+  // current view) — Inbox/Read/Save/Archive all opt in. "Archive selected"
+  // shows on every view except Archive itself (nothing to do there); "Read
+  // selected" only on Inbox (the only view with unfiled, state===null
+  // items to move to Read); "Delete selected" is a full purge (see
+  // purgeArticles) and only shown on Archive — the one place permanently
+  // discarding a selection in bulk makes sense.
   enableBulkActions?: boolean
 }) {
   const router = useRouter()
   const [queryDraft, setQueryDraft] = useState(filters.query)
   const [loadingMore, setLoadingMore] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // True only when the current selection came from "Select all" (the
+  // header checkbox), as opposed to individually clicked rows — a bulk
+  // archive triggered while this is true collects and archives every page
+  // of the current filter, not just what's loaded on screen (see
+  // handleBulkArchive below). Any manual per-item click clears it, falling
+  // back to today's on-screen-only behavior.
+  const [selectedAll, setSelectedAll] = useState(false)
+  const [archivingAllCount, setArchivingAllCount] = useState<number | null>(null)
   const [bulkPending, setBulkPending] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -121,6 +134,7 @@ export default function ArticlesView({
     // A new filter/page load replaces the list wholesale — stale
     // selection referring to ids that may no longer even be on screen.
     setSelectedIds(new Set())
+    setSelectedAll(false)
     setConfirmingDelete(false)
   }
 
@@ -134,6 +148,7 @@ export default function ArticlesView({
 
   function toggleSelect(id: string) {
     setConfirmingDelete(false)
+    setSelectedAll(false)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -144,22 +159,70 @@ export default function ArticlesView({
 
   function toggleSelectAll() {
     setConfirmingDelete(false)
-    setSelectedIds((prev) =>
-      prev.size === localItems.length ? new Set() : new Set(localItems.map((item) => item.id))
-    )
+    setSelectedIds((prev) => {
+      if (prev.size === localItems.length) {
+        setSelectedAll(false)
+        return new Set()
+      }
+      setSelectedAll(true)
+      return new Set(localItems.map((item) => item.id))
+    })
+  }
+
+  // "Select all" only ever selects what's loaded on screen. If more pages
+  // exist (cursor is non-null) and the selection came from "Select all"
+  // (not a manual partial pick), paginate through every remaining page
+  // first so the whole filtered backlog gets archived in one go — see the
+  // Inbox pagination bug this fixes: without this, "select all + archive"
+  // only ever cleared the first loaded page, and the next page always
+  // looked like a "new" batch of articles.
+  async function collectAllMatchingIds(startingIds: string[]): Promise<string[]> {
+    const allIds = [...startingIds]
+    let pageCursor = cursor
+    while (pageCursor) {
+      const result = await fetchArticlesPage({
+        query: filters.query || undefined,
+        view: filters.view,
+        folderIds: filters.folderIds,
+        sourceFeedIds: filters.sourceFeedIds,
+        tagIds: filters.tagIds,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        cursor: pageCursor,
+      })
+      allIds.push(...result.items.map((item) => item.id))
+      setArchivingAllCount(allIds.length)
+      pageCursor = result.nextCursor
+    }
+    return allIds
   }
 
   async function handleBulkArchive() {
-    const ids = [...selectedIds]
+    let ids = [...selectedIds]
     if (ids.length === 0) return
     setBulkPending(true)
     setBulkError(null)
+
+    if (selectedAll && cursor) {
+      setArchivingAllCount(ids.length)
+      ids = await collectAllMatchingIds(ids)
+    }
+
     for (const id of ids) updateItem(id, { state: 'archived', archivedAt: new Date().toISOString() })
-    const result = await archiveArticlesBulk(ids)
+    // Chunked to keep any single request reasonable-sized when "select
+    // all" pulled in a large backlog.
+    const CHUNK_SIZE = 200
+    let error: string | null = null
+    for (let i = 0; i < ids.length && !error; i += CHUNK_SIZE) {
+      const result = await archiveArticlesBulk(ids.slice(i, i + CHUNK_SIZE))
+      error = result.error
+    }
     setBulkPending(false)
+    setArchivingAllCount(null)
     setSelectedIds(new Set())
-    if (result.error) {
-      setBulkError(result.error)
+    setSelectedAll(false)
+    if (error) {
+      setBulkError(error)
       return
     }
     router.refresh()
@@ -174,6 +237,7 @@ export default function ArticlesView({
     const result = await moveToReader(ids)
     setBulkPending(false)
     setSelectedIds(new Set())
+    setSelectedAll(false)
     if (result.error) {
       setBulkError(result.error)
       return
@@ -194,6 +258,7 @@ export default function ArticlesView({
     const result = await purgeArticles(ids)
     setBulkPending(false)
     setSelectedIds(new Set())
+    setSelectedAll(false)
     setConfirmingDelete(false)
     if (result.error) {
       setBulkError(result.error)
@@ -210,7 +275,7 @@ export default function ArticlesView({
       view: filters.view,
       folderIds: filters.folderIds,
       sourceFeedIds: filters.sourceFeedIds,
-      tag: filters.tag,
+      tagIds: filters.tagIds,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       cursor,
@@ -225,7 +290,7 @@ export default function ArticlesView({
     (filters.query ? 1 : 0) +
     (filters.folderIds.length > 0 ? 1 : 0) +
     (filters.sourceFeedIds.length > 0 ? 1 : 0) +
-    (filters.tag ? 1 : 0) +
+    (filters.tagIds.length > 0 ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0)
 
@@ -242,7 +307,7 @@ export default function ArticlesView({
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitSearch()
             }}
-            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-lg bg-background"
+            className="flex-1 min-w-[10rem] max-w-xs border border-border px-3 py-2 text-lg bg-background"
           />
           <MultiSelectDropdown
             label="All folders"
@@ -258,6 +323,15 @@ export default function ArticlesView({
             onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
             className="w-36"
           />
+          {showTagsDropdown && (
+            <MultiSelectDropdown
+              label="All tags"
+              options={allTags.map((tag) => ({ id: tag, label: tag }))}
+              selectedIds={filters.tagIds}
+              onChange={(tagIds) => navigate({ tagIds })}
+              className="w-32"
+            />
+          )}
           {showDateFilters && (
             <>
               <label className="flex items-center gap-1.5 text-base text-muted">
@@ -311,36 +385,6 @@ export default function ArticlesView({
             </button>
           </div>
         </div>
-
-        {allTags.length > 0 && (
-          <div className="flex items-center gap-1.5 text-base overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => navigate({ tag: null })}
-              className={
-                filters.tag === null
-                  ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
-                  : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
-              }
-            >
-              All tags
-            </button>
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => navigate({ tag })}
-                className={
-                  filters.tag === tag
-                    ? 'shrink-0 border border-accent text-accent bg-accent/10 px-2.5 py-1 transition-colors'
-                    : 'shrink-0 border border-border text-muted px-2.5 py-1 hover:border-accent hover:text-accent transition-colors'
-                }
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {enableBulkActions && localItems.length > 0 && (
@@ -367,7 +411,9 @@ export default function ArticlesView({
                   onClick={handleBulkArchive}
                   className="border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50"
                 >
-                  Archive selected
+                  {archivingAllCount !== null
+                    ? `Archiving ${archivingAllCount}…`
+                    : 'Archive selected'}
                 </button>
               )}
               {filters.view === 'unfiled' && (

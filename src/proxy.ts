@@ -29,7 +29,16 @@ export async function proxy(request: NextRequest) {
   // the refreshed cookies onto the response. Server Components can only
   // read cookies, not write them, so this is the one place a refreshed
   // token actually gets persisted back to the browser.
-  await supabase.auth.getUser()
+  //
+  // Fail open: a slow/unreachable Auth server shouldn't hang or break every
+  // request on this matcher (effectively the whole app). If this throws,
+  // skip the refresh for this request and pass the existing cookies through
+  // unmodified rather than blocking the response.
+  try {
+    await supabase.auth.getUser()
+  } catch (err) {
+    console.error('proxy: auth.getUser failed', err)
+  }
 
   return supabaseResponse
 }

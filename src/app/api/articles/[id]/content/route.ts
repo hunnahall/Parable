@@ -20,7 +20,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 // The reading view's slow part, split out of the page's initial render
-// (see src/app/reader/[id]/page.tsx and ArticleReadingView.tsx) so
+// (see src/app/read/[id]/page.tsx and ArticleReadingView.tsx) so
 // opening an article shows the title/metadata/buttons immediately instead
 // of blocking on a live scrape+translate chain — this is fetched
 // client-side right after the shell mounts.

@@ -5,6 +5,8 @@ import type { ArticleItem } from '@/lib/dashboard/data'
 import { prefetchArticleContent } from '@/lib/articles/contentCache'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
+import ArticleNoteEditor from './ArticleNoteEditor'
+import ArticleTagEditor from './ArticleTagEditor'
 import type { FolderOption } from './ArticleCard'
 
 function formatDate(dateString: string | null): string | null {
@@ -58,6 +60,7 @@ export default function ArticleCardGrid({
   onToggleSelect?: (id: string) => void
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
+  const showEditors = item.state === 'saved' || item.state === 'archived' || item.state === 'reading'
   // A real header image (captured on first open — see extract.ts/
   // content.ts) fills the tile full-bleed; a favicon is just a small
   // per-site icon, not a photo, so stretching it to fill the same box
@@ -93,7 +96,7 @@ export default function ArticleCardGrid({
         )}
         {showReaderLink ? (
           <Link
-            href={`/reader/${item.id}`}
+            href={`/read/${item.id}`}
             onMouseDown={() => prefetchArticleContent(item.id)}
             onTouchStart={() => prefetchArticleContent(item.id)}
             className="flex items-center justify-center w-full h-full bg-surface-border"
@@ -115,7 +118,7 @@ export default function ArticleCardGrid({
         </div>
         {showReaderLink ? (
           <Link
-            href={`/reader/${item.id}`}
+            href={`/read/${item.id}`}
             onMouseDown={() => prefetchArticleContent(item.id)}
             onTouchStart={() => prefetchArticleContent(item.id)}
             onFocus={() => prefetchArticleContent(item.id)}
@@ -149,6 +152,26 @@ export default function ArticleCardGrid({
             showAddToReader={!showReaderLink}
           />
         </div>
+        {showEditors && (
+          <>
+            <ArticleNoteEditor
+              itemId={item.id}
+              note={item.note}
+              onChange={(note) => onUpdate(item.id, { note })}
+            />
+            <ArticleTagEditor
+              itemId={item.id}
+              tags={item.tags}
+              onChange={(tags) => {
+                const shouldSave = item.tags.length === 0 && tags.length > 0 && item.state !== 'saved'
+                onUpdate(item.id, {
+                  tags,
+                  ...(shouldSave ? { state: 'saved' as const, archivedAt: null } : {}),
+                })
+              }}
+            />
+          </>
+        )}
         {actions.error && <p className="text-base text-danger mt-1">{actions.error}</p>}
       </div>
     </div>

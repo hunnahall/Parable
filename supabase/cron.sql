@@ -56,7 +56,7 @@ select cron.schedule(
   $$
 );
 
--- Sweeps every unread article (no article_states row yet) older than 48h
+-- Sweeps every unread article (no article_states row yet) older than 24h
 -- into 'archived' for every user — see auto_archive_stale_articles() in the
 -- database and src/lib/feeds/retention.ts. Every 4 hours, offset 20
 -- minutes after ingest-feeds so the two don't fire in the same instant.
@@ -76,10 +76,10 @@ select cron.schedule(
 );
 
 -- Purges cached full article content (article_content rows) 7 days after
--- an article was archived, excluding anything any user has saved — see
--- purge_expired_article_content(). Metadata (feed_items, tags, folders,
--- summary_ai) is untouched; only the content cache is deleted. Scheduled
--- well clear of the other jobs so nothing overlaps.
+-- an article was archived, excluding anything any user has saved or is
+-- reading — see purge_expired_article_content(). Metadata (feed_items,
+-- tags, folders, summary_ai) is untouched; only the content cache is
+-- deleted. Scheduled well clear of the other jobs so nothing overlaps.
 select cron.schedule(
   'purge-article-content',
   '15 5 * * *',
@@ -95,21 +95,26 @@ select cron.schedule(
   $$
 );
 
--- Hard-deletes feed_items rows published 45+ days ago that were never
--- saved, foldered, read, or tagged/noted — see purge_unengaged_feed_items()
--- and src/lib/feeds/retention.ts::runPurgeUnengagedFeedItems. Saved or
--- foldered articles are kept forever; read/tagged-but-not-saved-or-
--- foldered articles are also excluded and keep following the
--- auto-archive-articles / purge-article-content rules above indefinitely.
--- This is the one job that bounds feed_items' long-term storage growth.
--- Daily is plenty since the 45-day window moves slowly; scheduled clear
--- of the other jobs.
+-- purge-unengaged-articles (hard-deleted feed_items 45+ days after
+-- publish, regardless of archive state) was retired 2026-09-02 in favor of
+-- purge-archived-metadata below — run once, not part of this file's
+-- steady-state schedule:
+--
+--   select cron.unschedule('purge-unengaged-articles');
+
+-- Hard-deletes feed_items rows for articles that have sat in Archive 30+
+-- days — see purge_archived_article_metadata() and
+-- src/lib/feeds/retention.ts::runPurgeArchivedArticleMetadata. Items in
+-- Read or Save are never touched by this, unconditionally — that's the
+-- one hard exemption. This is the app's only long-term bound on
+-- feed_items' storage growth. Daily is plenty since the 30-day window
+-- moves slowly; scheduled clear of the other jobs.
 select cron.schedule(
-  'purge-unengaged-articles',
-  '30 5 * * *',
+  'purge-archived-metadata',
+  '45 5 * * *',
   $$
   select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/cron/purge-unengaged-articles',
+    url := 'https://parable-rss.vercel.app/api/cron/purge-archived-metadata',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',

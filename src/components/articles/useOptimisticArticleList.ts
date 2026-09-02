@@ -4,12 +4,12 @@ import { useState } from 'react'
 import type { ArticleItem } from '@/lib/dashboard/data'
 
 // Shared optimistic-local-copy pattern used by every article list surface
-// (Inbox/Reader/Saved/Archive pages) — router.refresh() re-runs the whole
+// (Inbox/Read/Save/Archive pages) — router.refresh() re-runs the whole
 // page's server data, so gating a visible state change on
 // it makes a single save/archive/tag edit feel multi-second slow.
 //
 // `belongs` decides whether an item, after a patch, still matches this
-// list's view — e.g. the Saved page's list only wants state==='saved', so
+// list's view — e.g. the Save page's list only wants state==='saved', so
 // archiving an item there should make it disappear locally, not just show
 // an updated badge.
 export function useOptimisticArticleList(items: ArticleItem[], belongs: (item: ArticleItem) => boolean) {
