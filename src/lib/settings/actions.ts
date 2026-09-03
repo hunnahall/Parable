@@ -2,49 +2,42 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
-import { feedItemsRpc } from '@/lib/articles/list'
+import { feedItemsRpc, UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
-// Matches EXISTING_GUID_CHECK_BATCH_SIZE in src/lib/feeds/ingest.ts — the
-// same root cause (a `.in()` filter's id list blowing past a PostgREST URL
-// length limit once it gets into the hundreds) applies to any `.in('id',
-// ...)` call built from an unbounded id list, not just that one.
-const DELETE_BATCH_SIZE = 200
-
-// Wipes every feed, article, and piece of per-article curation (saved,
-// archived, tags, notes, read state, folder placement) plus every other
-// per-user setting (preferences, dashboard widget layout) — everything
-// except the auth account itself, so the app comes back looking like a
-// brand new signup.
+// Wipes everything that belongs to this account — subscriptions, folders,
+// per-article curation (saved, archived, tags, notes, read state, folder
+// placement) and preferences — so the app comes back looking like a brand
+// new signup.
 //
-// feeds/folders/categories have no per-user ownership column (a known
-// schema gap — see removeFeed in src/lib/feeds/actions.ts, which already
-// deletes a feed unscoped), so this clears them outright rather than
-// trying to scope a delete that isn't representable at the schema level.
-// Only one account exists on this project today, so that's equivalent to
-// "your data" in practice.
+// Scoped to this user throughout. The shared catalog (feeds, feed_items,
+// article_content) is deliberately untouched: those rows are read by every
+// subscriber, and a feed nobody subscribes to any more is already
+// soft-deleted by removeFeed and reclaimed by the retention jobs.
 export async function performFullReset(): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
 
-  // Cascades to feed_items, which cascades to article_states, read_items,
-  // article_folders, article_content, and saved_items.
-  const { error: feedsError } = await supabase.from('feeds').delete().not('id', 'is', null)
-  if (feedsError) return { error: feedsError.message }
+  const { error: subscriptionsError } = await supabase
+    .from('subscriptions')
+    .delete()
+    .eq('user_id', user.id)
+  if (subscriptionsError) return { error: subscriptionsError.message }
 
-  // Cascades to feed_folders, article_folders, and its own children —
-  // mostly redundant with the feeds delete above, but needed for any
-  // folder that doesn't currently hold a feed.
-  const { error: foldersError } = await supabase.from('folders').delete().not('id', 'is', null)
+  // Cascades to feed_folders and article_folders via their FKs.
+  const { error: foldersError } = await supabase.from('folders').delete().eq('user_id', user.id)
   if (foldersError) return { error: foldersError.message }
 
-  const { error: categoriesError } = await supabase
-    .from('categories')
+  const { error: statesError } = await supabase
+    .from('article_states')
     .delete()
-    .not('name', 'is', null)
-  if (categoriesError) return { error: categoriesError.message }
+    .eq('user_id', user.id)
+  if (statesError) return { error: statesError.message }
+
+  const { error: readError } = await supabase.from('read_items').delete().eq('user_id', user.id)
+  if (readError) return { error: readError.message }
 
   const { error: prefsError } = await supabase
     .from('user_preferences')
@@ -74,16 +67,14 @@ export async function performPartialReset(): Promise<{
 
   const supabase = await createClient()
 
-  // 'saved'/'archived'/'reading' is the full set article_states.state
-  // allows, so excluding all three is exactly "has no article_states row" —
-  // the same unfiled predicate the Inbox uses, done as a SQL anti-join
+  // The same unfiled predicate the Inbox uses, done as a SQL anti-join
   // instead of fetching every filed id and interpolating it into a
   // `.not('id', 'in', ...)` filter, which blows past PostgREST's URL limit
   // once article_states is into the hundreds.
   const { data: unfiledItems, error: itemsError } = await feedItemsRpc(
     supabase,
     'feed_items_excluding_states',
-    { p_user_id: user.id, p_exclude_states: ['saved', 'archived', 'reading'] }
+    { p_user_id: user.id, p_exclude_states: UNFILED_EXCLUDED_STATES }
   ).select('id')
   if (itemsError) return { error: itemsError.message, archivedCount: 0 }
 
@@ -140,7 +131,7 @@ export async function runAutoDeleteRulesNow(): Promise<{
   const { data: items, error: itemsError } = await feedItemsRpc(
     supabase,
     'feed_items_excluding_states',
-    { p_user_id: user.id, p_exclude_states: ['saved', 'archived', 'reading'] }
+    { p_user_id: user.id, p_exclude_states: UNFILED_EXCLUDED_STATES }
   ).select('id, title, title_en')
   if (itemsError) return { error: itemsError.message, deletedCount: 0 }
 
@@ -150,16 +141,22 @@ export async function runAutoDeleteRulesNow(): Promise<{
 
   if (matchedIds.length === 0) return { error: null, deletedCount: 0 }
 
-  // Hard delete, same as purgeArticles (src/lib/articles/actions.ts) — the
-  // shared feed_items row, cascading to article_states/read_items/etc. for
-  // every user. Safe here because matchedIds only ever came from the
-  // unfiled set above, so none of them have a saved/archived/reading state
-  // to lose.
-  for (let i = 0; i < matchedIds.length; i += DELETE_BATCH_SIZE) {
-    const batch = matchedIds.slice(i, i + DELETE_BATCH_SIZE)
-    const { error: deleteError } = await supabase.from('feed_items').delete().in('id', batch)
-    if (deleteError) return { error: deleteError.message, deletedCount: 0 }
-  }
+  // A per-user tombstone, same as purgeArticles (src/lib/articles/actions.ts):
+  // your filter list is yours, so it must not delete the shared feed_items
+  // row another subscriber is still reading. Safe to write state
+  // unconditionally because matchedIds only ever came from the unfiled set
+  // above, so none of them have a saved/archived/reading state to lose.
+  const now = new Date().toISOString()
+  const { error: deleteError } = await supabase.from('article_states').upsert(
+    matchedIds.map((feedItemId) => ({
+      user_id: user.id,
+      feed_item_id: feedItemId,
+      state: 'deleted' as const,
+      archived_at: now,
+    })),
+    { onConflict: 'user_id,feed_item_id' }
+  )
+  if (deleteError) return { error: deleteError.message, deletedCount: 0 }
 
   revalidatePath('/inbox')
   revalidatePath('/', 'layout')

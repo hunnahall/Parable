@@ -9,7 +9,6 @@ export interface ArticleItem {
   summary: string | null
   published_at: string | null
   feed_title: string | null
-  category: string | null
   state: ArticleCuration | null
   note: string | null
   tags: string[]
@@ -60,28 +59,49 @@ function bestSummary(
 
 interface FeedMeta {
   title: string | null
-  category: string | null
   summarizeArticles: boolean
 }
 
+// The displayed title and the AI-summary toggle both come from the
+// caller's own subscription, falling back to the shared catalog row's
+// title when they haven't renamed it (or no longer subscribe, which is
+// still reachable for articles they saved before unsubscribing).
 async function attachFeedMeta<T extends { feed_id: string }>(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  items: T[]
+  items: T[],
+  user: Awaited<ReturnType<typeof getUser>>
 ): Promise<Map<string, FeedMeta>> {
   const feedIds = [...new Set(items.map((item) => item.feed_id))]
   if (feedIds.length === 0) return new Map()
 
-  const { data: feeds, error } = await supabase
-    .from('feeds')
-    .select('id, title, category, summarize_articles')
-    .in('id', feedIds)
+  const [{ data: feeds, error }, { data: subs, error: subsError }] = await Promise.all([
+    supabase.from('feeds').select('id, title').in('id', feedIds),
+    user
+      ? supabase
+          .from('subscriptions')
+          .select('feed_id, title, summarize_articles')
+          .eq('user_id', user.id)
+          .in('feed_id', feedIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
   logQueryError('articles/attachFeedMeta', error)
+  logQueryError('articles/attachFeedMeta (subscriptions)', subsError)
+
+  const subByFeed = new Map(
+    (subs ?? []).map((sub) => [sub.feed_id, sub as { title: string | null; summarize_articles: boolean }])
+  )
 
   return new Map(
-    (feeds ?? []).map((feed) => [
-      feed.id,
-      { title: feed.title, category: feed.category, summarizeArticles: feed.summarize_articles },
-    ])
+    (feeds ?? []).map((feed) => {
+      const sub = subByFeed.get(feed.id)
+      return [
+        feed.id,
+        {
+          title: sub?.title ?? feed.title,
+          summarizeArticles: sub?.summarize_articles ?? false,
+        },
+      ]
+    })
   )
 }
 
@@ -147,6 +167,11 @@ async function getArticleFoldersMap(
   return new Map((data ?? []).map((row) => [row.feed_item_id, row.folder_id]))
 }
 
+// Every state article_states allows. Excluding all of them is exactly
+// "has no curation row" — the Inbox's definition of unfiled. Kept as one
+// constant so adding a state can't silently leak it into the Inbox.
+export const UNFILED_EXCLUDED_STATES = ['saved', 'archived', 'reading', 'deleted'] as const
+
 const ARTICLE_SELECT =
   'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at, image_url'
 
@@ -203,7 +228,6 @@ function toArticleItem(
     isAiSummary: summarizeArticles && item.summary_ai !== null,
     published_at: item.published_at,
     feed_title: meta?.title ?? null,
-    category: meta?.category ?? null,
     state: info?.state ?? null,
     note: info?.note ?? null,
     tags: info?.tags ?? [],
@@ -237,7 +261,7 @@ export async function getArticleById(
   const [states, folders, feedMeta] = await Promise.all([
     getArticleStatesMap(supabase, user),
     getArticleFoldersMap(supabase, user),
-    attachFeedMeta(supabase, [item]),
+    attachFeedMeta(supabase, [item], user),
   ])
 
   return { ...toArticleItem(item, feedMeta, states, folders), originalLanguage: item.original_language }
@@ -262,7 +286,7 @@ export async function getArticlesUnfiledCount(): Promise<number> {
   // and counting them client-side is cheap and actually works.
   const { data, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
     p_user_id: user.id,
-    p_exclude_states: ['saved', 'archived', 'reading'],
+    p_exclude_states: UNFILED_EXCLUDED_STATES,
   }).select('id')
   logQueryError('articles/getArticlesUnfiledCount', error)
   return data?.length ?? 0
@@ -356,7 +380,7 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   } else if (view === 'unfiled') {
     query = feedItemsRpc(supabase, 'feed_items_excluding_states', {
       p_user_id: user.id,
-      p_exclude_states: ['saved', 'archived', 'reading'],
+      p_exclude_states: UNFILED_EXCLUDED_STATES,
     }).select(ARTICLE_SELECT)
   } else {
     query = feedItemsRpc(supabase, 'feed_items_with_state', {
@@ -435,7 +459,7 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   const hasMore = rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows
 
-  const feedMeta = await attachFeedMeta(supabase, pageRows)
+  const feedMeta = await attachFeedMeta(supabase, pageRows, user)
   const items = pageRows.map((item: ArticleRow) => toArticleItem(item, feedMeta, states, folders))
 
   const last = pageRows.at(-1)
@@ -444,13 +468,33 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   return { items, nextCursor }
 }
 
+// Source-filter options on the list pages: your subscriptions, labelled
+// with your own title override where you set one.
 export async function listFeeds(): Promise<FeedOption[]> {
+  const user = await getUser()
+  if (!user) return []
+
   const supabase = await createClient()
+  const { data: subs, error: subsError } = await supabase
+    .from('subscriptions')
+    .select('feed_id, title')
+    .eq('user_id', user.id)
+  logQueryError('articles/listFeeds (subscriptions)', subsError)
+
+  const subscriptions = subs ?? []
+  if (subscriptions.length === 0) return []
+
   const { data, error } = await supabase
     .from('feeds')
     .select('id, title')
+    .in(
+      'id',
+      subscriptions.map((sub) => sub.feed_id)
+    )
     .is('deleted_at', null)
     .order('title')
   logQueryError('articles/listFeeds', error)
-  return data ?? []
+
+  const overrides = new Map(subscriptions.map((sub) => [sub.feed_id, sub.title]))
+  return (data ?? []).map((feed) => ({ id: feed.id, title: overrides.get(feed.id) ?? feed.title }))
 }

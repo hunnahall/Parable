@@ -52,11 +52,7 @@ export default function ArticleCard({
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showEditors = item.state === 'saved' || item.state === 'archived' || item.state === 'reading'
-  const metaParts = [
-    item.feed_title,
-    !compact ? item.category : null,
-    formatArticleDate(item.published_at),
-  ].filter((part): part is string => !!part)
+  const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter((part): part is string => !!part)
 
   return (
     <li className={compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'p-4'}>

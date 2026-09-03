@@ -12,12 +12,32 @@ import type { FeedRow } from './data'
 const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
 const FEED_SELECT =
-  'id, url, title, category, last_fetched_at, last_error, is_scraped, summarize_articles, consecutive_failures'
+  'id, url, title, last_fetched_at, last_error, is_scraped, consecutive_failures'
+
+// feeds is a shared catalog keyed by url: two users adding the same feed
+// get the same row, so it's only ever fetched and stored once. Subscribing
+// is what makes it appear in *your* list.
+async function subscribeToFeed(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  feedId: string,
+  options: { title: string; summarizeArticles: boolean }
+): Promise<string | null> {
+  const { error } = await supabase.from('subscriptions').upsert(
+    {
+      user_id: userId,
+      feed_id: feedId,
+      title: options.title,
+      summarize_articles: options.summarizeArticles,
+    },
+    { onConflict: 'user_id,feed_id' }
+  )
+  return error?.message ?? null
+}
 
 export async function addFeed(input: {
   url: string
   title: string
-  category: string | null
   summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
@@ -25,7 +45,6 @@ export async function addFeed(input: {
 
   const url = input.url.trim()
   let title = input.title.trim()
-  const category = input.category?.trim() || null
 
   if (!url) return { feed: null, error: 'URL is required' }
 
@@ -48,16 +67,36 @@ export async function addFeed(input: {
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  // Reuse the catalog row if this URL is already known (another user's
+  // subscription, or one you previously removed), rather than creating a
+  // duplicate that would be fetched and stored twice.
+  const { data: existing, error: lookupError } = await supabase
     .from('feeds')
-    .insert({ url, title, category, summarize_articles: input.summarizeArticles ?? false })
     .select(FEED_SELECT)
-    .single()
+    .eq('url', url)
+    .maybeSingle()
+  if (lookupError) return { feed: null, error: lookupError.message }
 
-  if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
+  let feed = existing
+  if (!feed) {
+    const { data, error } = await supabase
+      .from('feeds')
+      .insert({ url, title })
+      .select(FEED_SELECT)
+      .single()
+    if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
+    feed = data
+  }
+
+  const summarizeArticles = input.summarizeArticles ?? false
+  const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
+    title,
+    summarizeArticles,
+  })
+  if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...data, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, summarize_articles: summarizeArticles, folderIds: [] }, error: null }
 }
 
 // Step 1 of "Build a Feed" (see BuildFeedSection.tsx): fetches and
@@ -83,7 +122,6 @@ export async function previewBuiltFeed(
 export async function createBuiltFeed(input: {
   sourceUrl: string
   title: string
-  category: string | null
   summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
@@ -91,28 +129,38 @@ export async function createBuiltFeed(input: {
 
   const url = input.sourceUrl.trim()
   const title = input.title.trim()
-  const category = input.category?.trim() || null
 
   if (!url) return { feed: null, error: 'URL is required' }
   if (!title) return { feed: null, error: 'Title is required' }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('feeds')
-    .insert({
-      url,
-      title,
-      category,
-      is_scraped: true,
-      summarize_articles: input.summarizeArticles ?? false,
-    })
     .select(FEED_SELECT)
-    .single()
+    .eq('url', url)
+    .maybeSingle()
+  if (lookupError) return { feed: null, error: lookupError.message }
 
-  if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
+  let feed = existing
+  if (!feed) {
+    const { data, error } = await supabase
+      .from('feeds')
+      .insert({ url, title, is_scraped: true })
+      .select(FEED_SELECT)
+      .single()
+    if (error || !data) return { feed: null, error: error?.message ?? 'Insert failed' }
+    feed = data
+  }
+
+  const summarizeArticles = input.summarizeArticles ?? false
+  const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
+    title,
+    summarizeArticles,
+  })
+  if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...data, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, summarize_articles: summarizeArticles, folderIds: [] }, error: null }
 }
 
 // Manual trigger, unlike the cron-driven /api/ingest-feeds route: capped
@@ -135,20 +183,25 @@ export async function runIngestNow(): Promise<
   }
 }
 
+// Renames the feed for you only. The title lives on your subscription
+// rather than the shared catalog row, so this can't rename another
+// subscriber's copy out from under them.
 export async function updateFeed(
   id: string,
-  input: { title: string; category: string | null }
+  input: { title: string }
 ): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
   const title = input.title.trim()
-  const category = input.category?.trim() || null
-
   if (!title) return { error: 'Title is required' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('feeds').update({ title, category }).eq('id', id)
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ title })
+    .eq('user_id', user.id)
+    .eq('feed_id', id)
 
   if (error) return { error: error.message }
 
@@ -159,7 +212,7 @@ export async function updateFeed(
 // Toggled directly from the feed list (see FeedManager.tsx) — deliberately
 // its own action rather than folded into updateFeed, since it fires on a
 // single click with no Edit-mode round trip and shouldn't need the
-// title/category validation that comes with a full feed edit.
+// title validation that comes with a full feed edit.
 export async function setFeedSummarizeArticles(
   id: string,
   enabled: boolean
@@ -169,81 +222,66 @@ export async function setFeedSummarizeArticles(
 
   const supabase = await createClient()
   const { error } = await supabase
-    .from('feeds')
+    .from('subscriptions')
     .update({ summarize_articles: enabled })
-    .eq('id', id)
+    .eq('user_id', user.id)
+    .eq('feed_id', id)
 
   if (error) return { error: error.message }
 
-  // Toggling off: clear stale AI summaries so the DB itself reflects "no
-  // AI summary" rather than relying purely on the read-time gate in
-  // bestSummary() (src/lib/articles/list.ts) to hide a value that's
-  // still sitting there. Narrow, deliberate exception to retention.ts's
-  // "summary_ai is kept forever" policy — scoped to exactly this field,
-  // triggered by exactly the user action that should invalidate it.
-  // Best-effort: a failure here doesn't fail the toggle itself, since the
-  // read-time gate already makes the bug invisible regardless.
-  if (!enabled) {
-    const { error: clearError } = await supabase
-      .from('feed_items')
-      .update({ summary_ai: null })
-      .eq('feed_id', id)
-    logQueryError('feeds/setFeedSummarizeArticles (clear summary_ai)', clearError)
-  }
-
+  // Toggling off deliberately leaves summary_ai in place: it's a column on
+  // the shared feed_items row, so clearing it would blank the summaries of
+  // every other subscriber who still wants them. The read-time gate in
+  // bestSummary() (src/lib/articles/list.ts) already hides it from you.
   revalidatePath('/feeds')
   return { error: null }
 }
 
-// feed_items.feed_id cascades on feed deletion at the DB level, which would
-// wipe out saved articles along with the feed — saved articles are kept
-// forever per the retention policy (see retention.ts), so a feed removal
-// must never be able to take them with it. Two-step: hard-delete this
-// feed's non-saved items (nothing else is worth keeping once its feed is
-// gone), then soft-delete the feed itself (mark deleted_at) instead of
-// actually deleting the row, so the remaining saved feed_items keep a live
-// FK to it — attachFeedMeta (src/lib/articles/list.ts) still resolves
-// their title/category from it. Every "active feeds" read path filters on
-// deleted_at is null so a soft-deleted feed disappears from ingest, the
-// feed list, and source/category filters.
+// Unsubscribing, not deleting. The feed and its articles are shared, so
+// tearing down the catalog row would take other subscribers' articles —
+// including saved ones — with it. Dropping the subscription removes the
+// feed from your list and stops it counting toward your inbox, while
+// anything you saved from it stays readable (both the feed_items policy
+// and feed_items_excluding_states keep articles you've curated visible
+// after the subscription is gone).
+//
+// A feed nobody subscribes to any more is soft-deleted so ingest stops
+// fetching it; the row itself survives to keep those saved articles' FK
+// intact and to be reused if someone adds the same URL again.
 export async function removeFeed(id: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
   const supabase = await createClient()
 
-  const { data: items, error: itemsFetchError } = await supabase
-    .from('feed_items')
-    .select('id')
+  const { error: unsubscribeError } = await supabase
+    .from('subscriptions')
+    .delete()
+    .eq('user_id', user.id)
     .eq('feed_id', id)
-  if (itemsFetchError) return { error: itemsFetchError.message }
+  if (unsubscribeError) return { error: unsubscribeError.message }
 
-  const itemIds = (items ?? []).map((item) => item.id)
-  let savedIds: string[] = []
-  if (itemIds.length > 0) {
-    const { data: savedStates, error: savedError } = await supabase
-      .from('article_states')
-      .select('feed_item_id')
-      .eq('state', 'saved')
-      .in('feed_item_id', itemIds)
-    if (savedError) return { error: savedError.message }
-    savedIds = (savedStates ?? []).map((row) => row.feed_item_id)
+  // Your folder filing for this feed goes with the subscription; other
+  // subscribers' filing lives in their own folders, which this can't see.
+  const { error: folderError } = await supabase
+    .from('feed_folders')
+    .delete()
+    .eq('feed_id', id)
+  logQueryError('feeds/removeFeed (folder cleanup)', folderError)
+
+  const { count, error: countError } = await supabase
+    .from('subscriptions')
+    .select('feed_id', { count: 'exact', head: true })
+    .eq('feed_id', id)
+  if (countError) return { error: countError.message }
+
+  if ((count ?? 0) === 0) {
+    const { error } = await supabase
+      .from('feeds')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) return { error: error.message }
   }
-
-  const idsToDelete = itemIds.filter((itemId) => !savedIds.includes(itemId))
-  if (idsToDelete.length > 0) {
-    const { error: deleteItemsError } = await supabase
-      .from('feed_items')
-      .delete()
-      .in('id', idsToDelete)
-    if (deleteItemsError) return { error: deleteItemsError.message }
-  }
-
-  const { error } = await supabase
-    .from('feeds')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) return { error: error.message }
 
   revalidatePath('/feeds')
   revalidatePath('/')

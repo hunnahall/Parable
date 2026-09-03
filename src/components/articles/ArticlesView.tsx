@@ -86,9 +86,9 @@ export default function ArticlesView({
   // current view) — Inbox/Read/Save/Archive all opt in. "Archive selected"
   // shows on every view except Archive itself (nothing to do there); "Read
   // selected" only on Inbox (the only view with unfiled, state===null
-  // items to move to Read); "Delete selected" is a full purge (see
-  // purgeArticles) and only shown on Archive — the one place permanently
-  // discarding a selection in bulk makes sense.
+  // items to move to Read); "Delete selected" removes a selection from
+  // this account for good (see purgeArticles) and only shows on Archive —
+  // the one place discarding in bulk makes sense.
   enableBulkActions?: boolean
 }) {
   const router = useRouter()

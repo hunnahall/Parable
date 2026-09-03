@@ -72,7 +72,7 @@ export default function OpmlImport() {
     let added = 0
     const failed: { url: string; error: string }[] = []
     for (const feed of feeds) {
-      const outcome = await addFeed({ url: feed.url, title: feed.title, category: null })
+      const outcome = await addFeed({ url: feed.url, title: feed.title })
       if (outcome.error !== null) {
         failed.push({ url: feed.url, error: outcome.error })
         continue

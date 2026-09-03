@@ -89,7 +89,6 @@ export default function FeedManager({
     const result = await addFeed({
       url: newUrl,
       title: newTitle,
-      category: null,
     })
     if (result.error !== null) {
       setPending(false)
@@ -131,7 +130,7 @@ export default function FeedManager({
     )
     setEditingId(null)
     const [titleResult, folderResult] = await Promise.all([
-      updateFeed(id, { title: editTitle, category: null }),
+      updateFeed(id, { title: editTitle }),
       assignFeedToFolders(id, editFolderIds),
     ])
     setPending(false)

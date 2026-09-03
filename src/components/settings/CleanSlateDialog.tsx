@@ -115,9 +115,9 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
             <span>
               <span className="block text-lg font-medium">Full reset</span>
               <span className="block text-base text-muted mt-0.5">
-                Permanently deletes everything — every feed, article, saved item, tag, note, and
-                folder, plus your display preferences. Your account goes back to exactly how it
-                looked right after signup. This can&rsquo;t be undone.
+                Permanently deletes everything of yours — every subscription, saved item, tag,
+                note, read record, and folder, plus your display preferences. Your account goes
+                back to exactly how it looked right after signup. This can&rsquo;t be undone.
               </span>
             </span>
           </label>

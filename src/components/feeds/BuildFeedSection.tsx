@@ -74,7 +74,6 @@ export default function BuildFeedSection({
     const result = await createBuiltFeed({
       sourceUrl: preview.sourceUrl,
       title: title.trim(),
-      category: null,
       summarizeArticles,
     })
     setSaving(false)

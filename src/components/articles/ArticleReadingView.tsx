@@ -16,13 +16,14 @@ import { getArticleContent } from '@/lib/articles/contentCache'
 import { formatArticleDate } from '@/lib/formatting'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
+import ArticleSummaryDialog from './ArticleSummaryDialog'
+import type { FolderOption } from './ArticleCard'
+
 // Loaded on demand: ExportDialog pulls in jsPDF (and html2canvas behind
 // it) plus turndown via src/lib/articles/export.ts. Statically imported,
 // that whole PDF stack shipped in the reading page's first-load JS for a
 // dialog most sessions never open.
 const ExportDialog = dynamic(() => import('./ExportDialog'), { ssr: false })
-import ArticleSummaryDialog from './ArticleSummaryDialog'
-import type { FolderOption } from './ArticleCard'
 
 // A sentinel folder-select value distinct from both "" (no folder) and any
 // real folder id, so picking it can be told apart from an actual selection.
@@ -181,7 +182,6 @@ export default function ArticleReadingView({
 
       <div className="flex items-center gap-2 text-base text-muted mb-2">
         {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
-        {item.category && <span>{item.category}</span>}
         {formatArticleDate(item.published_at, { long: true }) && (
           <span>{formatArticleDate(item.published_at, { long: true })}</span>
         )}

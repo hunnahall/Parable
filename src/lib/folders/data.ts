@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
 
 export interface FolderRow {
@@ -8,8 +8,15 @@ export interface FolderRow {
 }
 
 export async function listFolders(): Promise<FolderRow[]> {
+  const user = await getUser()
+  if (!user) return []
+
   const supabase = await createClient()
-  const { data, error } = await supabase.from('folders').select('id, name, parent_id').order('name')
+  const { data, error } = await supabase
+    .from('folders')
+    .select('id, name, parent_id')
+    .eq('user_id', user.id)
+    .order('name')
   logQueryError('folders/listFolders', error)
   return (data ?? []).map((row) => ({ id: row.id, name: row.name, parentId: row.parent_id }))
 }

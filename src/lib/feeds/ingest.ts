@@ -6,6 +6,7 @@ import { summarizeArticle } from '@/lib/summarize'
 import { prewarmArticleContent, prewarmArticleImage } from '@/lib/articles/content'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
+import { UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { detectArticles } from './buildFeed'
 import { mapWithConcurrency } from '@/lib/concurrency'
 
@@ -103,31 +104,23 @@ function adminClient(): AdminClient {
   )
 }
 
-// Ingest is a single shared background job, not scoped to a request or
-// signed-in user — same assumption the rest of the app's admin-client jobs
-// already make (see performFullReset in src/lib/settings/actions.ts): only
-// one account exists on this project today, so "the" row in
-// user_preferences, if any, is that account's settings. autoDeleteKeywords
-// comes back empty whenever the feature is off, so callers never need to
-// check the enabled flag separately.
-async function loadIngestPreferences(
-  supabase: AdminClient
-): Promise<{ targetLanguage: string; autoDeleteKeywords: string[] }> {
-  const { data } = await supabase
-    .from('user_preferences')
-    .select('language, auto_delete_enabled, auto_delete_keywords')
-    .maybeSingle()
+// Ingest is one shared background job writing rows every subscriber
+// reads, so it can't be driven by any single user's preferences.
+// feed_items stores exactly one translation per item (title_en /
+// summary_en), so the language it translates into is a project-level
+// setting rather than a per-account one; per-account target languages
+// would need a feed_item_translations table keyed by language.
+//
+// Auto-delete keywords are genuinely per-user and are applied after the
+// fetch instead — see applyAutoDeleteRules below.
+const INGEST_TARGET_LANGUAGE = process.env.INGEST_TARGET_LANGUAGE || DEFAULT_LANGUAGE
 
-  return {
-    targetLanguage: data?.language ?? DEFAULT_LANGUAGE,
-    autoDeleteKeywords: data?.auto_delete_enabled ? (data.auto_delete_keywords ?? []) : [],
-  }
-}
-
-// summarize_articles is per-feed, not a global setting (see
+// summarize_articles is per-subscription, not a global setting (see
 // FeedRow.summarize_articles in src/lib/feeds/data.ts and the toggle in
-// FeedManager/BuildFeedSection) — AI summaries are worth the OpenAI call
-// on some feeds and not others, not an account-wide on/off.
+// FeedManager/BuildFeedSection). Since the summary is written to the
+// shared feed_items row, it's generated when *any* subscriber wants it;
+// bestSummary (src/lib/articles/list.ts) then gates whether each
+// individual reader is shown it.
 type FeedRow = {
   id: string
   url: string
@@ -175,11 +168,9 @@ async function processItem(
   feed: FeedRow,
   item: FeedEntryItem,
   guid: string,
-  targetLanguage: string,
-  autoDeleteKeywords: string[]
+  targetLanguage: string
 ): Promise<{
   inserted: boolean
-  autoDeleted: boolean
   prewarm: PrewarmTarget | null
   prewarmImage: PrewarmTarget | null
 }> {
@@ -200,17 +191,7 @@ async function processItem(
       targetLanguage
     )
 
-    // Auto-delete runs after translation (so a keyword typed in the user's
-    // target language matches a title that's now in that language,
-    // regardless of what language the article was actually published in)
-    // but before summarization (so a discarded article never pays for the
-    // second OpenAI call).
-    const titleForMatching = title_en ?? stripHtml(rawTitle)
-    if (matchedAutoDeleteKeyword(titleForMatching, autoDeleteKeywords)) {
-      return { inserted: false, autoDeleted: true, prewarm: null, prewarmImage: null }
-    }
-
-    // Off by default per feed (see FeedRow.summarize_articles) — the
+    // On only when at least one subscriber asked for it — the
     // OpenAI call this skips is the pipeline's one unconditional
     // per-article cost (unlike translation, which only fires for
     // non-target-language content); when it's off, feed_items.summary_ai
@@ -278,7 +259,7 @@ async function processItem(
         ? { feedItemId: insertedId, link: item.link }
         : null
 
-    return { inserted: true, autoDeleted: false, prewarm, prewarmImage }
+    return { inserted: true, prewarm, prewarmImage }
   } catch (itemErr) {
     // A single malformed item (missing/garbage fields) or a one-off insert
     // failure shouldn't sink the rest of an otherwise-healthy feed.
@@ -286,7 +267,7 @@ async function processItem(
       `ingest-feeds: skipping item guid=${guid} in feed ${feed.id} (${feed.url})`,
       itemErr
     )
-    return { inserted: false, autoDeleted: false, prewarm: null, prewarmImage: null }
+    return { inserted: false, prewarm: null, prewarmImage: null }
   }
 }
 
@@ -294,7 +275,6 @@ type FeedResult =
   | {
       ok: true
       itemsInserted: number
-      itemsAutoDeleted: number
       prewarmTargets: PrewarmTarget[]
       prewarmImageTargets: PrewarmTarget[]
     }
@@ -341,8 +321,7 @@ async function processFeed(
   supabase: AdminClient,
   feed: FeedRow,
   cutoffMs: number | null,
-  targetLanguage: string,
-  autoDeleteKeywords: string[]
+  targetLanguage: string
 ): Promise<FeedResult> {
   try {
     const rawItems = await fetchFeedItems(feed)
@@ -399,11 +378,10 @@ async function processFeed(
     // OpenAI calls) would otherwise discard every already-processed item
     // for this feed, and re-pay for the same OpenAI calls on the next run.
     const results = await mapWithConcurrency(newItems, ITEM_CONCURRENCY, ({ item, guid }) =>
-      processItem(supabase, feed, item, guid, targetLanguage, autoDeleteKeywords)
+      processItem(supabase, feed, item, guid, targetLanguage)
     )
 
     const itemsInserted = results.filter((r) => r.inserted).length
-    const itemsAutoDeleted = results.filter((r) => r.autoDeleted).length
     const prewarmTargets = results.flatMap((r) => (r.prewarm ? [r.prewarm] : []))
     const prewarmImageTargets = results.flatMap((r) => (r.prewarmImage ? [r.prewarmImage] : []))
 
@@ -416,7 +394,7 @@ async function processFeed(
       throw new Error(`Failed to update last_fetched_at: ${updateError.message}`)
     }
 
-    return { ok: true, itemsInserted, itemsAutoDeleted, prewarmTargets, prewarmImageTargets }
+    return { ok: true, itemsInserted, prewarmTargets, prewarmImageTargets }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
@@ -442,6 +420,66 @@ async function processFeed(
   }
 }
 
+// Applies each user's own Filters list (see FiltersForm) to whatever this
+// run just added to their inbox. Runs per user, after the fetch, rather
+// than inline during ingest: the keywords are per-account but feed_items
+// rows are shared by every subscriber, so a match can only ever hide the
+// article from the user who wrote the keyword — never delete it out from
+// under anyone else. Writes the same 'deleted' tombstone the manual "Run
+// filters now" action does (see runAutoDeleteRulesNow in
+// src/lib/settings/actions.ts).
+async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
+  const { data: prefRows, error: prefsError } = await supabase
+    .from('user_preferences')
+    .select('user_id, auto_delete_keywords')
+    .eq('auto_delete_enabled', true)
+  if (prefsError) {
+    console.error('ingest: failed to load auto-delete preferences', prefsError.message)
+    return 0
+  }
+
+  let tombstoned = 0
+  const now = new Date().toISOString()
+
+  for (const prefs of prefRows ?? []) {
+    const keywords: string[] = prefs.auto_delete_keywords ?? []
+    if (keywords.length === 0) continue
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see feedItemsRpc in src/lib/articles/list.ts
+    const rpc = supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => any
+    const { data: items, error: itemsError } = await rpc('feed_items_excluding_states', {
+      p_user_id: prefs.user_id,
+      p_exclude_states: UNFILED_EXCLUDED_STATES,
+    }).select('id, title, title_en')
+    if (itemsError) {
+      console.error(`ingest: auto-delete lookup failed for ${prefs.user_id}`, itemsError.message)
+      continue
+    }
+
+    const matchedIds = ((items ?? []) as { id: string; title: string; title_en: string | null }[])
+      .filter((item) => matchedAutoDeleteKeyword(item.title_en ?? item.title, keywords))
+      .map((item) => item.id)
+    if (matchedIds.length === 0) continue
+
+    const { error: writeError } = await supabase.from('article_states').upsert(
+      matchedIds.map((feedItemId) => ({
+        user_id: prefs.user_id,
+        feed_item_id: feedItemId,
+        state: 'deleted',
+        archived_at: now,
+      })),
+      { onConflict: 'user_id,feed_item_id' }
+    )
+    if (writeError) {
+      console.error(`ingest: auto-delete write failed for ${prefs.user_id}`, writeError.message)
+      continue
+    }
+    tombstoned += matchedIds.length
+  }
+
+  return tombstoned
+}
+
 // Shared by the cron-triggered /api/ingest-feeds route and the "Run ingest
 // now" button in the feeds management UI (src/lib/feeds/actions.ts), so
 // both paths run the exact same logic instead of drifting apart. The cron
@@ -454,21 +492,42 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
 
   // Independent of each other — run together instead of paying for two
   // sequential round trips before any feed work can start.
-  const [{ data: feeds, error: feedsError }, { targetLanguage, autoDeleteKeywords }] =
-    await Promise.all([
-      supabase
-        .from('feeds')
-        .select('id, url, title, is_scraped, summarize_articles, consecutive_failures')
-        .is('deleted_at', null),
-      loadIngestPreferences(supabase),
-    ])
+  // Only feeds someone actually subscribes to are worth fetching, and a
+  // feed's AI-summary setting is the union of its subscribers' choices.
+  const { data: subs, error: subsError } = await supabase
+    .from('subscriptions')
+    .select('feed_id, summarize_articles')
+  if (subsError) {
+    throw new Error(`Failed to load subscriptions: ${subsError.message}`)
+  }
+
+  const summarizeByFeed = new Map<string, boolean>()
+  for (const sub of subs ?? []) {
+    if (sub.summarize_articles) summarizeByFeed.set(sub.feed_id, true)
+  }
+  const subscribedFeedIds = [...new Set((subs ?? []).map((sub) => sub.feed_id))]
+
+  if (subscribedFeedIds.length === 0) {
+    return { feedsProcessed: 0, feedsFailed: [], itemsInserted: 0, itemsAutoDeleted: 0 }
+  }
+
+  const { data: catalogFeeds, error: feedsError } = await supabase
+    .from('feeds')
+    .select('id, url, title, is_scraped, consecutive_failures')
+    .in('id', subscribedFeedIds)
+    .is('deleted_at', null)
 
   if (feedsError) {
     throw new Error(`Failed to load feeds: ${feedsError.message}`)
   }
 
-  const results = await mapWithConcurrency(feeds ?? [], FEED_CONCURRENCY, (feed) =>
-    processFeed(supabase, feed, cutoffMs, targetLanguage, autoDeleteKeywords)
+  const feeds = (catalogFeeds ?? []).map((feed) => ({
+    ...feed,
+    summarize_articles: summarizeByFeed.get(feed.id) ?? false,
+  }))
+
+  const results = await mapWithConcurrency(feeds, FEED_CONCURRENCY, (feed) =>
+    processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE)
   )
 
   let feedsProcessed = 0
@@ -482,13 +541,14 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
     if (result.ok) {
       feedsProcessed++
       itemsInserted += result.itemsInserted
-      itemsAutoDeleted += result.itemsAutoDeleted
       prewarmTargets.push(...result.prewarmTargets)
       prewarmImageTargets.push(...result.prewarmImageTargets)
     } else {
       feedsFailed.push(result.failure)
     }
   }
+
+  itemsAutoDeleted = await applyAutoDeleteRules(supabase)
 
   // Scheduled to run after this request's response is sent (see Next's
   // `after`) rather than awaited here — a live scrape per item would
