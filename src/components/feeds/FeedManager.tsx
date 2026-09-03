@@ -15,6 +15,7 @@ import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import type { EngagementRate } from '@/lib/feeds/engagement'
 import type { TagCount } from '@/lib/tags/data'
+import { formatFetchedAt } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import OpmlImport from './OpmlImport'
@@ -32,18 +33,6 @@ function folderLabelsFor(folderIds: string[], folders: { id: string; label: stri
 function formatRate(rate: EngagementRate | undefined): string {
   if (!rate || rate.rate === null) return '—'
   return `${Math.round(rate.rate * 100)}%`
-}
-
-function formatDate(dateString: string | null): string {
-  if (!dateString) return 'never'
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return 'never'
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
 }
 
 export default function FeedManager({
@@ -416,7 +405,7 @@ export default function FeedManager({
                             {feed.url}
                           </a>
                           <p className="text-base text-muted mt-0.5">
-                            Last fetched: {formatDate(feed.last_fetched_at)}
+                            Last fetched: {formatFetchedAt(feed.last_fetched_at)}
                           </p>
                           {feed.last_error && (
                             <p className="text-base text-danger mt-0.5">

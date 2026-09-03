@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { createClient, getUser } from '@/lib/supabase/server'
-import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/dashboard/data'
+import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/articles/list'
 import { getUserPreferences } from '@/lib/preferences/data'
 import { mapWithConcurrency } from '@/lib/concurrency'
 import { assignArticleToFolder } from '@/lib/folders/actions'
@@ -203,7 +203,7 @@ export async function archiveArticlesBulk(
 // delete an article someone explicitly saved, by design (see
 // ArticlesView's confirm-to-delete step, the only guard against a stray
 // click). feedItemIds only ever comes from a user's on-screen selection,
-// not a derived "everything matching X" set, so unlike the dashboard
+// not a derived "everything matching X" set, so unlike the article list
 // queries this fixed, there's no id-list-size scaling concern here.
 export async function purgeArticles(feedItemIds: string[]): Promise<{ error: string | null }> {
   const user = await getUser()

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
-import { getArticlesPage, listFeeds } from '@/lib/dashboard/data'
+import { getArticlesPage, listFeeds } from '@/lib/articles/list'
 import { listFolderOptions } from '@/lib/folders/data'
 import { listAllTags } from '@/lib/tags/data'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'

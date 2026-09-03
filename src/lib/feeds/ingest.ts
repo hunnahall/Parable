@@ -20,7 +20,7 @@ const STORED_SUMMARY_MAX_LENGTH = 1500
 // entire history in one unpaginated RSS file — 1000+ items. Checking
 // which of those already exist by passing every guid into one `.in()`
 // filter builds a request URL that blows past a length limit somewhere
-// in the chain (same root cause as the dashboard query bug fixed
+// in the chain (same root cause as the article-list query bug fixed
 // earlier), which is what "Failed to check existing items: Bad Request"
 // / "fetch failed" actually were. Batching keeps each request small
 // regardless of how large a feed's guid list is.

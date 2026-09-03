@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
-import { feedItemsRpc } from '@/lib/dashboard/data'
+import { feedItemsRpc } from '@/lib/articles/list'
 import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
 // Matches EXISTING_GUID_CHECK_BATCH_SIZE in src/lib/feeds/ingest.ts — the
@@ -52,18 +52,6 @@ export async function performFullReset(): Promise<{ error: string | null }> {
     .eq('user_id', user.id)
   if (prefsError) return { error: prefsError.message }
 
-  const { error: dashboardError } = await supabase
-    .from('dashboard_widgets')
-    .delete()
-    .eq('user_id', user.id)
-  if (dashboardError) return { error: dashboardError.message }
-
-  const { error: widgetsError } = await supabase
-    .from('user_widgets')
-    .delete()
-    .eq('user_id', user.id)
-  if (widgetsError) return { error: widgetsError.message }
-
   revalidatePath('/', 'layout')
   return { error: null }
 }
@@ -73,7 +61,7 @@ export async function performFullReset(): Promise<{ error: string | null }> {
 // state transition archiveArticle() applies one at a time (see
 // src/lib/articles/actions.ts), and the same "unfiled" predicate the
 // Articles page and its sidebar badge use (see getArticlesUnfiledCount in
-// src/lib/dashboard/data.ts). Saved articles, tags, notes, read history,
+// src/lib/articles/list.ts). Saved articles, tags, notes, read history,
 // feeds, and folders are all untouched — only feed_items with zero
 // article_states rows are affected, so this can never touch (or need to
 // check) a saved/tagged/read article.
@@ -86,22 +74,20 @@ export async function performPartialReset(): Promise<{
 
   const supabase = await createClient()
 
-  const { data: stateRows, error: statesError } = await supabase
-    .from('article_states')
-    .select('feed_item_id')
-    .eq('user_id', user.id)
-  if (statesError) return { error: statesError.message, archivedCount: 0 }
-
-  const filedIds = (stateRows ?? []).map((row) => row.feed_item_id)
-
-  let query = supabase.from('feed_items').select('id')
-  if (filedIds.length > 0) {
-    query = query.not('id', 'in', `(${filedIds.join(',')})`)
-  }
-  const { data: unfiledItems, error: itemsError } = await query
+  // 'saved'/'archived'/'reading' is the full set article_states.state
+  // allows, so excluding all three is exactly "has no article_states row" —
+  // the same unfiled predicate the Inbox uses, done as a SQL anti-join
+  // instead of fetching every filed id and interpolating it into a
+  // `.not('id', 'in', ...)` filter, which blows past PostgREST's URL limit
+  // once article_states is into the hundreds.
+  const { data: unfiledItems, error: itemsError } = await feedItemsRpc(
+    supabase,
+    'feed_items_excluding_states',
+    { p_user_id: user.id, p_exclude_states: ['saved', 'archived', 'reading'] }
+  ).select('id')
   if (itemsError) return { error: itemsError.message, archivedCount: 0 }
 
-  const unfiledIds = (unfiledItems ?? []).map((row) => row.id)
+  const unfiledIds = ((unfiledItems ?? []) as { id: string }[]).map((row) => row.id)
   if (unfiledIds.length === 0) return { error: null, archivedCount: 0 }
 
   const now = new Date().toISOString()
@@ -128,7 +114,7 @@ export async function performPartialReset(): Promise<{
 // fetched, so a filter added after an article was already ingested would
 // otherwise never touch it.
 // Scoped to the same "unfiled" predicate as the Inbox page and its sidebar
-// badge (see getArticlesUnfiledCount in src/lib/dashboard/data.ts):
+// badge (see getArticlesUnfiledCount in src/lib/articles/list.ts):
 // saved/archived/reading articles reflect a user's explicit curation, which
 // this blocklist — a pre-triage junk filter, not an override — shouldn't
 // touch.

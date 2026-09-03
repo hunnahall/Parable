@@ -1,20 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 import { prefetchArticleContent } from '@/lib/articles/contentCache'
+import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
 import type { FolderOption } from './ArticleCard'
-
-function formatDate(dateString: string | null): string | null {
-  if (!dateString) return null
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
 
 // Best-effort favicon fallback when an article has no captured image —
 // derived client-side from the article's own link origin, no ingest-time
@@ -68,7 +62,7 @@ export default function ArticleCardGrid({
   // neutral ground, until the article's actually been opened once.
   const hasRealImage = !!item.imageUrl
   const imageSrc = item.imageUrl ?? faviconFor(item.link)
-  const metaParts = [item.feed_title, formatDate(item.published_at)].filter(
+  const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter(
     (part): part is string => !!part
   )
 

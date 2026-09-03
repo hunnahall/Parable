@@ -3,7 +3,7 @@ export default function CovenantWorksCredit({ className = 'mt-8' }: { className?
     // In normal document flow (not `fixed`) by default so it sits after the
     // page's real content at the true bottom of the page, rather than pinned
     // to the viewport where it could float over widgets on tall/scrollable
-    // pages like the dashboard. Pass `className` to override positioning
+    // pages. Pass `className` to override positioning
     // (e.g. anchoring it to a specific container on shorter pages).
     <div className={`flex items-center justify-end gap-1.5 opacity-70 text-foreground ${className}`}>
       {/* Inlined rather than <img src="..."> — currentColor doesn't resolve

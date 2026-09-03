@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LayoutList, LayoutGrid } from 'lucide-react'
-import type { ArticleItem, ArticlesPageFilters } from '@/lib/dashboard/data'
+import type { ArticleItem, ArticlesPageFilters } from '@/lib/articles/list'
 import {
   fetchArticlesPage,
   archiveArticlesBulk,

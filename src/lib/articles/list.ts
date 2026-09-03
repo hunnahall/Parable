@@ -75,7 +75,7 @@ async function attachFeedMeta<T extends { feed_id: string }>(
     .from('feeds')
     .select('id, title, category, summarize_articles')
     .in('id', feedIds)
-  logQueryError('dashboard/attachFeedMeta', error)
+  logQueryError('articles/attachFeedMeta', error)
 
   return new Map(
     (feeds ?? []).map((feed) => [
@@ -112,7 +112,7 @@ async function getArticleStatesMap(
     .from('article_states')
     .select('feed_item_id, state, note, tags, archived_at')
     .eq('user_id', resolvedUser.id)
-  logQueryError('dashboard/getArticleStatesMap', error)
+  logQueryError('articles/getArticleStatesMap', error)
 
   return new Map(
     (data ?? []).map((row) => [
@@ -142,7 +142,7 @@ async function getArticleFoldersMap(
     .from('article_folders')
     .select('feed_item_id, folder_id')
     .eq('user_id', resolvedUser.id)
-  logQueryError('dashboard/getArticleFoldersMap', error)
+  logQueryError('articles/getArticleFoldersMap', error)
 
   return new Map((data ?? []).map((row) => [row.feed_item_id, row.folder_id]))
 }
@@ -228,7 +228,7 @@ export async function getArticleById(
     supabase.from('feed_items').select(`${ARTICLE_SELECT}, original_language`).eq('id', id).maybeSingle(),
     getUser(),
   ])
-  logQueryError('dashboard/getArticleById', error)
+  logQueryError('articles/getArticleById', error)
   if (!item) return null
 
   // states/folders/feedMeta only depend on `item`/`user` above, not on
@@ -264,7 +264,7 @@ export async function getArticlesUnfiledCount(): Promise<number> {
     p_user_id: user.id,
     p_exclude_states: ['saved', 'archived', 'reading'],
   }).select('id')
-  logQueryError('dashboard/getArticlesUnfiledCount', error)
+  logQueryError('articles/getArticlesUnfiledCount', error)
   return data?.length ?? 0
 }
 
@@ -280,7 +280,7 @@ export async function getReaderCount(): Promise<number> {
     p_user_id: user.id,
     p_state: 'reading',
   }).select('id')
-  logQueryError('dashboard/getReaderCount', error)
+  logQueryError('articles/getReaderCount', error)
   return data?.length ?? 0
 }
 
@@ -396,8 +396,8 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
         supabase.from('feed_folders').select('feed_id').in('folder_id', filters.folderIds),
         supabase.from('article_folders').select('feed_item_id').in('folder_id', filters.folderIds),
       ])
-    logQueryError('dashboard/getArticlesPage (folder feed lookup)', feedFolderError)
-    logQueryError('dashboard/getArticlesPage (folder article lookup)', articleFolderError)
+    logQueryError('articles/getArticlesPage (folder feed lookup)', feedFolderError)
+    logQueryError('articles/getArticlesPage (folder article lookup)', articleFolderError)
 
     const folderFeedIds = (feedFolderRows ?? []).map((row) => row.feed_id)
     const folderArticleIds = (articleFolderRows ?? []).map((row) => row.feed_item_id)
@@ -429,7 +429,7 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   query = query.limit(limit + 1)
 
   const { data: rows, error } = await query
-  logQueryError('dashboard/getArticlesPage', error)
+  logQueryError('articles/getArticlesPage', error)
   if (!rows) return { items: [], nextCursor: null }
 
   const hasMore = rows.length > limit
@@ -451,6 +451,6 @@ export async function listFeeds(): Promise<FeedOption[]> {
     .select('id, title')
     .is('deleted_at', null)
     .order('title')
-  logQueryError('dashboard/listFeeds', error)
+  logQueryError('articles/listFeeds', error)
   return data ?? []
 }

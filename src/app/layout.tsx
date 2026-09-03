@@ -4,7 +4,7 @@ import { Hanken_Grotesk, Inter, Work_Sans, Instrument_Sans, Lato } from 'next/fo
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getArticlesUnfiledCount, getReaderCount } from '@/lib/dashboard/data'
+import { getArticlesUnfiledCount, getReaderCount } from '@/lib/articles/list'
 import ParableMark from '@/components/brand/ParableMark'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
@@ -17,7 +17,7 @@ const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--fon
 
 export const metadata: Metadata = {
   title: 'Parable',
-  description: 'A personal dashboard for RSS feeds',
+  description: 'A personal RSS reader.',
 }
 
 export default async function RootLayout({

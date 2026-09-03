@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 
 // Shared optimistic-local-copy pattern used by every article list surface
 // (Inbox/Read/Save/Archive pages) — router.refresh() re-runs the whole

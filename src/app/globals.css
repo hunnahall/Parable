@@ -174,26 +174,6 @@ h4 {
   box-shadow: var(--shadow-card);
 }
 
-/* Only for panels that are actually interactive (draggable/clickable) —
-   applying a hover-lift to static, non-interactive panels (e.g. a
-   Settings section) would communicate an affordance that isn't there. */
-.card-elevated-interactive {
-  transition:
-    box-shadow var(--motion-fast) ease-out,
-    transform var(--motion-fast) ease-out,
-    border-color var(--motion-fast) ease-out;
-}
-.card-elevated-interactive:hover {
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--surface-border) 60%, var(--foreground) 15%);
-}
-@media (prefers-reduced-motion: reduce) {
-  .card-elevated-interactive:hover {
-    transform: none;
-  }
-}
-
 /* Modals/drawers/popovers — same surface, a taller shadow tier since
    these float above a dimmed backdrop rather than sitting flush on the
    page. */
@@ -203,9 +183,8 @@ h4 {
   box-shadow: var(--shadow-modal);
 }
 
-/* Native checkboxes/radios (to-do items, indicator compare picks, watchlist
-   config, settings) otherwise render in the browser's default blue rather
-   than the brand accent. */
+/* Native checkboxes/radios otherwise render in the browser's default blue
+   rather than the brand accent. */
 input[type="checkbox"], input[type="radio"] {
   accent-color: var(--accent);
 }
@@ -222,39 +201,6 @@ input[type="checkbox"], input[type="radio"] {
 
 .animate-landing-reveal {
   animation: landing-reveal var(--motion-slow) ease-in-out both;
-}
-
-/* The one deliberate motion "moment" this pass adds (design-instructions.md
-   #5 — one well-orchestrated moment, not effects scattered everywhere):
-   dashboard widgets fade/rise in with a slight stagger on first paint,
-   driven by each widget's own --reveal-delay custom property (set inline
-   per widget index in DashboardGrid.tsx) rather than nth-child, since
-   widget order can change via drag/remove.
-
-   Uses the standalone `translate` property, not `transform` — this
-   applies to WidgetCard's own inner element (not the outer div
-   react-grid-layout positions via `transform: translate(x,y)`, see
-   DashboardGrid.tsx), but that same inner element also has
-   .card-elevated-interactive's :hover transform for the lift effect. A
-   filled CSS animation (fill-mode both) keeps "owning" whatever property
-   it animates even after finishing, which would silently block a later
-   :hover rule from changing that same property. `translate` and
-   `transform` compose independently, so the reveal animation and the
-   hover lift never fight over the same property. */
-@keyframes widget-reveal {
-  from { opacity: 0; translate: 0 6px; }
-  to { opacity: 1; translate: 0 0; }
-}
-
-.animate-widget-reveal {
-  animation: widget-reveal var(--motion-slow) ease-out both;
-  animation-delay: var(--reveal-delay, 0ms);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-widget-reveal {
-    animation: none;
-  }
 }
 
 /* Empty-state watermark (design-instructions.md #8): a large, pale outline

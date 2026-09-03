@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runIngest } from '@/lib/feeds/ingest'
+import { isAuthorizedCronRequest } from '@/lib/cron/route'
 
 // Triggered every 4 hours by Supabase Cron (see supabase/cron.sql), which
 // calls this deployed route directly — no separate runner involved.
@@ -20,19 +21,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-function isAuthorized(request: NextRequest): boolean {
-  const expected = process.env.CRON_SECRET
-  // Fail closed: if the secret isn't configured, nothing can authenticate.
-  if (!expected) return false
-
-  const headerSecret = request.headers.get('x-cron-secret')
-  const querySecret = request.nextUrl.searchParams.get('secret')
-
-  return headerSecret === expected || querySecret === expected
-}
-
 async function handle(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAuthorizedCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

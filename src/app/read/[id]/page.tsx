@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
-import { getArticleById } from '@/lib/dashboard/data'
+import { getArticleById } from '@/lib/articles/list'
 import { listFolderOptions } from '@/lib/folders/data'
 import ArticleReadingView from '@/components/articles/ArticleReadingView'
 

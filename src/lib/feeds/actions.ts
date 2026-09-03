@@ -177,7 +177,7 @@ export async function setFeedSummarizeArticles(
 
   // Toggling off: clear stale AI summaries so the DB itself reflects "no
   // AI summary" rather than relying purely on the read-time gate in
-  // bestSummary() (src/lib/dashboard/data.ts) to hide a value that's
+  // bestSummary() (src/lib/articles/list.ts) to hide a value that's
   // still sitting there. Narrow, deliberate exception to retention.ts's
   // "summary_ai is kept forever" policy — scoped to exactly this field,
   // triggered by exactly the user action that should invalidate it.
@@ -202,7 +202,7 @@ export async function setFeedSummarizeArticles(
 // feed's non-saved items (nothing else is worth keeping once its feed is
 // gone), then soft-delete the feed itself (mark deleted_at) instead of
 // actually deleting the row, so the remaining saved feed_items keep a live
-// FK to it — attachFeedMeta (src/lib/dashboard/data.ts) still resolves
+// FK to it — attachFeedMeta (src/lib/articles/list.ts) still resolves
 // their title/category from it. Every "active feeds" read path filters on
 // deleted_at is null so a soft-deleted feed disappears from ingest, the
 // feed list, and source/category filters.

@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 import {
   saveArticle,
   archiveArticle,
@@ -12,22 +13,20 @@ import {
 } from '@/lib/articles/actions'
 import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
 import { getArticleContent } from '@/lib/articles/contentCache'
+import { formatArticleDate } from '@/lib/formatting'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import ArticleTagEditor from './ArticleTagEditor'
-import ExportDialog from './ExportDialog'
+// Loaded on demand: ExportDialog pulls in jsPDF (and html2canvas behind
+// it) plus turndown via src/lib/articles/export.ts. Statically imported,
+// that whole PDF stack shipped in the reading page's first-load JS for a
+// dialog most sessions never open.
+const ExportDialog = dynamic(() => import('./ExportDialog'), { ssr: false })
 import ArticleSummaryDialog from './ArticleSummaryDialog'
 import type { FolderOption } from './ArticleCard'
 
 // A sentinel folder-select value distinct from both "" (no folder) and any
 // real folder id, so picking it can be told apart from an actual selection.
 const NEW_FOLDER_OPTION = '__new_folder__'
-
-function formatDate(dateString: string | null): string | null {
-  if (!dateString) return null
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
-}
 
 interface ContentState {
   status: 'loading' | 'ready' | 'error'
@@ -183,7 +182,9 @@ export default function ArticleReadingView({
       <div className="flex items-center gap-2 text-base text-muted mb-2">
         {item.feed_title && <span className="font-medium">{item.feed_title}</span>}
         {item.category && <span>{item.category}</span>}
-        {formatDate(item.published_at) && <span>{formatDate(item.published_at)}</span>}
+        {formatArticleDate(item.published_at, { long: true }) && (
+          <span>{formatArticleDate(item.published_at, { long: true })}</span>
+        )}
         {content.isTranslated && (
           <span className="border border-border-subtle px-1.5 py-0.5">Translated</span>
         )}

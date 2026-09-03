@@ -10,7 +10,7 @@ import {
   moveToReader,
 } from '@/lib/articles/actions'
 import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 import type { FolderOption } from './ArticleCard'
 
 // Shared archive/delete/folder-assignment logic behind ArticleCard (list

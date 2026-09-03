@@ -1,6 +1,6 @@
 'use client'
 
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 import type { FolderOption } from './ArticleCard'
 import type { useArticleCardActions } from './useArticleCardActions'
 

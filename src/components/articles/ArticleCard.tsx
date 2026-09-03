@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import type { ArticleItem } from '@/lib/dashboard/data'
+import type { ArticleItem } from '@/lib/articles/list'
 import { prefetchArticleContent } from '@/lib/articles/contentCache'
+import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
@@ -11,13 +12,6 @@ import ArticleTagEditor from './ArticleTagEditor'
 export interface FolderOption {
   id: string
   label: string
-}
-
-function formatDate(dateString: string | null): string | null {
-  if (!dateString) return null
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 // Shared card used by the Inbox/Read/Save/Archive pages — one place for
@@ -61,7 +55,7 @@ export default function ArticleCard({
   const metaParts = [
     item.feed_title,
     !compact ? item.category : null,
-    formatDate(item.published_at),
+    formatArticleDate(item.published_at),
   ].filter((part): part is string => !!part)
 
   return (
