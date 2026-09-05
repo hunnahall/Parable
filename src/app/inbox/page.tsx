@@ -58,6 +58,7 @@ export default async function InboxPage({
           showFolderPicker
           showDateFilters={false}
           enableBulkActions
+          collapsibleSummaries
         />
       </div>
     </>

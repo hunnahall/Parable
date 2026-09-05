@@ -56,6 +56,7 @@ export default function ArticlesView({
   showDelete = false,
   showDateFilters = true,
   enableBulkActions = false,
+  collapsibleSummaries = false,
 }: {
   basePath: string
   items: ArticleItem[]
@@ -76,6 +77,10 @@ export default function ArticlesView({
   // purgeArticles) and shows on Save and Archive — the two places
   // discarding in bulk makes sense.
   enableBulkActions?: boolean
+  // Inbox only: list rows show just the title, with a "+" button that
+  // reveals the summary and Save/Archive row — card view is unaffected,
+  // it already reads as a tile rather than a dense list.
+  collapsibleSummaries?: boolean
 }) {
   const router = useRouter()
   const [queryDraft, setQueryDraft] = useState(filters.query)
@@ -445,6 +450,7 @@ export default function ArticlesView({
               showDelete={showDelete}
               selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
               onToggleSelect={enableBulkActions ? toggleSelect : undefined}
+              collapsible={collapsibleSummaries}
             />
           ))}
         </ul>

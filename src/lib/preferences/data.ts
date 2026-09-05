@@ -11,7 +11,6 @@ export interface UserPreferences {
   // ingest-time title/summary translation and translate-on-open, not a UI
   // locale. Articles already in this language are left untranslated.
   language: string
-  autoDeleteEnabled: boolean
   // Case-insensitive substring match against the (already-translated)
   // title — see runIngest in src/lib/feeds/ingest.ts for where this is
   // applied.
@@ -25,7 +24,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   font: 'inter',
   sidebarCollapsed: false,
   language: DEFAULT_LANGUAGE,
-  autoDeleteEnabled: false,
   autoDeleteKeywords: [],
 }
 
@@ -39,7 +37,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('font, sidebar_collapsed, language, auto_delete_enabled, auto_delete_keywords')
+    .select('font, sidebar_collapsed, language, auto_delete_keywords')
     .eq('user_id', user.id)
     .maybeSingle()
   logQueryError('preferences/getUserPreferences', error)
@@ -49,7 +47,6 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     font: data.font as FontChoice,
     sidebarCollapsed: data.sidebar_collapsed,
     language: data.language,
-    autoDeleteEnabled: data.auto_delete_enabled,
     autoDeleteKeywords: data.auto_delete_keywords ?? [],
   }
 }

@@ -55,6 +55,7 @@ export default async function ArchivePage({
           folders={folders}
           feedOptions={feedOptions}
           filters={filters}
+          showDateFilters={false}
           enableBulkActions
         />
       </div>

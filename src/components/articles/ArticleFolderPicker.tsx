@@ -51,7 +51,7 @@ export default function ArticleFolderPicker({
   const selected = new Set(selectedIds)
   const label =
     selectedIds.length === 0
-      ? 'File'
+      ? 'Save'
       : selectedIds.length === 1
         ? (folders.find((f) => f.id === selectedIds[0])?.label ?? '1 folder')
         : `${selectedIds.length} folders`

@@ -75,14 +75,6 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
           New articles with a title matching one of these filters will be automatically
           discarded. A filter can be a single word or a phrase.
         </p>
-        <label className="flex items-center gap-1.5 text-base">
-          <input
-            type="checkbox"
-            checked={prefs.autoDeleteEnabled}
-            onChange={(e) => applyChange({ autoDeleteEnabled: e.target.checked })}
-          />
-          Enabled
-        </label>
         <div className="flex gap-2">
           <Input
             type="text"

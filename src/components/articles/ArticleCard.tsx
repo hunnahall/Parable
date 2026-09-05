@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
+import { Plus, Minus } from 'lucide-react'
 import type { ArticleItem } from '@/lib/articles/list'
 import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
+import Button from '@/components/ui/Button'
 
 export interface FolderOption {
   id: string
@@ -28,6 +31,7 @@ export default function ArticleCard({
   compact = false,
   selected,
   onToggleSelect,
+  collapsible = false,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -41,12 +45,18 @@ export default function ArticleCard({
   // skips rendering the checkbox column.
   selected?: boolean
   onToggleSelect?: (id: string) => void
+  // Inbox opts in: the title shows alone, and a "+" button reveals the
+  // summary and the Save/Archive row instead of them always taking up
+  // vertical space. Save/Archive keep the old always-expanded layout.
+  collapsible?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showNote = item.state === 'saved' || item.state === 'archived'
   const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter(
     (part): part is string => !!part
   )
+  const [expanded, setExpanded] = useState(false)
+  const showBody = !collapsible || expanded
 
   return (
     <li
@@ -72,35 +82,58 @@ export default function ArticleCard({
           <div className="mb-0.5 text-base text-muted">
             {metaParts.join(' · ')}
           </div>
-          {item.link ? (
-            <a
-              href={item.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={actions.handleOpen}
-              className="text-lg font-medium break-words hover:text-accent hover:underline"
-            >
-              {item.title}
-            </a>
-          ) : (
-            <span className="text-lg font-medium break-words">{item.title}</span>
-          )}
-          {item.summary && (
-            <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
-          )}
-          <ArticleCardActionsRow
-            item={item}
-            actions={actions}
-            folders={folders}
-            showFolderPicker={showFolderPicker}
-            showDelete={showDelete}
-          />
-          {showNote && (
-            <ArticleNoteEditor
-              itemId={item.id}
-              note={item.note}
-              onChange={(note) => onUpdate(item.id, { note })}
-            />
+          <div className="flex items-start gap-2">
+            {item.link ? (
+              <a
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={actions.handleOpen}
+                className="min-w-0 flex-1 text-lg font-medium break-words hover:text-accent hover:underline"
+              >
+                {item.title}
+              </a>
+            ) : (
+              <span className="min-w-0 flex-1 text-lg font-medium break-words">{item.title}</span>
+            )}
+            {collapsible && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                aria-label={expanded ? 'Hide details' : 'Show details'}
+                className="mt-0.5 shrink-0 px-1"
+              >
+                {expanded ? (
+                  <Minus size={13} strokeWidth={1.75} aria-hidden="true" />
+                ) : (
+                  <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                )}
+              </Button>
+            )}
+          </div>
+          {showBody && (
+            <>
+              {item.summary && (
+                <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
+              )}
+              <ArticleCardActionsRow
+                item={item}
+                actions={actions}
+                folders={folders}
+                showFolderPicker={showFolderPicker}
+                showDelete={showDelete}
+                alwaysVisible={collapsible}
+              />
+              {showNote && (
+                <ArticleNoteEditor
+                  itemId={item.id}
+                  note={item.note}
+                  onChange={(note) => onUpdate(item.id, { note })}
+                />
+              )}
+            </>
           )}
           {actions.error && <p className="mt-1 text-base text-danger">{actions.error}</p>}
         </div>

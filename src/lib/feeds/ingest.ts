@@ -450,7 +450,6 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
   const { data: prefRows, error: prefsError } = await supabase
     .from('user_preferences')
     .select('user_id, auto_delete_keywords')
-    .eq('auto_delete_enabled', true)
   if (prefsError) {
     console.error('ingest: failed to load auto-delete preferences', prefsError.message)
     return 0
@@ -516,10 +515,7 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
   const [{ data: subs, error: subsError }, { data: prefRows, error: prefsError }] =
     await Promise.all([
       supabase.from('subscriptions').select('feed_id, user_id'),
-      supabase
-        .from('user_preferences')
-        .select('user_id, auto_delete_keywords')
-        .eq('auto_delete_enabled', true),
+      supabase.from('user_preferences').select('user_id, auto_delete_keywords'),
     ])
   if (subsError) {
     throw new Error(`Failed to load subscriptions: ${subsError.message}`)

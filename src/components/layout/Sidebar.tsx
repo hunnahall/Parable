@@ -44,7 +44,7 @@ export default function Sidebar({
         }
       >
         <Link href="/" aria-label="Parable" className="min-w-0">
-          {collapsed ? <ParableMark size={22} /> : <ParableLogo height={28} />}
+          {collapsed ? <ParableMark size={33} /> : <ParableLogo height={42} />}
         </Link>
         {!collapsed && (
           <button

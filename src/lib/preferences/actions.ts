@@ -16,7 +16,6 @@ export async function updatePreferences(
     font: prefs.font,
     sidebar_collapsed: prefs.sidebarCollapsed,
     language: prefs.language,
-    auto_delete_enabled: prefs.autoDeleteEnabled,
     auto_delete_keywords: prefs.autoDeleteKeywords,
     updated_at: new Date().toISOString(),
   })

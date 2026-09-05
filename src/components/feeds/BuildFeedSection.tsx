@@ -92,7 +92,7 @@ export default function BuildFeedSection({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors"
+          className="bg-foreground text-background px-4 py-2 text-base transition-colors hover:opacity-90"
         >
           Build feed
         </button>
