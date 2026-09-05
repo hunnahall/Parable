@@ -330,7 +330,7 @@ async function fetchFeedItems(feed: FeedRow): Promise<FeedEntryItem[]> {
 async function processFeed(
   supabase: AdminClient,
   feed: FeedRow,
-  cutoffMs: number | null,
+  cutoffMs: number,
   targetLanguage: string,
   deadline: number
 ): Promise<FeedResult> {
@@ -346,19 +346,18 @@ async function processFeed(
     const items = rawItems
       .map((item) => ({ item, guid: item.guid ?? item.link ?? null }))
       .filter((entry): entry is { item: FeedEntryItem; guid: string } => entry.guid !== null)
-      // When a max age is set, an item with no parseable publish date
-      // can't be confirmed to fall inside or outside it — INCLUDE rather
-      // than exclude, so a feed using a non-standard/relative date format
-      // rss-parser can't normalize doesn't have its items silently
-      // disappear from every manual "Run ingest now" run. (Previously
-      // excluded undated items here, which meant a feed whose dates never
-      // parse would look "empty" on manual runs forever — dedup-by-guid
-      // above already prevents an included-but-actually-old item from
-      // being a repeat problem.) Skipped entirely for scraped feeds:
-      // detectArticles rarely finds a reliable date, so age-filtering them
-      // would just drop everything on every manual run either way.
+      // An item with no parseable publish date can't be confirmed to fall
+      // inside or outside the cutoff — INCLUDE rather than exclude, so a
+      // feed using a non-standard/relative date format rss-parser can't
+      // normalize doesn't have its items silently disappear from every
+      // ingest run. (Previously excluded undated items here, which meant a
+      // feed whose dates never parse would look "empty" forever —
+      // dedup-by-guid above already prevents an included-but-actually-old
+      // item from being a repeat problem.) Skipped entirely for scraped
+      // feeds: detectArticles rarely finds a reliable date, so age-filtering
+      // them would just drop everything on every run either way.
       .filter((entry) => {
-        if (cutoffMs === null || feed.is_scraped) return true
+        if (feed.is_scraped) return true
         const publishedMs = entry.item.isoDate ? new Date(entry.item.isoDate).getTime() : NaN
         return Number.isNaN(publishedMs) || publishedMs >= cutoffMs
       })
@@ -499,13 +498,17 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
 
 // Shared by the cron-triggered /api/ingest-feeds route and the "Run ingest
 // now" button in the feeds management UI (src/lib/feeds/actions.ts), so
-// both paths run the exact same logic instead of drifting apart. The cron
-// route calls this with no options (unbounded — same as always); only
-// runIngestNow passes maxAgeHours, so a manual run doesn't backfill a
-// feed's entire history the first time it's triggered.
-export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<IngestSummary> {
+// both paths run the exact same logic instead of drifting apart — including
+// this cutoff. Parable's own retention policy never keeps an article past
+// 24h in the Inbox anyway (see runRetention), so ingesting anything older
+// would just create work that gets discarded shortly after — including on
+// a feed's very first fetch, which otherwise would backfill its entire
+// history in one run.
+const MAX_ITEM_AGE_HOURS = 24
+
+export async function runIngest(): Promise<IngestSummary> {
   const supabase = adminClient()
-  const cutoffMs = opts.maxAgeHours != null ? Date.now() - opts.maxAgeHours * 60 * 60 * 1000 : null
+  const cutoffMs = Date.now() - MAX_ITEM_AGE_HOURS * 60 * 60 * 1000
   const deadline = Date.now() + RUN_BUDGET_MS
 
   // Only feeds someone actually subscribes to are worth fetching. Each

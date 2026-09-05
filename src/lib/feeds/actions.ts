@@ -156,9 +156,9 @@ export async function createBuiltFeed(input: {
   return { feed: { ...feed, title, folderIds: [] }, error: null }
 }
 
-// Manual trigger, unlike the cron-driven /api/ingest-feeds route: capped
-// to the last 24 hours so clicking this on a feed that's never been
-// ingested doesn't backfill its entire history in one go.
+// Manual trigger, unlike the cron-driven /api/ingest-feeds route — same
+// underlying runIngest, including its 24h cutoff, so clicking this on a
+// feed that's never been ingested doesn't backfill its entire history.
 export async function runIngestNow(): Promise<
   { summary: IngestSummary; error: null } | { summary: null; error: string }
 > {
@@ -166,7 +166,7 @@ export async function runIngestNow(): Promise<
   if (!user) return { summary: null, error: 'Not signed in' }
 
   try {
-    const summary = await runIngest({ maxAgeHours: 24 })
+    const summary = await runIngest()
     revalidatePath('/feeds')
     revalidatePath('/')
     return { summary, error: null }
