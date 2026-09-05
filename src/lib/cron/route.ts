@@ -16,10 +16,9 @@ export function isAuthorizedCronRequest(request: NextRequest): boolean {
   return headerSecret === expected || querySecret === expected
 }
 
-// The three retention routes differ only in which retention function they
-// call and what they log, so they share one handler shape: authorize,
-// read ?dryRun, run, and turn a throw into a 500 rather than an opaque
-// empty-body failure.
+// Shared handler shape for every cron route: authorize, read ?dryRun,
+// run, and turn a throw into a 500 rather than an opaque empty-body
+// failure.
 export function cronRoute<T>(label: string, run: (options: { dryRun: boolean }) => Promise<T>) {
   return async function handle(request: NextRequest) {
     if (!isAuthorizedCronRequest(request)) {

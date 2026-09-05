@@ -8,19 +8,16 @@ import {
   updateFeed,
   removeFeed,
   runIngestNow,
-  setFeedSummarizeArticles,
 } from '@/lib/feeds/actions'
 import { assignFeedToFolders } from '@/lib/folders/actions'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import type { EngagementRate } from '@/lib/feeds/engagement'
-import type { TagCount } from '@/lib/tags/data'
 import { formatFetchedAt } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import OpmlImport from './OpmlImport'
 import BuildFeedSection from './BuildFeedSection'
-import TagManager from './TagManager'
 
 const NO_FOLDER = 'No folder'
 
@@ -40,13 +37,11 @@ export default function FeedManager({
   folders,
   folderRows,
   engagement,
-  tags,
 }: {
   feeds: FeedRow[]
   folders: { id: string; label: string }[]
   folderRows: FolderRow[]
   engagement: Record<string, EngagementRate>
-  tags: TagCount[]
 }) {
   const router = useRouter()
   const [feedsExpanded, setFeedsExpanded] = useState(false)
@@ -140,25 +135,6 @@ export default function FeedManager({
     }
     if (folderResult.error) {
       setError(folderResult.error)
-      return
-    }
-    router.refresh()
-  }
-
-  // Toggled directly from the list — no Edit-mode round trip needed, since
-  // this is the one setting worth flipping per-article-cost-consciously on
-  // its own (see setFeedSummarizeArticles in src/lib/feeds/actions.ts).
-  async function handleToggleSummarize(feed: FeedRow) {
-    const next = !feed.summarize_articles
-    setLocalFeeds((prev) =>
-      prev.map((f) => (f.id === feed.id ? { ...f, summarize_articles: next } : f))
-    )
-    const result = await setFeedSummarizeArticles(feed.id, next)
-    if (result.error) {
-      setError(result.error)
-      setLocalFeeds((prev) =>
-        prev.map((f) => (f.id === feed.id ? { ...f, summarize_articles: feed.summarize_articles } : f))
-      )
       return
     }
     router.refresh()
@@ -284,7 +260,6 @@ export default function FeedManager({
 
       <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
 
-      <TagManager tags={tags} />
 
       <FolderManager folders={folderRows} />
 
@@ -420,17 +395,6 @@ export default function FeedManager({
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <label
-                            className="flex items-center gap-1.5 text-base text-muted"
-                            title="Generate an AI summary for each new article from this feed"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={feed.summarize_articles}
-                              onChange={() => handleToggleSummarize(feed)}
-                            />
-                            AI summary
-                          </label>
                           <button
                             type="button"
                             onClick={() => startEdit(feed)}

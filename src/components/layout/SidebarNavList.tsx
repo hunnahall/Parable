@@ -9,12 +9,10 @@ import CountBadge from './CountBadge'
 export default function SidebarNavList({
   collapsed = false,
   inboxCount,
-  readerCount,
   onNavigate,
 }: {
   collapsed?: boolean
   inboxCount: number
-  readerCount: number
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
@@ -26,8 +24,7 @@ export default function SidebarNavList({
 
         const active = isNavEntryActive(entry.href, pathname)
         const Icon = entry.icon
-        const badgeCount =
-          entry.badge === 'inbox' ? inboxCount : entry.badge === 'reader' ? readerCount : 0
+        const badgeCount = entry.badge === 'inbox' ? inboxCount : 0
 
         return (
           <Link
@@ -37,13 +34,14 @@ export default function SidebarNavList({
             aria-current={active ? 'page' : undefined}
             title={collapsed ? entry.label : undefined}
             className={
-              'flex items-center gap-3 px-3 py-2 text-base font-bold font-label transition-colors ' +
+              'flex items-center gap-2.5 h-8 px-2 rounded-md text-base font-medium font-label transition-colors ' +
+              (collapsed ? 'justify-center ' : '') +
               (active
-                ? 'text-foreground border-l-2 border-accent bg-foreground/5'
-                : 'text-muted hover:text-foreground border-l-2 border-transparent')
+                ? 'bg-foreground/[0.08] text-foreground'
+                : 'text-muted hover:bg-foreground/[0.04] hover:text-foreground')
             }
           >
-            <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+            <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{entry.label}</span>}
             {!collapsed && badgeCount > 0 && <CountBadge count={badgeCount} />}
           </Link>

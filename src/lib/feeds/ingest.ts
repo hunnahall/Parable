@@ -1,22 +1,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { after } from 'next/server'
 import Parser from 'rss-parser'
 import { stripHtml, translateArticle } from '@/lib/translate'
-import { summarizeArticle } from '@/lib/summarize'
-import { prewarmArticleContent, prewarmArticleImage } from '@/lib/articles/content'
+import { summarizeToTarget } from '@/lib/summarize'
+import { fetchAndExtractContent, fetchHeaderImage } from '@/lib/articles/extract'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
+import { applyFilings, planFilings, type RuleRow } from '@/lib/filters/filing'
 import { UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { detectArticles } from './buildFeed'
 import { mapWithConcurrency } from '@/lib/concurrency'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
-// Some feeds put the full article body in <content:encoded>/<description>
-// instead of a short snippet. This column is meant to hold a summary, not
-// an unbounded copy of the article — the full body already gets cached
-// separately (and purged) in article_content. Cap what we store here so a
-// handful of such feeds can't quietly balloon feed_items forever.
-const STORED_SUMMARY_MAX_LENGTH = 1500
+// Below this, an extracted "body" is a cookie banner or a paywall stub
+// rather than an article — summarizing it produces a worse result than
+// summarizing the feed's own description, so that's what we fall back to.
+const MIN_BODY_LENGTH = 500
 // Some feeds (e.g. huggingface.co/blog, openai.com/news) publish their
 // entire history in one unpaginated RSS file — 1000+ items. Checking
 // which of those already exist by passing every guid into one `.in()`
@@ -42,13 +40,19 @@ const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https:/
 // Kept modest to stay well clear of OpenAI's and any single feed host's
 // per-connection rate limits.
 const FEED_CONCURRENCY = 6
-const ITEM_CONCURRENCY = 5
-// The background content-prewarm pass (see the needsTranslation branch in
-// processItem/runIngest below) is a live scrape of an external site per
-// item, same as the reading view's own lazy fetch — kept low so an ingest
-// run with a lot of new items in the user's own language doesn't hammer
-// several hosts at once.
-const PREWARM_CONCURRENCY = 3
+// Every new item now costs a page fetch plus a summarization call, where
+// it used to cost at most two short OpenAI calls — raised to keep
+// wall-clock per feed roughly where it was despite the heavier per-item
+// work. Still well clear of OpenAI's and any single host's rate limits.
+const ITEM_CONCURRENCY = 8
+
+// The route this runs under has a 300s ceiling (maxDuration in
+// /api/ingest-feeds). A first run against a large backlog can easily
+// exceed that, and being killed mid-flight would discard whatever was
+// still in flight and re-pay for it next time. Stop *starting* new items
+// at this mark instead and return cleanly: guids are deduped against
+// feed_items, so the next cron run picks up exactly what was left.
+const RUN_BUDGET_MS = 240_000
 
 // rss-parser's underlying XML parser (sax-js) always reports a parse
 // failure with "Line: N" and "Column: N" in the message — a distinctive
@@ -115,18 +119,21 @@ function adminClient(): AdminClient {
 // fetch instead — see applyAutoDeleteRules below.
 const INGEST_TARGET_LANGUAGE = process.env.INGEST_TARGET_LANGUAGE || DEFAULT_LANGUAGE
 
-// summarize_articles is per-subscription, not a global setting (see
-// FeedRow.summarize_articles in src/lib/feeds/data.ts and the toggle in
-// FeedManager/BuildFeedSection). Since the summary is written to the
-// shared feed_items row, it's generated when *any* subscriber wants it;
-// bestSummary (src/lib/articles/list.ts) then gates whether each
-// individual reader is shown it.
+// Auto-delete keywords are per-user but feed_items rows are shared, so a
+// feed carries every subscriber's list. An item whose title matches
+// *every* subscriber's list is dropped before it costs a fetch or a
+// summarization call — that is what "delete immediately without
+// summarizing" means once more than one account can subscribe. An item
+// matching only some subscribers' lists is still ingested and summarized
+// for the others, then tombstoned for the ones who filtered it.
+type FeedSubscriber = { userId: string; keywords: string[] }
+
 type FeedRow = {
   id: string
   url: string
   title: string | null
   is_scraped: boolean
-  summarize_articles: boolean
+  subscribers: FeedSubscriber[]
   consecutive_failures: number
 }
 // Deliberately a small structural subset rather than rss-parser's own Item
@@ -158,52 +165,57 @@ function extractItemImage(item: RawFeedItem): string | undefined {
   return item.enclosure?.url ?? item.mediaContent?.$?.url ?? item.mediaThumbnail?.$?.url ?? undefined
 }
 
-interface PrewarmTarget {
-  feedItemId: string
-  link: string
-}
-
+// Everything Parable keeps about an article, in the order it becomes
+// available. The body is fetched, read once, and never stored.
 async function processItem(
   supabase: AdminClient,
   feed: FeedRow,
   item: FeedEntryItem,
   guid: string,
   targetLanguage: string
-): Promise<{
-  inserted: boolean
-  prewarm: PrewarmTarget | null
-  prewarmImage: PrewarmTarget | null
-}> {
+): Promise<{ inserted: boolean; feedItemId: string | null; title: string; titleEn: string | null }> {
+  const skipped = { inserted: false, feedItemId: null, title: '', titleEn: null }
   try {
     const rawTitle = item.title ?? ''
     const rawSummary = item.content ?? item.summary ?? item.contentSnippet ?? ''
 
-    // translateArticle() re-strips these same raw strings internally —
-    // passing it the same raw HTML that stripHtml() cleans here keeps the
-    // stored title/summary and the detected/translated text based on
-    // identical input. Always attempted (no per-feed opt-out) — it does
-    // its own local language detection and skips the OpenAI call entirely
-    // whenever the detected language already matches the target, so this
-    // never pays for a translation nothing needed.
-    const { original_language, title_en, summary_en } = await translateArticle(
-      rawTitle,
-      rawSummary,
-      targetLanguage
-    )
+    // Step 1: translate the title. translateArticle does its own local
+    // language detection and skips the OpenAI call entirely when the
+    // detected language already matches the target, so this never pays for
+    // a no-op translation.
+    const { original_language, title_en } = await translateArticle(rawTitle, rawSummary, targetLanguage)
+    const title = stripHtml(rawTitle)
+    const matchTitle = title_en ?? title
 
-    // On only when at least one subscriber asked for it — the
-    // OpenAI call this skips is the pipeline's one unconditional
-    // per-article cost (unlike translation, which only fires for
-    // non-target-language content); when it's off, feed_items.summary_ai
-    // just stays null and article lists fall back to the feed's own
-    // description instead.
-    const summary_ai = feed.summarize_articles
-      ? await summarizeArticle(
-          title_en ?? stripHtml(rawTitle),
-          summary_en ?? stripHtml(rawSummary),
-          targetLanguage
-        )
-      : null
+    // Step 2: filter on the translated title, before anything expensive.
+    // A title every subscriber has filtered never becomes a row at all.
+    const filteredOutFor = feed.subscribers
+      .filter((sub) => matchedAutoDeleteKeyword(matchTitle, sub.keywords) !== null)
+      .map((sub) => sub.userId)
+    if (filteredOutFor.length === feed.subscribers.length) {
+      return skipped
+    }
+
+    // Step 3: read the article. The body only exists to be summarized —
+    // it is never persisted, so a failure here is a quality regression
+    // (summarize the feed's blurb instead), not an error.
+    let bodyForSummary = stripHtml(rawSummary)
+    let scrapedImage: string | null = null
+    if (item.link) {
+      const extracted = await fetchAndExtractContent(item.link)
+      if ('text' in extracted && extracted.text.length >= MIN_BODY_LENGTH) {
+        bodyForSummary = extracted.text
+        scrapedImage = extracted.imageUrl
+      } else if (!item.imageUrl) {
+        // Extraction gave us nothing usable, but a cover image is a cheap
+        // separate fetch and beats falling back to a favicon.
+        scrapedImage = await fetchHeaderImage(item.link)
+      }
+    }
+
+    // Step 4: two sentences, in the target language, in one call — see
+    // summarizeToTarget for why translation isn't a second pass.
+    const summary_ai = await summarizeToTarget(matchTitle, bodyForSummary, targetLanguage)
 
     // upsert + ignoreDuplicates rather than a plain insert: if this run
     // overlaps another (cron firing while "Run ingest now" is also
@@ -217,15 +229,13 @@ async function processItem(
         {
           feed_id: feed.id,
           guid,
-          title: stripHtml(rawTitle),
+          title,
           link: item.link ?? null,
-          summary: stripHtml(rawSummary).slice(0, STORED_SUMMARY_MAX_LENGTH),
           published_at: item.isoDate ?? null,
           original_language,
           title_en,
-          summary_en,
           summary_ai,
-          image_url: item.imageUrl ?? null,
+          image_url: item.imageUrl ?? scrapedImage ?? null,
         },
         { onConflict: 'feed_id,guid', ignoreDuplicates: true }
       )
@@ -235,31 +245,28 @@ async function processItem(
       throw new Error(`Failed to insert item: ${insertError.message}`)
     }
 
-    // Only set on a genuine insert (upserted is empty when ignoreDuplicates
-    // skipped a same-run race — see the comment above) and only when this
-    // item's own detected language already matches the target (or
-    // couldn't be detected), since that's what guarantees the prewarm
-    // scrape below can't be followed by a wasted OpenAI call. Full-body
-    // translation itself never runs at ingest time — only lazily on open
-    // (see /api/articles/[id]/content) or eagerly once an article is moved
-    // to Reader (see moveToReader in src/lib/articles/actions.ts).
-    const insertedId = upserted?.[0]?.id as string | undefined
-    const needsTranslation = original_language !== targetLanguage && original_language !== 'und'
-    const prewarm: PrewarmTarget | null =
-      !needsTranslation && insertedId && item.link
-        ? { feedItemId: insertedId, link: item.link }
-        : null
-    // An item needing translation skips the full prewarm above, but a
-    // cover image has no OpenAI cost either way — fetch just the header
-    // image for these too (unless the RSS item already carried its own
-    // image), rather than leaving every item on the favicon fallback
-    // until opened.
-    const prewarmImage: PrewarmTarget | null =
-      needsTranslation && !item.imageUrl && insertedId && item.link
-        ? { feedItemId: insertedId, link: item.link }
-        : null
+    // Empty when ignoreDuplicates skipped a same-run race (see above).
+    const insertedId = (upserted?.[0]?.id as string | undefined) ?? null
 
-    return { inserted: true, prewarm, prewarmImage }
+    // Subscribers who filtered this title get a tombstone rather than the
+    // article — it exists for the others, but never reaches their inbox.
+    if (insertedId && filteredOutFor.length > 0) {
+      const now = new Date().toISOString()
+      const { error: tombstoneError } = await supabase.from('article_states').upsert(
+        filteredOutFor.map((userId) => ({
+          user_id: userId,
+          feed_item_id: insertedId,
+          state: 'deleted',
+          archived_at: now,
+        })),
+        { onConflict: 'user_id,feed_item_id' }
+      )
+      if (tombstoneError) {
+        console.error(`ingest: filter tombstone failed for ${insertedId}`, tombstoneError.message)
+      }
+    }
+
+    return { inserted: true, feedItemId: insertedId, title, titleEn: title_en }
   } catch (itemErr) {
     // A single malformed item (missing/garbage fields) or a one-off insert
     // failure shouldn't sink the rest of an otherwise-healthy feed.
@@ -267,17 +274,20 @@ async function processItem(
       `ingest-feeds: skipping item guid=${guid} in feed ${feed.id} (${feed.url})`,
       itemErr
     )
-    return { inserted: false, prewarm: null, prewarmImage: null }
+    return skipped
   }
 }
 
+// New rows this feed contributed, carried up so runIngest can apply each
+// user's filing rules to them in one pass at the end.
+export interface IngestedItem {
+  id: string
+  title: string
+  title_en: string | null
+}
+
 type FeedResult =
-  | {
-      ok: true
-      itemsInserted: number
-      prewarmTargets: PrewarmTarget[]
-      prewarmImageTargets: PrewarmTarget[]
-    }
+  | { ok: true; itemsInserted: number; newItems: IngestedItem[] }
   | { ok: false; failure: FeedFailure }
 
 // Fetches+parses the feed's raw item list, before dedup/cutoff filtering.
@@ -321,7 +331,8 @@ async function processFeed(
   supabase: AdminClient,
   feed: FeedRow,
   cutoffMs: number | null,
-  targetLanguage: string
+  targetLanguage: string,
+  deadline: number
 ): Promise<FeedResult> {
   try {
     const rawItems = await fetchFeedItems(feed)
@@ -374,16 +385,24 @@ async function processFeed(
     // Each item is inserted as soon as it's processed (inside processItem)
     // rather than buffering the whole feed's rows for one bulk insert at
     // the end — a large or first-time feed can have enough new items that
-    // a mid-run crash/timeout (each item pays for up to two sequential
-    // OpenAI calls) would otherwise discard every already-processed item
-    // for this feed, and re-pay for the same OpenAI calls on the next run.
-    const results = await mapWithConcurrency(newItems, ITEM_CONCURRENCY, ({ item, guid }) =>
-      processItem(supabase, feed, item, guid, targetLanguage)
-    )
+    // a mid-run crash/timeout (each item pays for a page fetch and an
+    // OpenAI call) would otherwise discard every already-processed item
+    // for this feed and re-pay for it on the next run.
+    //
+    // The deadline check is per item rather than per feed: once the run
+    // budget is spent, remaining items are simply left for the next cron
+    // pass, which finds them again because nothing was written for them.
+    const results = await mapWithConcurrency(newItems, ITEM_CONCURRENCY, ({ item, guid }) => {
+      if (Date.now() > deadline) {
+        return Promise.resolve({ inserted: false, feedItemId: null, title: '', titleEn: null })
+      }
+      return processItem(supabase, feed, item, guid, targetLanguage)
+    })
 
     const itemsInserted = results.filter((r) => r.inserted).length
-    const prewarmTargets = results.flatMap((r) => (r.prewarm ? [r.prewarm] : []))
-    const prewarmImageTargets = results.flatMap((r) => (r.prewarmImage ? [r.prewarmImage] : []))
+    const newRows: IngestedItem[] = results.flatMap((r) =>
+      r.feedItemId ? [{ id: r.feedItemId, title: r.title, title_en: r.titleEn }] : []
+    )
 
     const { error: updateError } = await supabase
       .from('feeds')
@@ -394,7 +413,7 @@ async function processFeed(
       throw new Error(`Failed to update last_fetched_at: ${updateError.message}`)
     }
 
-    return { ok: true, itemsInserted, prewarmTargets, prewarmImageTargets }
+    return { ok: true, itemsInserted, newItems: newRows }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
@@ -420,14 +439,13 @@ async function processFeed(
   }
 }
 
-// Applies each user's own Filters list (see FiltersForm) to whatever this
-// run just added to their inbox. Runs per user, after the fetch, rather
-// than inline during ingest: the keywords are per-account but feed_items
-// rows are shared by every subscriber, so a match can only ever hide the
-// article from the user who wrote the keyword — never delete it out from
-// under anyone else. Writes the same 'deleted' tombstone the manual "Run
-// filters now" action does (see runAutoDeleteRulesNow in
-// src/lib/settings/actions.ts).
+// A backstop pass over each user's whole inbox, not the primary filter —
+// processItem already drops a matching title before it costs a fetch or a
+// summarization call. This catches the cases that path can't: a keyword
+// added after an article was already ingested, and an article ingested
+// for one subscriber while another's list would have rejected it. Writes
+// the same 'deleted' tombstone the manual "Run filters now" action does
+// (see runAutoDeleteRulesNow in src/lib/settings/actions.ts).
 async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
   const { data: prefRows, error: prefsError } = await supabase
     .from('user_preferences')
@@ -489,23 +507,40 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
 export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<IngestSummary> {
   const supabase = adminClient()
   const cutoffMs = opts.maxAgeHours != null ? Date.now() - opts.maxAgeHours * 60 * 60 * 1000 : null
+  const deadline = Date.now() + RUN_BUDGET_MS
 
-  // Independent of each other — run together instead of paying for two
-  // sequential round trips before any feed work can start.
-  // Only feeds someone actually subscribes to are worth fetching, and a
-  // feed's AI-summary setting is the union of its subscribers' choices.
-  const { data: subs, error: subsError } = await supabase
-    .from('subscriptions')
-    .select('feed_id, summarize_articles')
+  // Only feeds someone actually subscribes to are worth fetching. Each
+  // feed also needs its subscribers' auto-delete keywords, so that an item
+  // nobody wants can be dropped before it costs a fetch and an OpenAI call
+  // (see processItem step 2).
+  const [{ data: subs, error: subsError }, { data: prefRows, error: prefsError }] =
+    await Promise.all([
+      supabase.from('subscriptions').select('feed_id, user_id'),
+      supabase
+        .from('user_preferences')
+        .select('user_id, auto_delete_keywords')
+        .eq('auto_delete_enabled', true),
+    ])
   if (subsError) {
     throw new Error(`Failed to load subscriptions: ${subsError.message}`)
   }
-
-  const summarizeByFeed = new Map<string, boolean>()
-  for (const sub of subs ?? []) {
-    if (sub.summarize_articles) summarizeByFeed.set(sub.feed_id, true)
+  if (prefsError) {
+    // Not fatal: without keywords every item simply survives the filter
+    // gate, which is the same outcome as nobody having any.
+    console.error('ingest: failed to load auto-delete preferences', prefsError.message)
   }
-  const subscribedFeedIds = [...new Set((subs ?? []).map((sub) => sub.feed_id))]
+
+  const keywordsByUser = new Map<string, string[]>(
+    (prefRows ?? []).map((row) => [row.user_id as string, (row.auto_delete_keywords ?? []) as string[]])
+  )
+
+  const subscribersByFeed = new Map<string, FeedSubscriber[]>()
+  for (const sub of subs ?? []) {
+    const list = subscribersByFeed.get(sub.feed_id) ?? []
+    list.push({ userId: sub.user_id, keywords: keywordsByUser.get(sub.user_id) ?? [] })
+    subscribersByFeed.set(sub.feed_id, list)
+  }
+  const subscribedFeedIds = [...subscribersByFeed.keys()]
 
   if (subscribedFeedIds.length === 0) {
     return { feedsProcessed: 0, feedsFailed: [], itemsInserted: 0, itemsAutoDeleted: 0 }
@@ -523,59 +558,64 @@ export async function runIngest(opts: { maxAgeHours?: number } = {}): Promise<In
 
   const feeds = (catalogFeeds ?? []).map((feed) => ({
     ...feed,
-    summarize_articles: summarizeByFeed.get(feed.id) ?? false,
+    subscribers: subscribersByFeed.get(feed.id) ?? [],
   }))
 
   const results = await mapWithConcurrency(feeds, FEED_CONCURRENCY, (feed) =>
-    processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE)
+    processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE, deadline)
   )
 
   let feedsProcessed = 0
   let itemsInserted = 0
-  let itemsAutoDeleted = 0
   const feedsFailed: FeedFailure[] = []
-  const prewarmTargets: PrewarmTarget[] = []
-  const prewarmImageTargets: PrewarmTarget[] = []
+  const newItems: IngestedItem[] = []
 
   for (const result of results) {
     if (result.ok) {
       feedsProcessed++
       itemsInserted += result.itemsInserted
-      prewarmTargets.push(...result.prewarmTargets)
-      prewarmImageTargets.push(...result.prewarmImageTargets)
+      newItems.push(...result.newItems)
     } else {
       feedsFailed.push(result.failure)
     }
   }
 
-  itemsAutoDeleted = await applyAutoDeleteRules(supabase)
-
-  // Scheduled to run after this request's response is sent (see Next's
-  // `after`) rather than awaited here — a live scrape per item would
-  // otherwise stretch every ingest cycle (cron and "Run ingest now" alike)
-  // by however long these translate-disabled feeds' new items take to
-  // fetch, defeating the point of pre-caching them ahead of a user ever
-  // opening one.
-  if (prewarmTargets.length > 0) {
-    after(() =>
-      mapWithConcurrency(prewarmTargets, PREWARM_CONCURRENCY, (target) =>
-        prewarmArticleContent(supabase, target.feedItemId, target.link)
-      )
-    )
-  }
-
-  // Same deferred-after-response treatment as the full-content prewarm
-  // above, kept as a separate pass since it targets a different (usually
-  // larger) set of items — every translate-enabled feed's new items, not
-  // just translate-disabled ones — and is cheap enough on its own not to
-  // need folding into that pass's concurrency budget.
-  if (prewarmImageTargets.length > 0) {
-    after(() =>
-      mapWithConcurrency(prewarmImageTargets, PREWARM_CONCURRENCY, (target) =>
-        prewarmArticleImage(supabase, target.feedItemId, target.link)
-      )
-    )
-  }
+  // Filing rules run after the filter backstop, so a title matching both a
+  // delete keyword and a rule is deleted rather than filed — the blocklist
+  // is the stronger signal.
+  const itemsAutoDeleted = await applyAutoDeleteRules(supabase)
+  await applyFilterRules(supabase, newItems)
 
   return { feedsProcessed, feedsFailed, itemsInserted, itemsAutoDeleted }
+}
+
+// Applies each user's Rules block (see RulesBlock on /filters) to the rows
+// this run just added. Runs once at the end rather than inline per item
+// for the same reason auto-delete does: rules are per-account, feed_items
+// rows are shared, and a rule can only ever file the article into the
+// folder of the user who wrote it.
+async function applyFilterRules(supabase: AdminClient, newItems: IngestedItem[]): Promise<void> {
+  if (newItems.length === 0) return
+
+  const { data: rules, error } = await supabase
+    .from('filter_rules')
+    .select('user_id, keyword, folder_id')
+  if (error) {
+    console.error('ingest: failed to load filter rules', error.message)
+    return
+  }
+  if (!rules || rules.length === 0) return
+
+  const rulesByUser = new Map<string, RuleRow[]>()
+  for (const rule of rules) {
+    const list = rulesByUser.get(rule.user_id) ?? []
+    list.push({ keyword: rule.keyword, folder_id: rule.folder_id })
+    rulesByUser.set(rule.user_id, list)
+  }
+
+  for (const [userId, userRules] of rulesByUser) {
+    const filings = planFilings(newItems, userRules)
+    const { error: writeError } = await applyFilings(supabase, userId, filings)
+    if (writeError) console.error(`ingest: filing rules failed for ${userId}`, writeError)
+  }
 }

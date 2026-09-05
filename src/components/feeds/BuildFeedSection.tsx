@@ -25,7 +25,6 @@ export default function BuildFeedSection({
   const [preview, setPreview] = useState<BuildFeedPreview | null>(null)
   const [title, setTitle] = useState('')
   const [folderId, setFolderId] = useState('')
-  const [summarizeArticles, setSummarizeArticles] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +38,6 @@ export default function BuildFeedSection({
     setPreview(null)
     setTitle('')
     setFolderId('')
-    setSummarizeArticles(false)
     setError(null)
   }, [busy])
 
@@ -74,7 +72,6 @@ export default function BuildFeedSection({
     const result = await createBuiltFeed({
       sourceUrl: preview.sourceUrl,
       title: title.trim(),
-      summarizeArticles,
     })
     setSaving(false)
     if (result.error !== null) {
@@ -186,15 +183,6 @@ export default function BuildFeedSection({
                     ))}
                   </select>
                 </div>
-
-                <label className="flex items-center gap-1.5 text-base text-muted">
-                  <input
-                    type="checkbox"
-                    checked={summarizeArticles}
-                    onChange={(e) => setSummarizeArticles(e.target.checked)}
-                  />
-                  Generate AI summaries for this feed
-                </label>
 
                 <ul className="border border-border divide-y divide-border max-h-64 overflow-y-auto">
                   {preview.articles.slice(0, PREVIEW_ITEM_LIMIT).map((article) => (

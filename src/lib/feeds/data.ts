@@ -8,7 +8,6 @@ export interface FeedRow {
   last_fetched_at: string | null
   last_error: string | null
   is_scraped: boolean
-  summarize_articles: boolean
   consecutive_failures: number
   folderIds: string[]
 }
@@ -24,7 +23,7 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const supabase = await createClient()
   const { data: subs, error: subsError } = await supabase
     .from('subscriptions')
-    .select('feed_id, title, summarize_articles')
+    .select('feed_id, title')
     .eq('user_id', user.id)
   logQueryError('feeds/listFeedsDetailed (subscriptions)', subsError)
 
@@ -65,7 +64,6 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
     return {
       ...feed,
       title: sub?.title ?? feed.title,
-      summarize_articles: sub?.summarize_articles ?? false,
       folderIds: foldersByFeed.get(feed.id) ?? [],
     }
   })

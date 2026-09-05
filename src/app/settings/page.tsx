@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
+import PageHeader from '@/components/layout/PageHeader'
 import SettingsForm from '@/components/settings/SettingsForm'
 
 export default async function SettingsPage() {
@@ -10,9 +11,11 @@ export default async function SettingsPage() {
   const preferences = await getUserPreferences()
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="mb-4">Settings</h1>
-      <SettingsForm initialPreferences={preferences} />
-    </div>
+    <>
+      <PageHeader title="Settings" />
+      <div className="mx-auto max-w-2xl p-6">
+        <SettingsForm initialPreferences={preferences} />
+      </div>
+    </>
   )
 }

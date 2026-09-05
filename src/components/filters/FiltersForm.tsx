@@ -6,12 +6,14 @@ import { X } from 'lucide-react'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
 import { runAutoDeleteRulesNow } from '@/lib/settings/actions'
+import { useToast } from '@/components/ui/Toast'
+import Button from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 
 export default function FiltersForm({ initialPreferences }: { initialPreferences: UserPreferences }) {
   const router = useRouter()
+  const toast = useToast()
   const [prefs, setPrefs] = useState(initialPreferences)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [error, setError] = useState<string | null>(null)
   const [filterInput, setFilterInput] = useState('')
   const [runningRules, setRunningRules] = useState(false)
   const [rulesRunResult, setRulesRunResult] = useState<string | null>(null)
@@ -22,15 +24,12 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
   async function applyChange(patch: Partial<UserPreferences>) {
     const next = { ...prefs, ...patch }
     setPrefs(next)
-    setStatus('saving')
-    setError(null)
     const result = await updatePreferences(next)
     if (result.error !== null) {
-      setStatus('error')
-      setError(result.error)
+      toast(result.error, 'danger')
       return
     }
-    setStatus('saved')
+    toast('Saved')
     router.refresh()
   }
 
@@ -70,7 +69,8 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
 
   return (
     <div className="space-y-6">
-      <div className="card-elevated p-4 space-y-2">
+      <div className="card-elevated space-y-2 p-4">
+        <h2 className="text-lg font-bold">Filters</h2>
         <p className="text-base text-muted">
           New articles with a title matching one of these filters will be automatically
           discarded. A filter can be a single word or a phrase.
@@ -84,7 +84,7 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
           Enabled
         </label>
         <div className="flex gap-2">
-          <input
+          <Input
             type="text"
             value={filterInput}
             onChange={(e) => setFilterInput(e.target.value)}
@@ -95,22 +95,16 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
               }
             }}
             placeholder="e.g. soccer or transfer rumors"
-            className="flex-1 border border-border px-3 py-2 text-lg bg-background"
+            className="flex-1"
           />
-          <button
-            type="button"
-            onClick={addFilter}
-            className="border border-border px-3 py-2 text-base hover:bg-foreground/5 transition-colors"
-          >
-            Add
-          </button>
+          <Button onClick={addFilter}>Add</Button>
         </div>
         {prefs.autoDeleteKeywords.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {prefs.autoDeleteKeywords.map((word) => (
               <li
                 key={word}
-                className="flex items-center gap-1 border border-border px-2 py-1 text-base"
+                className="flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-base"
               >
                 {word}
                 <button
@@ -126,26 +120,18 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
           </ul>
         )}
         <div>
-          <button
-            type="button"
+          <Button
             onClick={handleRunRulesNow}
             disabled={runningRules || prefs.autoDeleteKeywords.length === 0}
-            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
           >
             {runningRules ? 'Running…' : 'Run filters now'}
-          </button>
-          <p className="text-base text-muted mt-1">
+          </Button>
+          <p className="mt-1 text-base text-muted">
             Deletes any article currently in your Inbox whose title matches one of these filters.
-            Save, Archive, and Read articles are left alone.
+            Saved and archived articles are left alone.
           </p>
-          {rulesRunResult && <p className="text-base text-muted mt-1">{rulesRunResult}</p>}
+          {rulesRunResult && <p className="mt-1 text-base text-muted">{rulesRunResult}</p>}
         </div>
-      </div>
-
-      <div className="text-lg text-muted" role="status">
-        {status === 'saving' && 'Saving…'}
-        {status === 'saved' && 'Saved.'}
-        {status === 'error' && <span className="text-danger">{error}</span>}
       </div>
     </div>
   )

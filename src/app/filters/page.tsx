@@ -1,18 +1,29 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
+import { listFilterRules } from '@/lib/filters/rules'
+import { listFolderOptions } from '@/lib/folders/data'
+import PageHeader from '@/components/layout/PageHeader'
 import FiltersForm from '@/components/filters/FiltersForm'
+import RulesBlock from '@/components/filters/RulesBlock'
 
 export default async function FiltersPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  const preferences = await getUserPreferences()
+  const [preferences, rules, folders] = await Promise.all([
+    getUserPreferences(),
+    listFilterRules(),
+    listFolderOptions(),
+  ])
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="mb-4">Filters</h1>
-      <FiltersForm initialPreferences={preferences} />
-    </div>
+    <>
+      <PageHeader title="Filters" />
+      <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <FiltersForm initialPreferences={preferences} />
+        <RulesBlock rules={rules} folders={folders} />
+      </div>
+    </>
   )
 }

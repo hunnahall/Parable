@@ -2,20 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { LayoutList, LayoutGrid } from 'lucide-react'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/articles/list'
-import {
-  fetchArticlesPage,
-  archiveArticlesBulk,
-  purgeArticles,
-  moveToReader,
-} from '@/lib/articles/actions'
+import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
 import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
 import ArticleCardGrid from './ArticleCardGrid'
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
+import Button from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 
-export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived' | 'reading'
+export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
 export type ArticlesDisplayMode = 'list' | 'card'
 
 export interface ArticlesFilters {
@@ -23,7 +21,6 @@ export interface ArticlesFilters {
   view: ArticlesViewMode
   folderIds: string[]
   sourceFeedIds: string[]
-  tagIds: string[]
   dateFrom: string | null
   dateTo: string | null
   display: ArticlesDisplayMode
@@ -34,7 +31,6 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   if (filters.query) params.set('q', filters.query)
   if (filters.folderIds.length > 0) params.set('folder', filters.folderIds.join(','))
   if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
-  if (filters.tagIds.length > 0) params.set('tags', filters.tagIds.join(','))
   if (filters.dateFrom) params.set('from', filters.dateFrom)
   if (filters.dateTo) params.set('to', filters.dateTo)
   if (filters.display !== 'list') params.set('display', filters.display)
@@ -42,27 +38,23 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   return qs ? `${basePath}?${qs}` : basePath
 }
 
-// Powers the Inbox, Read, Save, and Archive pages — each passes its own
-// `view` (which server-side query getArticlesPage runs) and `basePath` (so
-// filter navigation stays on that page). Save/Archive affordances per card
-// are the same shared ArticleCard; only Save and Read show the folder
-// picker. Inbox is the odd one out: its cards have no reading-view link
-// (showReaderLink={false} below) and get a "Read" action instead, plus the
-// toolbar's bulk "Read" button. Per-card deletion only exists on Archive
-// (showDelete) — everywhere else, deleting is a bulk-only action scoped to
-// Archive's "Delete selected".
+// Powers the Inbox, Save, and Archive pages — each passes its own `view`
+// (which server-side query getArticlesPage runs) and `basePath` (so filter
+// navigation stays on that page). Every card is the same shared
+// ArticleCard; Inbox and Save additionally show the folder picker, which
+// is what files an article and therefore what saves it. A card's title
+// always links out to the publisher — Parable stores no article bodies, so
+// there is nowhere else for it to go.
 export default function ArticlesView({
   basePath,
   items,
   nextCursor,
   folders,
   feedOptions,
-  allTags,
   filters,
   showFolderPicker = false,
   showDelete = false,
   showDateFilters = true,
-  showTagsDropdown = false,
   enableBulkActions = false,
 }: {
   basePath: string
@@ -70,25 +62,19 @@ export default function ArticlesView({
   nextCursor: { publishedAt: string; id: string } | null
   folders: FolderOption[]
   feedOptions: { id: string; title: string | null }[]
-  allTags: string[]
   filters: ArticlesFilters
   showFolderPicker?: boolean
   showDelete?: boolean
-  // Archive keeps the From/To date pickers in its toolbar; Inbox, Read,
-  // and Save drop them so the search bar, folder/source dropdowns, and
-  // list/card toggle all fit on one aligned line.
+  // Archive keeps the From/To date pickers in its toolbar; Inbox and Save
+  // drop them so the search bar, folder/source dropdowns, and list/card
+  // toggle all fit on one aligned line.
   showDateFilters?: boolean
-  // Read and Save only — an "All tags" multi-select alongside folders/
-  // sources, replacing the single-select tag chips everywhere else used to
-  // share.
-  showTagsDropdown?: boolean
   // Multi-select toolbar (select all, plus whichever bulk action fits the
-  // current view) — Inbox/Read/Save/Archive all opt in. "Archive selected"
-  // shows on every view except Archive itself (nothing to do there); "Read
-  // selected" only on Inbox (the only view with unfiled, state===null
-  // items to move to Read); "Delete selected" removes a selection from
-  // this account for good (see purgeArticles) and only shows on Archive —
-  // the one place discarding in bulk makes sense.
+  // current view) — every list page opts in. "Archive selected" shows on
+  // every view except Archive itself (nothing to do there); "Delete
+  // selected" removes a selection from this account for good (see
+  // purgeArticles) and shows on Save and Archive — the two places
+  // discarding in bulk makes sense.
   enableBulkActions?: boolean
 }) {
   const router = useRouter()
@@ -185,7 +171,6 @@ export default function ArticlesView({
         view: filters.view,
         folderIds: filters.folderIds,
         sourceFeedIds: filters.sourceFeedIds,
-        tagIds: filters.tagIds,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         cursor: pageCursor,
@@ -228,23 +213,6 @@ export default function ArticlesView({
     router.refresh()
   }
 
-  async function handleBulkRead() {
-    const ids = [...selectedIds]
-    if (ids.length === 0) return
-    setBulkPending(true)
-    setBulkError(null)
-    for (const id of ids) updateItem(id, { state: 'reading', archivedAt: null })
-    const result = await moveToReader(ids)
-    setBulkPending(false)
-    setSelectedIds(new Set())
-    setSelectedAll(false)
-    if (result.error) {
-      setBulkError(result.error)
-      return
-    }
-    router.refresh()
-  }
-
   async function handleBulkDelete() {
     const ids = [...selectedIds]
     if (ids.length === 0) return
@@ -275,7 +243,6 @@ export default function ArticlesView({
       view: filters.view,
       folderIds: filters.folderIds,
       sourceFeedIds: filters.sourceFeedIds,
-      tagIds: filters.tagIds,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       cursor,
@@ -290,15 +257,14 @@ export default function ArticlesView({
     (filters.query ? 1 : 0) +
     (filters.folderIds.length > 0 ? 1 : 0) +
     (filters.sourceFeedIds.length > 0 ? 1 : 0) +
-    (filters.tagIds.length > 0 ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0)
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3 pb-4 border-b border-border-subtle">
-        <div className="flex flex-wrap items-center gap-3">
-          <input
+      <div className="space-y-3 border-b border-border-subtle pb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
             type="search"
             placeholder="Search articles…"
             value={queryDraft}
@@ -307,7 +273,7 @@ export default function ArticlesView({
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitSearch()
             }}
-            className="flex-1 min-w-[10rem] max-w-xs border border-border px-3 py-2 text-lg bg-background"
+            className="min-w-[10rem] max-w-xs flex-1"
           />
           <MultiSelectDropdown
             label="All folders"
@@ -323,51 +289,42 @@ export default function ArticlesView({
             onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
             className="w-36"
           />
-          {showTagsDropdown && (
-            <MultiSelectDropdown
-              label="All tags"
-              options={allTags.map((tag) => ({ id: tag, label: tag }))}
-              selectedIds={filters.tagIds}
-              onChange={(tagIds) => navigate({ tagIds })}
-              className="w-32"
-            />
-          )}
           {showDateFilters && (
             <>
               <label className="flex items-center gap-1.5 text-base text-muted">
                 From
-                <input
+                <Input
                   type="date"
                   value={filters.dateFrom ?? ''}
                   onChange={(e) => navigate({ dateFrom: e.target.value || null })}
-                  className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+                  className="text-foreground"
                 />
               </label>
               <label className="flex items-center gap-1.5 text-base text-muted">
                 To
-                <input
+                <Input
                   type="date"
                   value={filters.dateTo ?? ''}
                   onChange={(e) => navigate({ dateTo: e.target.value || null })}
-                  className="border border-border px-3 py-2 text-lg bg-background text-foreground"
+                  className="text-foreground"
                 />
               </label>
             </>
           )}
-          <div className="flex items-center border border-border ml-auto">
+          <div className="ml-auto flex items-center overflow-hidden rounded-md border border-border">
             <button
               type="button"
               onClick={() => navigate({ display: 'list' })}
               aria-label="List view"
               aria-pressed={filters.display === 'list'}
               className={
-                'flex items-center justify-center w-8 h-8 transition-colors ' +
+                'flex h-8 w-8 items-center justify-center transition-colors ' +
                 (filters.display === 'list'
                   ? 'bg-foreground/10 text-foreground'
                   : 'text-muted hover:text-foreground')
               }
             >
-              <LayoutList size={16} strokeWidth={1.75} aria-hidden="true" />
+              <LayoutList size={15} strokeWidth={1.75} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -375,20 +332,20 @@ export default function ArticlesView({
               aria-label="Card view"
               aria-pressed={filters.display === 'card'}
               className={
-                'flex items-center justify-center w-8 h-8 border-l border-border transition-colors ' +
+                'flex h-8 w-8 items-center justify-center border-l border-border transition-colors ' +
                 (filters.display === 'card'
                   ? 'bg-foreground/10 text-foreground'
                   : 'text-muted hover:text-foreground')
               }
             >
-              <LayoutGrid size={16} strokeWidth={1.75} aria-hidden="true" />
+              <LayoutGrid size={15} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
         </div>
       </div>
 
       {enableBulkActions && localItems.length > 0 && (
-        <div className="flex items-center gap-3 text-lg">
+        <div className="flex items-center gap-2 text-base">
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
@@ -405,51 +362,31 @@ export default function ArticlesView({
           {selectedIds.size > 0 && (
             <>
               {filters.view !== 'archived' && (
-                <button
-                  type="button"
-                  disabled={bulkPending}
-                  onClick={handleBulkArchive}
-                  className="border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50"
-                >
+                <Button size="sm" variant="secondary" disabled={bulkPending} onClick={handleBulkArchive}>
                   {archivingAllCount !== null
                     ? `Archiving ${archivingAllCount}…`
                     : 'Archive selected'}
-                </button>
+                </Button>
               )}
-              {filters.view === 'unfiled' && (
-                <button
-                  type="button"
-                  disabled={bulkPending}
-                  onClick={handleBulkRead}
-                  className="border border-accent text-accent px-3 py-1.5 text-sm hover:bg-accent/10 transition-colors disabled:opacity-50"
-                >
-                  Read selected
-                </button>
-              )}
-              {filters.view === 'archived' && (
-                <button
-                  type="button"
+              {/* Deleting in bulk is offered wherever an article has been
+                  kept on purpose — Save and Archive. It never appears on
+                  Inbox, where Archive is the discard action. */}
+              {(filters.view === 'archived' || filters.view === 'saved') && (
+                <Button
+                  size="sm"
+                  variant={confirmingDelete ? 'danger-solid' : 'danger'}
                   disabled={bulkPending}
                   onClick={handleBulkDelete}
-                  className={
-                    confirmingDelete
-                      ? 'border border-danger bg-danger text-danger-foreground px-3 py-1.5 text-sm transition-colors disabled:opacity-50'
-                      : 'border border-danger text-danger px-3 py-1.5 text-sm hover:bg-danger/10 transition-colors disabled:opacity-50'
-                  }
                 >
                   {confirmingDelete
                     ? `Really delete ${selectedIds.size}? Click to confirm`
                     : 'Delete selected'}
-                </button>
+                </Button>
               )}
               {confirmingDelete && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="text-sm text-muted hover:text-foreground transition-colors"
-                >
+                <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)}>
                   Cancel
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -466,6 +403,16 @@ export default function ArticlesView({
           <p className="relative text-lg text-muted">
             {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
           </p>
+          {/* An empty state that only reports emptiness leaves the reader
+              at a dead end — the one thing that resolves it goes here. */}
+          {activeFilterCount === 0 && (
+            <Link
+              href="/feeds"
+              className="relative mt-3 inline-flex h-8 items-center rounded-md border border-brand bg-brand px-3 text-base font-medium text-brand-foreground transition-opacity hover:opacity-90"
+            >
+              Add a feed
+            </Link>
+          )}
         </div>
       ) : filters.display === 'card' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -479,14 +426,13 @@ export default function ArticlesView({
               onFolderCreated={handleFolderCreated}
               showFolderPicker={showFolderPicker}
               showDelete={showDelete}
-              showReaderLink={filters.view !== 'unfiled'}
               selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
               onToggleSelect={enableBulkActions ? toggleSelect : undefined}
             />
           ))}
         </div>
       ) : (
-        <ul className="card-elevated divide-y divide-border">
+        <ul className="card-elevated divide-y divide-border-subtle overflow-hidden">
           {localItems.map((item) => (
             <ArticleCard
               key={item.id}
@@ -497,7 +443,6 @@ export default function ArticlesView({
               onFolderCreated={handleFolderCreated}
               showFolderPicker={showFolderPicker}
               showDelete={showDelete}
-              showReaderLink={filters.view !== 'unfiled'}
               selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
               onToggleSelect={enableBulkActions ? toggleSelect : undefined}
             />
@@ -507,14 +452,9 @@ export default function ArticlesView({
 
       {cursor && (
         <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            disabled={loadingMore}
-            className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
-          >
+          <Button onClick={handleLoadMore} disabled={loadingMore}>
             {loadingMore ? 'Loading…' : 'Load more'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

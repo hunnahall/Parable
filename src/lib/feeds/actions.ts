@@ -21,14 +21,13 @@ async function subscribeToFeed(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   feedId: string,
-  options: { title: string; summarizeArticles: boolean }
+  options: { title: string }
 ): Promise<string | null> {
   const { error } = await supabase.from('subscriptions').upsert(
     {
       user_id: userId,
       feed_id: feedId,
       title: options.title,
-      summarize_articles: options.summarizeArticles,
     },
     { onConflict: 'user_id,feed_id' }
   )
@@ -38,7 +37,6 @@ async function subscribeToFeed(
 export async function addFeed(input: {
   url: string
   title: string
-  summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -88,15 +86,13 @@ export async function addFeed(input: {
     feed = data
   }
 
-  const summarizeArticles = input.summarizeArticles ?? false
   const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
     title,
-    summarizeArticles,
   })
   if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...feed, title, summarize_articles: summarizeArticles, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, folderIds: [] }, error: null }
 }
 
 // Step 1 of "Build a Feed" (see BuildFeedSection.tsx): fetches and
@@ -122,7 +118,6 @@ export async function previewBuiltFeed(
 export async function createBuiltFeed(input: {
   sourceUrl: string
   title: string
-  summarizeArticles?: boolean
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -152,15 +147,13 @@ export async function createBuiltFeed(input: {
     feed = data
   }
 
-  const summarizeArticles = input.summarizeArticles ?? false
   const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
     title,
-    summarizeArticles,
   })
   if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...feed, title, summarize_articles: summarizeArticles, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, folderIds: [] }, error: null }
 }
 
 // Manual trigger, unlike the cron-driven /api/ingest-feeds route: capped
@@ -205,34 +198,6 @@ export async function updateFeed(
 
   if (error) return { error: error.message }
 
-  revalidatePath('/feeds')
-  return { error: null }
-}
-
-// Toggled directly from the feed list (see FeedManager.tsx) — deliberately
-// its own action rather than folded into updateFeed, since it fires on a
-// single click with no Edit-mode round trip and shouldn't need the
-// title validation that comes with a full feed edit.
-export async function setFeedSummarizeArticles(
-  id: string,
-  enabled: boolean
-): Promise<{ error: string | null }> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
-
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('subscriptions')
-    .update({ summarize_articles: enabled })
-    .eq('user_id', user.id)
-    .eq('feed_id', id)
-
-  if (error) return { error: error.message }
-
-  // Toggling off deliberately leaves summary_ai in place: it's a column on
-  // the shared feed_items row, so clearing it would blank the summaries of
-  // every other subscriber who still wants them. The read-time gate in
-  // bestSummary() (src/lib/articles/list.ts) already hides it from you.
   revalidatePath('/feeds')
   return { error: null }
 }

@@ -11,18 +11,16 @@ export interface ArticleItem {
   feed_title: string | null
   state: ArticleCuration | null
   note: string | null
-  tags: string[]
   archivedAt: string | null
-  folderId: string | null
+  // An article can be filed into several folders at once (article_folders'
+  // PK is (feed_item_id, user_id, folder_id)) — folders replaced tags as
+  // the app's single curation primitive.
+  folderIds: string[]
   // Article-level image (enclosure/media:content/media:thumbnail captured
   // at ingest, or a scraped feed's detected image) — null for most feeds.
   // Card view (ArticleCardGrid) falls back to a favicon derived from
   // `link`'s origin when this is null.
   imageUrl: string | null
-  // True only when `summary` above is the AI-generated summary (not the
-  // feed's raw or translated text) — drives the "AI Summary" badge, so
-  // users can tell the three summary sources apart at a glance.
-  isAiSummary: boolean
 }
 
 export interface FeedOption {
@@ -37,35 +35,14 @@ function bestTitle(item: { title: string; title_en: string | null }): string {
   return item.title_en ?? item.title
 }
 
-// `summarizeArticles` is the feed's CURRENT toggle state, not just
-// whatever happens to be stored in summary_ai — a feed can have its
-// toggle off today but still carry summary_ai values written while it
-// was on (see retention.ts: summary_ai is deliberately never cleared by
-// background jobs). Gating here means the toggle takes effect
-// immediately for every already-ingested article, not just future ones.
-//
-// No raw/translated fallback when the toggle is off: list views render
-// every unfiled article, so a teaser shown by default there scales with
-// total article volume rather than actual reading — cut entirely to keep
-// that cost down. A summary is still one click away via "Summarize this"
-// in the reading view (see ArticleReadingView + /api/articles/[id]/summarize).
-function bestSummary(
-  item: { summary: string; summary_en: string | null; summary_ai: string | null },
-  summarizeArticles: boolean
-): string | null {
-  if (!summarizeArticles) return null
-  return item.summary_ai ?? item.summary_en ?? item.summary
-}
-
 interface FeedMeta {
   title: string | null
-  summarizeArticles: boolean
 }
 
-// The displayed title and the AI-summary toggle both come from the
-// caller's own subscription, falling back to the shared catalog row's
-// title when they haven't renamed it (or no longer subscribe, which is
-// still reachable for articles they saved before unsubscribing).
+// The displayed title comes from the caller's own subscription, falling
+// back to the shared catalog row's title when they haven't renamed it (or
+// no longer subscribe, which is still reachable for articles they saved
+// before unsubscribing).
 async function attachFeedMeta<T extends { feed_id: string }>(
   supabase: Awaited<ReturnType<typeof createClient>>,
   items: T[],
@@ -79,7 +56,7 @@ async function attachFeedMeta<T extends { feed_id: string }>(
     user
       ? supabase
           .from('subscriptions')
-          .select('feed_id, title, summarize_articles')
+          .select('feed_id, title')
           .eq('user_id', user.id)
           .in('feed_id', feedIds)
       : Promise.resolve({ data: [], error: null }),
@@ -88,19 +65,13 @@ async function attachFeedMeta<T extends { feed_id: string }>(
   logQueryError('articles/attachFeedMeta (subscriptions)', subsError)
 
   const subByFeed = new Map(
-    (subs ?? []).map((sub) => [sub.feed_id, sub as { title: string | null; summarize_articles: boolean }])
+    (subs ?? []).map((sub) => [sub.feed_id, sub as { title: string | null }])
   )
 
   return new Map(
     (feeds ?? []).map((feed) => {
       const sub = subByFeed.get(feed.id)
-      return [
-        feed.id,
-        {
-          title: sub?.title ?? feed.title,
-          summarizeArticles: sub?.summarize_articles ?? false,
-        },
-      ]
+      return [feed.id, { title: sub?.title ?? feed.title }]
     })
   )
 }
@@ -108,7 +79,6 @@ async function attachFeedMeta<T extends { feed_id: string }>(
 interface ArticleStateInfo {
   state: ArticleCuration
   note: string | null
-  tags: string[]
   archivedAt: string | null
 }
 
@@ -130,7 +100,7 @@ async function getArticleStatesMap(
 
   const { data, error } = await supabase
     .from('article_states')
-    .select('feed_item_id, state, note, tags, archived_at')
+    .select('feed_item_id, state, note, archived_at')
     .eq('user_id', resolvedUser.id)
   logQueryError('articles/getArticleStatesMap', error)
 
@@ -140,21 +110,20 @@ async function getArticleStatesMap(
       {
         state: row.state as ArticleCuration,
         note: row.note,
-        tags: row.tags ?? [],
         archivedAt: row.archived_at,
       },
     ])
   )
 }
 
-// A user's per-article folder filing (Saved-page organization) — separate
-// from feed_folders (subscription organization), though both read from the
-// same folders table. One row per (user, article) by article_folders' PK.
-// See getArticleStatesMap above for why `user` is optional.
+// A user's per-article folder filing — separate from feed_folders
+// (subscription organization), though both read from the same folders
+// table. Many rows per (user, article): an article can sit in several
+// folders at once. See getArticleStatesMap above for why `user` is optional.
 async function getArticleFoldersMap(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user?: Awaited<ReturnType<typeof getUser>>
-): Promise<Map<string, string>> {
+): Promise<Map<string, string[]>> {
   const resolvedUser = user !== undefined ? user : await getUser()
   if (!resolvedUser) return new Map()
 
@@ -164,16 +133,22 @@ async function getArticleFoldersMap(
     .eq('user_id', resolvedUser.id)
   logQueryError('articles/getArticleFoldersMap', error)
 
-  return new Map((data ?? []).map((row) => [row.feed_item_id, row.folder_id]))
+  const map = new Map<string, string[]>()
+  for (const row of data ?? []) {
+    const existing = map.get(row.feed_item_id)
+    if (existing) existing.push(row.folder_id)
+    else map.set(row.feed_item_id, [row.folder_id])
+  }
+  return map
 }
 
 // Every state article_states allows. Excluding all of them is exactly
 // "has no curation row" — the Inbox's definition of unfiled. Kept as one
 // constant so adding a state can't silently leak it into the Inbox.
-export const UNFILED_EXCLUDED_STATES = ['saved', 'archived', 'reading', 'deleted'] as const
+export const UNFILED_EXCLUDED_STATES = ['saved', 'archived', 'deleted'] as const
 
 const ARTICLE_SELECT =
-  'id, feed_id, title, title_en, link, summary, summary_en, summary_ai, published_at, image_url'
+  'id, feed_id, title, title_en, link, summary_ai, published_at, image_url'
 
 // There's no generated Database type in this project (createClient() has
 // no Schema generic), so postgrest-js can infer a `.from('feed_items')
@@ -202,8 +177,6 @@ type ArticleRow = {
   title: string
   title_en: string | null
   link: string | null
-  summary: string
-  summary_en: string | null
   summary_ai: string | null
   published_at: string | null
   image_url: string | null
@@ -213,58 +186,27 @@ function toArticleItem(
   item: ArticleRow,
   feedMeta: Map<string, FeedMeta>,
   states: Map<string, ArticleStateInfo>,
-  folders: Map<string, string> = new Map()
+  folders: Map<string, string[]> = new Map()
 ): ArticleItem {
   const info = states.get(item.id)
   const meta = feedMeta.get(item.feed_id)
-  const summarizeArticles = meta?.summarizeArticles ?? false
   return {
     id: item.id,
     title: bestTitle(item),
     link: item.link,
-    summary: bestSummary(item, summarizeArticles),
-    // True only when the summary actually shown is the AI-generated one
-    // (not the raw/translated feed text) — drives the "AI Summary" badge.
-    isAiSummary: summarizeArticles && item.summary_ai !== null,
+    // The two-sentence summary ingest writes for every article. No
+    // fallback to the feed's own description: the body it was generated
+    // from is discarded at ingest, so summary_ai is the only summary that
+    // exists (see src/lib/feeds/ingest.ts).
+    summary: item.summary_ai,
     published_at: item.published_at,
     feed_title: meta?.title ?? null,
     state: info?.state ?? null,
     note: info?.note ?? null,
-    tags: info?.tags ?? [],
     archivedAt: info?.archivedAt ?? null,
-    folderId: folders.get(item.id) ?? null,
+    folderIds: folders.get(item.id) ?? [],
     imageUrl: item.image_url,
   }
-}
-
-// Single-article lookup for the reading view (src/app/read/[id]/page.tsx)
-// — same toArticleItem shape as the list views, plus original_language
-// (needed there to decide whether translate-on-open should run).
-export async function getArticleById(
-  id: string
-): Promise<(ArticleItem & { originalLanguage: string | null }) | null> {
-  const supabase = await createClient()
-  // The item select and the user lookup are independent of each other —
-  // resolving user here once (instead of the two separate internal
-  // getUser() calls getArticleStatesMap/getArticleFoldersMap used to each
-  // make) removes the artificial sequential ordering between them below.
-  const [{ data: item, error }, user] = await Promise.all([
-    supabase.from('feed_items').select(`${ARTICLE_SELECT}, original_language`).eq('id', id).maybeSingle(),
-    getUser(),
-  ])
-  logQueryError('articles/getArticleById', error)
-  if (!item) return null
-
-  // states/folders/feedMeta only depend on `item`/`user` above, not on
-  // each other — previously awaited one at a time, paying for each
-  // other's latency serially for no reason.
-  const [states, folders, feedMeta] = await Promise.all([
-    getArticleStatesMap(supabase, user),
-    getArticleFoldersMap(supabase, user),
-    attachFeedMeta(supabase, [item], user),
-  ])
-
-  return { ...toArticleItem(item, feedMeta, states, folders), originalLanguage: item.original_language }
 }
 
 // Sidebar badge count: articles with no curation row at all (not saved,
@@ -282,7 +224,7 @@ export async function getArticlesUnfiledCount(): Promise<number> {
   // return a Content-Range count header for a HEAD request against an RPC
   // endpoint (only plain table queries), so that combination silently came
   // back with count === null here — the badge was always rendering as 0.
-  // The inbox is bounded (excludes saved/archived/reading), so fetching ids
+  // The inbox is bounded (excludes saved/archived/deleted), so fetching ids
   // and counting them client-side is cheap and actually works.
   const { data, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
     p_user_id: user.id,
@@ -292,28 +234,11 @@ export async function getArticlesUnfiledCount(): Promise<number> {
   return data?.length ?? 0
 }
 
-// Sidebar badge for the Reader nav entry — same pattern as
-// getArticlesUnfiledCount above, just against the 'reading' state directly
-// instead of an exclusion set.
-export async function getReaderCount(): Promise<number> {
-  const user = await getUser()
-  if (!user) return 0
-
-  const supabase = await createClient()
-  const { data, error } = await feedItemsRpc(supabase, 'feed_items_with_state', {
-    p_user_id: user.id,
-    p_state: 'reading',
-  }).select('id')
-  logQueryError('articles/getReaderCount', error)
-  return data?.length ?? 0
-}
-
 export interface ArticlesPageFilters {
   query?: string
-  view?: 'unfiled' | 'saved' | 'archived' | 'reading'
+  view?: 'unfiled' | 'saved' | 'archived'
   folderIds?: string[]
   sourceFeedIds?: string[]
-  tagIds?: string[]
   dateFrom?: string | null
   dateTo?: string | null
   cursor?: { publishedAt: string; id: string } | null
@@ -335,7 +260,7 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 // it's immune to that. (published_at, id) as the cursor tuple because
 // published_at alone isn't unique; id is the tiebreaker for a total order.
 //
-// Powers all three lifecycle pages (Articles/Save/Archive) via `view`:
+// Powers all three lifecycle pages (Inbox/Save/Archive) via `view`:
 // 'unfiled' = no article_states row yet (default, the Articles page),
 // 'saved'/'archived' = state matches exactly (the Save/Archive pages).
 export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
@@ -350,34 +275,13 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   const limit = filters.limit ?? ARTICLES_PAGE_LIMIT
   const view = filters.view ?? 'unfiled'
 
-  // Unfiled articles never have a curation row, so they can never carry
-  // tags — a tag filter combined with the unfiled view is definitionally
-  // empty rather than a query worth running.
-  const hasTagFilter = !!filters.tagIds && filters.tagIds.length > 0
-  if (hasTagFilter && view === 'unfiled') {
-    return { items: [], nextCursor: null }
-  }
-
-  // A tag filter needs the specific (state, tag) intersection, which stays
-  // small in practice (a tag narrows things down) — kept as an id list.
-  // Everything else routes through feed_items_excluding_states/with_state,
+  // Both branches route through feed_items_excluding_states/with_state,
   // which do the state membership test as a real SQL join instead of
   // interpolating every matching id into the request URL — that's what
   // broke once article_states grew past a few hundred rows (see the
-  // migration that added those functions). Multiple selected tags union
-  // together (OR), matching how folder/source multi-select already works.
-  let includeIds: string[] | null = null
-  if (hasTagFilter) {
-    includeIds = [...states.entries()]
-      .filter(([, info]) => info.state === view && filters.tagIds!.some((tag) => info.tags.includes(tag)))
-      .map(([id]) => id)
-  }
-
+  // migration that added those functions).
   let query
-  if (includeIds !== null) {
-    if (includeIds.length === 0) return { items: [], nextCursor: null }
-    query = supabase.from('feed_items').select(ARTICLE_SELECT).in('id', includeIds)
-  } else if (view === 'unfiled') {
+  if (view === 'unfiled') {
     query = feedItemsRpc(supabase, 'feed_items_excluding_states', {
       p_user_id: user.id,
       p_exclude_states: UNFILED_EXCLUDED_STATES,

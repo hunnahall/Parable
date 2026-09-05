@@ -1,39 +1,16 @@
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
-import sanitizeHtml from 'sanitize-html'
 
-// This no longer blocks the reading view's initial paint (see
-// src/app/api/articles/[id]/content/route.ts — the page renders
-// immediately and this fetch happens client-side, after mount), so it
-// can afford to be generous rather than trading false "aborted" failures
-// for a few saved seconds on an already-off-critical-path request. The
-// route itself has ~300s of real budget (Fluid Compute is confirmed on
-// for this Vercel project — see supabase/cron.sql), so this is a UX
-// choice (how long to make a live user wait on a slow site before giving
-// up), not a platform workaround — a genuinely slow origin (e.g. a
-// foreign news site that took 20s+ to respond, seen in article_content's
-// extraction_error column as "This operation was aborted") should fail
-// cleanly here rather than hang the reading view indefinitely.
-const FETCH_TIMEOUT_MS = 20_000
+// This now runs inside the ingest loop, once per new article, against a
+// route with a ~300s budget shared across every feed (Fluid Compute is
+// confirmed on for this Vercel project — see supabase/cron.sql). A slow
+// origin costs the whole run, not one impatient reader, so the timeout is
+// tighter than the 20s the reading view could afford: an article whose
+// page won't answer in 10s falls back to summarizing the feed's own
+// description rather than holding the budget hostage.
+const FETCH_TIMEOUT_MS = 10_000
 
-export type ExtractResult =
-  | { html: string; text: string; imageUrl: string | null }
-  | { error: string }
-
-// Readability's output is cleaner than raw publisher HTML but still
-// untrusted third-party markup, so it goes through the same sanitize-html
-// discipline src/lib/translate.ts::stripHtml applies elsewhere — just with
-// a richer allowlist here since this is a full reading view, not a
-// title/summary field.
-const ALLOWED_TAGS = [
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'p', 'a', 'img', 'blockquote',
-  'ul', 'ol', 'li',
-  'code', 'pre',
-  'table', 'thead', 'tbody', 'tr', 'td', 'th',
-  'figure', 'figcaption',
-  'strong', 'em', 'b', 'i', 'br', 'hr', 'span',
-]
+export type ExtractResult = { text: string; imageUrl: string | null } | { error: string }
 
 // The RSS-provided image (enclosure/media:content/media:thumbnail — see
 // ingest.ts) is often just the feed's own logo/icon repeated on every
@@ -46,13 +23,9 @@ function extractHeaderImage(document: Document): string | null {
   return og || twitter || null
 }
 
-// Cheap header-image-only fetch — used to eagerly populate
-// feed_items.image_url for a newly ingested item regardless of whether it
-// needs translation (see ingest.ts). fetchAndExtractContent below is
-// reserved for items already in the target language since it also runs
-// Readability and persists the full article body; this skips both, so an
-// item needing translation still gets a real cover image without paying
-// for (or caching) content that a lazy open-time fetch will redo anyway.
+// Cheap header-image-only fetch — used to populate feed_items.image_url
+// for an item whose body extraction already failed (or was skipped), so
+// it still gets a real cover image instead of the favicon fallback.
 export async function fetchHeaderImage(url: string): Promise<string | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -74,25 +47,13 @@ export async function fetchHeaderImage(url: string): Promise<string | null> {
   }
 }
 
-function sanitizeContent(html: string): string {
-  return sanitizeHtml(html, {
-    allowedTags: ALLOWED_TAGS,
-    allowedAttributes: {
-      a: ['href', 'title'],
-      img: ['src', 'alt', 'title'],
-    },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    transformTags: {
-      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }),
-    },
-  })
-}
-
-// The lazy-fetch point for the reading view: fetches the source article's
-// HTML, extracts the readable content via Readability (the same
-// jsdom-backed approach Firefox's own Reader View uses), and sanitizes the
-// result. Never throws — failures come back as {error} so the caller can
-// cache "extraction failed" and skip re-fetching on every open.
+// Fetches the source article's HTML and extracts the readable body via
+// Readability (the same jsdom-backed approach Firefox's own Reader View
+// uses). Returns plain text only: the body exists solely as input to the
+// summarizer and is discarded the moment the summary is written, so
+// there's nothing left to render and no HTML worth sanitizing. Never
+// throws — failures come back as {error} so ingest can fall back to the
+// feed's own description.
 export async function fetchAndExtractContent(url: string): Promise<ExtractResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -112,15 +73,12 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     // mutates/strips the document as it extracts the article body.
     const imageUrl = extractHeaderImage(dom.window.document)
     const article = new Readability(dom.window.document).parse()
-    if (!article?.content) {
+    const text = article?.textContent?.trim() ?? ''
+    if (!text) {
       return { error: 'Could not extract readable content from this page.' }
     }
 
-    return {
-      html: sanitizeContent(article.content),
-      text: article.textContent?.trim() ?? '',
-      imageUrl,
-    }
+    return { text, imageUrl }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { error: `Extraction failed: ${message}` }
