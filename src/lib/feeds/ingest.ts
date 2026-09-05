@@ -35,16 +35,25 @@ const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https:/
 
 // Cross-feed duplicate detection. With 30+ sources, wire copy is
 // republished across outlets and each copy would otherwise pay its own
-// page fetch and summarization call. Off by default in the strongest
-// sense that matters: 'log' records what it *would* have merged without
-// changing any row, so the distance threshold can be calibrated against
-// real traffic before it starts attaching one article's summary to
-// another. A threshold set too loose is a correctness bug, not a missed
-// saving, which is why this doesn't ship straight to 'on'.
+// page fetch and summarization call.
 //   'off' — don't embed, don't look up
 //   'log' — embed and look up, record matches, still summarize normally
 //   'on'  — reuse a matched article's summary and skip the fetch+summarize
-const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'log') as 'off' | 'log' | 'on'
+//
+// Defaults to 'on'. This shipped as 'log' first, on the reasoning that a
+// mis-set threshold attaches the wrong summary to an article and should be
+// calibrated against real traffic before it's trusted. That was the wrong
+// call: 'log' still pays for every embedding and every lookup while saving
+// nothing, so its failure mode is "nobody gets around to reading the logs
+// and the feature costs money forever." The blast radius on the other side
+// is one wrong two-sentence summary on one article, in an inbox that
+// deletes itself after 12h — recoverable by unsubscribing/re-ingesting,
+// and not what 'log' was protecting against.
+//
+// Every merge is still logged (see processItem), so the audit happens
+// after the fact instead of before, and DEDUPE_MODE=log in the
+// environment pulls back without a deploy.
+const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'on') as 'off' | 'log' | 'on'
 // Cosine distance, measured rather than guessed — see
 // src/scripts/test-dedupe-threshold.ts, which is what produced these
 // numbers against text-embedding-3-small at 512 dimensions:
@@ -58,14 +67,14 @@ const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'log') as 'off' | 'log' | 'on'
 //
 // 0.16 sits above every true duplicate and well below that 0.2226 pair,
 // which is the failure mode that matters: two headlines that are nearly
-// identical lexically and opposite in meaning. The two errors are not
-// symmetric — a false merge staples the wrong summary onto an article and
-// the body is gone by then, while a false miss costs one summarization
-// call — so this stays on the conservative side of the midpoint.
+// identical lexically and opposite in meaning. Kept on the conservative
+// side of the midpoint (0.1863) because a false miss only costs one
+// summarization call.
 //
-// Six hand-written pairs is a small sample, which is exactly why
-// DEDUPE_MODE defaults to 'log': real traffic gets to move this number
-// before it's allowed to change any row.
+// Six hand-written pairs is a small sample. Re-run the script with pairs
+// pulled from your own feeds before moving this, and read the
+// near-duplicate lines in the ingest logs — those are real matches on real
+// headlines, which is better evidence than anything invented here.
 const DEDUPE_MAX_DISTANCE = Number(process.env.DEDUPE_MAX_DISTANCE ?? '0.16')
 // Retention keeps nothing past 24h, so a match older than this points at a
 // row about to be reclaimed — its summary would be copied onto an article
@@ -137,9 +146,9 @@ export interface IngestSummary {
   itemsInserted: number
   itemsAutoDeleted: number
   // Items that took another source's summary instead of paying for their
-  // own fetch + summarization. Always 0 unless DEDUPE_MODE is 'on'; in
-  // 'log' mode the near-duplicates show up in the run's logs instead, which
-  // is how the distance threshold gets calibrated before it's trusted.
+  // own fetch + summarization — the direct measure of what dedupe saved
+  // this run. Always 0 when DEDUPE_MODE is 'log' or 'off'; the matches are
+  // still logged in 'log' mode.
   summariesReused: number
 }
 
@@ -301,13 +310,18 @@ async function processItem(
     // any fetch or summarization, since reusing an existing summary is the
     // whole point — it skips both.
     const duplicate = await findDuplicate(supabase, prepared)
+    const reused = DEDUPE_MODE === 'on' ? duplicate : null
     if (duplicate) {
+      // The audit trail for every merge, since 'on' is the default and the
+      // decision is otherwise invisible. Both titles are logged so a wrong
+      // merge is recognizable at a glance rather than only as a distance.
       console.log(
-        `ingest: near-duplicate d=${duplicate.distance.toFixed(4)} ` +
-          `[${DEDUPE_MODE}] "${matchTitle}" ~ "${duplicate.title_en ?? duplicate.title}"`
+        `ingest: ${reused ? 'REUSED summary' : 'near-duplicate (not reused)'} ` +
+          `d=${duplicate.distance.toFixed(4)} from=${duplicate.id}\n` +
+          `  this:  "${matchTitle}"\n` +
+          `  match: "${duplicate.title_en ?? duplicate.title}"`
       )
     }
-    const reused = DEDUPE_MODE === 'on' ? duplicate : null
 
     let summary_ai: string | null = reused?.summary_ai ?? null
     let scrapedImage: string | null = null

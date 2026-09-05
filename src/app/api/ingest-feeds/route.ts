@@ -35,7 +35,8 @@ async function handle(request: NextRequest) {
     console.log(
       `ingest-feeds: completed in ${Date.now() - startedAt}ms — ` +
         `${summary.feedsProcessed} feeds, ${summary.feedsFailed.length} failed, ` +
-        `${summary.itemsInserted} items inserted`
+        `${summary.itemsInserted} items inserted, ` +
+        `${summary.summariesReused} summaries reused from duplicates`
     )
     return NextResponse.json(summary)
   } catch (err) {
