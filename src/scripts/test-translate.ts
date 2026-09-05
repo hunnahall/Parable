@@ -1,34 +1,37 @@
 // Standalone smoke test for src/lib/translate.ts — not part of the app,
-// just a way to sanity-check detection + translation before wiring it
-// into the (not-yet-built) RSS ingest job.
+// just a way to sanity-check detection + batched translation against the
+// live API.
 //
 // Run with:
 //   npx tsx src/scripts/test-translate.ts
 //
 // Loads OPENAI_API_KEY from .env.local if present. Without it,
-// translateArticle() still runs end-to-end — it just falls back to nulls
-// for the _en fields, which is the documented "API failed" behavior, so
-// this script is also a check of that path.
+// translateTitles() still runs end-to-end — it just returns nulls, which
+// is the documented "API failed" behavior, so this script is also a check
+// of that path.
+//
+// Every sample is sent in ONE batched call, which is how ingest uses this
+// (see prepareItems in src/lib/feeds/ingest.ts): translation is batched per
+// feed rather than paid per item. So this also exercises the part most
+// likely to break silently — results being keyed back to the right article
+// by index rather than by arrival order.
 //
 // A note on the Arabic samples specifically: a terminal's own bidi
 // renderer can visually reorder RTL text next to the ASCII labels this
 // script prints around it, which can *look* like corruption even when
 // the underlying string is completely correct. So beyond eyeballing the
 // printed output, each sample below is checked programmatically:
-//   - original_language must land on the expected code (this is what
-//     proves the "arb" -> "ar" macrolanguage override in translate.ts
-//     actually fires, since franc reports Arabic as "arb", not "ar")
+//   - detectLanguage must land on the expected code (this is what proves
+//     the "arb" -> "ar" macrolanguage override in translate.ts actually
+//     fires, since franc reports Arabic as "arb", not "ar")
 //   - translated text must be non-null, contain no leftover HTML tags,
 //     and contain no leftover Arabic-script characters (i.e. it was
 //     actually translated, not just passed through)
-//   - the source string must have zero surrogate pairs, so the 500-char
-//     summary truncation in translate.ts (a plain .slice) can't split a
-//     character in half — true for Arabic script, but worth asserting
-//     rather than assuming, since it would NOT hold for e.g. emoji
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { translateArticle } from '../lib/translate'
+import { detectLanguage, needsTranslation, stripHtml, translateTitles } from '../lib/translate'
+import { DEFAULT_LANGUAGE } from '../lib/languages'
 
 function loadEnvLocal() {
   const envPath = path.resolve(process.cwd(), '.env.local')
@@ -117,61 +120,65 @@ const samples: Sample[] = [
   },
 ]
 
-function checkNoSurrogatePairs(sample: Sample) {
-  const combined = sample.title + sample.summary
-  return [...combined].length === combined.length
-}
-
 async function main() {
   const hasCreds = !!process.env.OPENAI_API_KEY
   console.log(
     hasCreds
-      ? 'OPENAI_API_KEY found — non-English samples will call the live API.\n'
-      : 'No OPENAI_API_KEY found — non-English samples should come back with title_en/summary_en: null.\n'
+      ? 'OPENAI_API_KEY found — samples needing translation will call the live API.\n'
+      : 'No OPENAI_API_KEY found — every translation should come back null.\n'
   )
+
+  // Mirrors prepareItems: detect locally, then send only what needs
+  // translating, in one batch, and key the results back by index.
+  const detected = samples.map((sample) => ({
+    sample,
+    language: detectLanguage(stripHtml(sample.title), stripHtml(sample.summary)),
+  }))
+  const toTranslate = detected.flatMap((entry, index) =>
+    needsTranslation(entry.language, DEFAULT_LANGUAGE) ? [index] : []
+  )
+  console.log(
+    `${samples.length} samples, ${toTranslate.length} sent in 1 batched call ` +
+      `(the other ${samples.length - toTranslate.length} cost nothing).\n`
+  )
+
+  const translated = await translateTitles(
+    toTranslate.map((index) => stripHtml(samples[index].title)),
+    DEFAULT_LANGUAGE
+  )
+  const titleEnByIndex = new Map<number, string | null>()
+  toTranslate.forEach((index, i) => titleEnByIndex.set(index, translated[i]))
 
   let failures = 0
 
-  for (const sample of samples) {
+  detected.forEach((entry, index) => {
+    const { sample, language } = entry
+    const titleEn = titleEnByIndex.get(index) ?? null
     console.log(`--- ${sample.label} ---`)
-    const result = await translateArticle(sample.title, sample.summary)
-    console.log(result)
+    console.log({ original_language: language, title_en: titleEn })
 
     const checks: Array<[string, boolean]> = [
-      [
-        `original_language === "${sample.expectedLanguage}"`,
-        result.original_language === sample.expectedLanguage,
-      ],
-      ['source text has no surrogate pairs (truncation-safe)', checkNoSurrogatePairs(sample)],
+      [`detectLanguage === "${sample.expectedLanguage}"`, language === sample.expectedLanguage],
     ]
 
-    const shouldHaveTranslation =
-      hasCreds &&
-      sample.expectedLanguage !== 'en' &&
-      sample.expectedLanguage !== 'und'
-
-    if (shouldHaveTranslation) {
+    // 'und' is deliberately treated as "needs translation" — franc returns
+    // it for anything much under a sentence, and an untranslated headline
+    // in the Inbox is worse than a pass-through call inside a batch.
+    if (sample.expectedLanguage === DEFAULT_LANGUAGE) {
+      checks.push(['skipped the API entirely (already in target language)', titleEn === null])
+    } else if (hasCreds) {
       checks.push(
-        ['title_en is non-null', result.title_en !== null],
-        ['summary_en is non-null', result.summary_en !== null],
-        [
-          'translated text has no leftover HTML tags',
-          !HTML_TAG.test(result.title_en ?? '') &&
-            !HTML_TAG.test(result.summary_en ?? ''),
-        ]
+        ['title_en is non-null', titleEn !== null],
+        ['translated title has no leftover HTML tags', !HTML_TAG.test(titleEn ?? '')]
       )
       if (sample.expectedLanguage === 'ar') {
         checks.push([
-          'translated text has no leftover Arabic script (RTL -> LTR actually happened)',
-          !ARABIC_SCRIPT.test(result.title_en ?? '') &&
-            !ARABIC_SCRIPT.test(result.summary_en ?? ''),
+          'translated title has no leftover Arabic script (RTL -> LTR actually happened)',
+          !ARABIC_SCRIPT.test(titleEn ?? ''),
         ])
       }
     } else {
-      checks.push(
-        ['title_en is null', result.title_en === null],
-        ['summary_en is null', result.summary_en === null]
-      )
+      checks.push(['title_en is null without credentials', titleEn === null])
     }
 
     for (const [description, passed] of checks) {
@@ -179,7 +186,7 @@ async function main() {
       if (!passed) failures++
     }
     console.log()
-  }
+  })
 
   if (failures > 0) {
     console.error(`${failures} check(s) failed.`)

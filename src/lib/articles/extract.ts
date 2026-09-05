@@ -10,7 +10,13 @@ import { Readability } from '@mozilla/readability'
 // description rather than holding the budget hostage.
 const FETCH_TIMEOUT_MS = 10_000
 
-export type ExtractResult = { text: string; imageUrl: string | null } | { error: string }
+// The image is carried on the failure arm too. A page that fetched and
+// parsed but yielded no usable body still has its og:image sitting in the
+// DOM we just built — returning it means ingest never has to re-fetch the
+// same URL a second time just to read one meta tag.
+export type ExtractResult =
+  | { text: string; imageUrl: string | null }
+  | { error: string; imageUrl: string | null }
 
 // The RSS-provided image (enclosure/media:content/media:thumbnail — see
 // ingest.ts) is often just the feed's own logo/icon repeated on every
@@ -64,7 +70,7 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ParableBot/1.0)' },
     })
     if (!response.ok) {
-      return { error: `Fetch failed: HTTP ${response.status}` }
+      return { error: `Fetch failed: HTTP ${response.status}`, imageUrl: null }
     }
     const html = await response.text()
 
@@ -75,13 +81,13 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     const article = new Readability(dom.window.document).parse()
     const text = article?.textContent?.trim() ?? ''
     if (!text) {
-      return { error: 'Could not extract readable content from this page.' }
+      return { error: 'Could not extract readable content from this page.', imageUrl }
     }
 
     return { text, imageUrl }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { error: `Extraction failed: ${message}` }
+    return { error: `Extraction failed: ${message}`, imageUrl: null }
   } finally {
     clearTimeout(timeout)
   }
