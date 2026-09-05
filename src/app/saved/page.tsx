@@ -5,7 +5,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import PageHeader from '@/components/layout/PageHeader'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
-export default async function SavePage({
+export default async function SavedPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -46,10 +46,10 @@ export default async function SavePage({
 
   return (
     <>
-      <PageHeader title="Save" />
+      <PageHeader title="Saved" />
       <div className={filters.display === 'card' ? 'mx-auto max-w-6xl p-6' : 'mx-auto max-w-3xl p-6'}>
         <ArticlesView
-          basePath="/save"
+          basePath="/saved"
           items={page.items}
           nextCursor={page.nextCursor}
           folders={folders}

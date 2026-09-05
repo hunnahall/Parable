@@ -83,7 +83,7 @@ export async function runFilterRulesNow(): Promise<{
   if (writeError) return { error: writeError, filedCount: 0 }
 
   revalidatePath('/inbox')
-  revalidatePath('/save')
+  revalidatePath('/saved')
   revalidatePath('/', 'layout')
   return { error: null, filedCount: filings.size }
 }
