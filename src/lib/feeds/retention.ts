@@ -1,18 +1,18 @@
 import { createClient } from '@supabase/supabase-js'
 
-export interface AutoArchiveSummary {
+// One sweep, three stages, run in order. Splitting them across separate
+// cron jobs the way the old 24h/7d/30d policy did buys nothing at these
+// windows — the stages are sub-second queries and the later ones want the
+// earlier ones' output, so ordering them explicitly here is both simpler
+// and more correct than hoping three schedules interleave the right way.
+export interface RetentionSummary {
   dryRun: boolean
-  archivedCount: number
-}
-
-export interface PurgeContentSummary {
-  dryRun: boolean
-  purgedCount: number
-}
-
-export interface PurgeArchivedMetadataSummary {
-  dryRun: boolean
-  purgedCount: number
+  // Inbox articles that aged past 12h without being saved or archived.
+  staleInboxCount: number
+  // Archived articles that aged past a further 24h.
+  expiredArchivedCount: number
+  // Shared feed_items rows nobody wants anymore, hard-deleted.
+  reclaimedCount: number
 }
 
 function adminClient() {
@@ -23,73 +23,56 @@ function adminClient() {
   )
 }
 
-// Sweeps every (user, feed_item) pair older than 24h with no article_states
-// row at all into 'archived' — saved/reading articles are untouched since
-// they already have a row (state='saved'/'reading'), so the underlying NOT
-// EXISTS in auto_archive_stale_articles() naturally skips them. Purely
-// time-based: read state never factors into this, by design.
-export async function runAutoArchiveArticles(
-  opts: { dryRun?: boolean } = {}
-): Promise<AutoArchiveSummary> {
-  const dryRun = opts.dryRun ?? false
-
-  const supabase = adminClient()
-  const { data, error } = await supabase
-    .rpc('auto_archive_stale_articles', { dry_run: dryRun })
-    .single()
-
-  if (error) throw new Error(`auto_archive_stale_articles failed: ${error.message}`)
-
-  return {
-    dryRun,
-    archivedCount: Number((data as { archived_count: number }).archived_count),
-  }
+async function callRetentionRpc(
+  supabase: ReturnType<typeof adminClient>,
+  fn: string,
+  dryRun: boolean,
+  field: string
+): Promise<number> {
+  const { data, error } = await supabase.rpc(fn, { dry_run: dryRun }).single()
+  if (error) throw new Error(`${fn} failed: ${error.message}`)
+  return Number((data as Record<string, number>)[field])
 }
 
-// Deletes cached full-text content (article_content rows) for articles
-// archived 7+ days ago, excluding anything any user has saved or is
-// reading. Only the content cache is touched — feed_items, article_states,
-// tags, folders, and summary_ai are untouched here.
-export async function runPurgeArticleContent(
+// Parable's whole retention policy:
+//
+//   1. An article you never touch is deleted 12h after it arrives.
+//   2. An article you archive is deleted 24h after you archive it.
+//   3. A shared feed_items row is reclaimed once nobody wants it.
+//
+// Both windows are measured from when Parable first saw the article
+// (feed_items.created_at), not from its own publish date — a feed that
+// publishes with a lag, or backfills, would otherwise deliver articles
+// already past their window and have them swept before anyone saw them.
+//
+// Stages 1 and 2 write per-user 'deleted' tombstones rather than touching
+// the shared row: your retention window is yours, and another subscriber
+// may have saved the same article. Stage 3 is the only thing that deletes
+// a shared row, and only once every subscriber has let go of it.
+export async function runRetention(
   opts: { dryRun?: boolean } = {}
-): Promise<PurgeContentSummary> {
+): Promise<RetentionSummary> {
   const dryRun = opts.dryRun ?? false
-
   const supabase = adminClient()
-  const { data, error } = await supabase
-    .rpc('purge_expired_article_content', { dry_run: dryRun })
-    .single()
 
-  if (error) throw new Error(`purge_expired_article_content failed: ${error.message}`)
-
-  return {
+  const staleInboxCount = await callRetentionRpc(
+    supabase,
+    'purge_stale_inbox_articles',
     dryRun,
-    purgedCount: Number((data as { purged_count: number }).purged_count),
-  }
-}
-
-// Hard-deletes feed_items rows for articles that have sat in Archive 30+
-// days — cascades to that article's article_states/article_content/
-// article_folders/read_items for every user. Items in Read or Save are
-// never touched by this: state 'saved' or 'reading' is a hard exemption,
-// unconditionally, regardless of any note or read history on an otherwise-
-// eligible archived article. This is the app's only long-term bound on
-// feed_items storage growth — see purge_archived_article_metadata() in the
-// database.
-export async function runPurgeArchivedArticleMetadata(
-  opts: { dryRun?: boolean } = {}
-): Promise<PurgeArchivedMetadataSummary> {
-  const dryRun = opts.dryRun ?? false
-
-  const supabase = adminClient()
-  const { data, error } = await supabase
-    .rpc('purge_archived_article_metadata', { dry_run: dryRun })
-    .single()
-
-  if (error) throw new Error(`purge_archived_article_metadata failed: ${error.message}`)
-
-  return {
+    'deleted_count'
+  )
+  const expiredArchivedCount = await callRetentionRpc(
+    supabase,
+    'purge_expired_archived_articles',
     dryRun,
-    purgedCount: Number((data as { purged_count: number }).purged_count),
-  }
+    'deleted_count'
+  )
+  const reclaimedCount = await callRetentionRpc(
+    supabase,
+    'reclaim_orphaned_feed_items',
+    dryRun,
+    'reclaimed_count'
+  )
+
+  return { dryRun, staleInboxCount, expiredArchivedCount, reclaimedCount }
 }

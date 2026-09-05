@@ -1,25 +1,22 @@
 'use client'
 
-import Link from 'next/link'
 import type { ArticleItem } from '@/lib/articles/list'
-import { prefetchArticleContent } from '@/lib/articles/contentCache'
 import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
-import ArticleTagEditor from './ArticleTagEditor'
 
 export interface FolderOption {
   id: string
   label: string
 }
 
-// Shared card used by the Inbox/Read/Save/Archive pages — one place for
-// the save/archive/tag button row instead of duplicating it per surface.
-// Save/Archive/Unsave always patch
-// via onUpdate; the caller's list (see useOptimisticArticleList) decides
-// whether the patched item still belongs in its current view and drops it
-// if not, so this component doesn't need to know what view it's in.
+// Shared list row used by the Inbox/Save/Archive pages — one place for the
+// archive/file button row instead of duplicating it per surface.
+// Archive/Unsave always patch via onUpdate; the caller's list (see
+// useOptimisticArticleList) decides whether the patched item still belongs
+// in its current view and drops it if not, so this component doesn't need
+// to know what view it's in.
 export default function ArticleCard({
   item,
   onUpdate,
@@ -31,7 +28,6 @@ export default function ArticleCard({
   compact = false,
   selected,
   onToggleSelect,
-  showReaderLink = true,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -41,22 +37,25 @@ export default function ArticleCard({
   showFolderPicker?: boolean
   showDelete?: boolean
   compact?: boolean
-  // Only the Articles page's bulk toolbar passes these — undefined
-  // elsewhere, which just skips rendering the checkbox column.
+  // Only the bulk toolbar passes these — undefined elsewhere, which just
+  // skips rendering the checkbox column.
   selected?: boolean
   onToggleSelect?: (id: string) => void
-  // False only on the Inbox page: Inbox articles have no full reading view
-  // (see the plan for the Read feature) — the title renders as plain
-  // text and "Read" replaces it as the way to open one.
-  showReaderLink?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
-  const showEditors = item.state === 'saved' || item.state === 'archived' || item.state === 'reading'
-  const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter((part): part is string => !!part)
+  const showNote = item.state === 'saved' || item.state === 'archived'
+  const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter(
+    (part): part is string => !!part
+  )
 
   return (
-    <li className={compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'p-4'}>
-      <div className="flex items-start gap-2">
+    <li
+      className={
+        'group transition-colors hover:bg-foreground/[0.03] ' +
+        (compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'px-4 py-3')
+      }
+    >
+      <div className="flex items-start gap-2.5">
         {onToggleSelect && (
           <input
             type="checkbox"
@@ -66,40 +65,28 @@ export default function ArticleCard({
             className="mt-1 shrink-0"
           />
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-base text-muted mb-0.5">
-            {metaParts.map((part, i) => (
-              <span key={i} className="flex items-center gap-2">
-                {i > 0 && <span aria-hidden="true">|</span>}
-                <span className={i === 0 ? 'font-medium' : undefined}>{part}</span>
-              </span>
-            ))}
+        <div className="min-w-0 flex-1">
+          {/* A middot, not a pipe — the separator should recede behind the
+              two values it joins, and neither is more important than the
+              other, so the feed name carries no extra weight either. */}
+          <div className="mb-0.5 text-base text-muted">
+            {metaParts.join(' · ')}
           </div>
-          {showReaderLink ? (
-            <Link
-              href={`/read/${item.id}`}
-              onMouseDown={() => prefetchArticleContent(item.id)}
-              onTouchStart={() => prefetchArticleContent(item.id)}
-              onFocus={() => prefetchArticleContent(item.id)}
-              className="text-lg font-medium hover:text-accent hover:underline break-words"
+          {item.link ? (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={actions.handleOpen}
+              className="text-lg font-medium break-words hover:text-accent hover:underline"
             >
               {item.title}
-            </Link>
+            </a>
           ) : (
             <span className="text-lg font-medium break-words">{item.title}</span>
           )}
           {item.summary && (
-            <p className="text-lg text-muted mt-0.5">
-              {item.isAiSummary && (
-                <span
-                  title="AI-generated summary"
-                  className="inline-block align-middle mr-1.5 text-sm font-medium uppercase tracking-wider border border-border-subtle text-muted px-1 py-0.5"
-                >
-                  AI
-                </span>
-              )}
-              {item.summary}
-            </p>
+            <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
           )}
           <ArticleCardActionsRow
             item={item}
@@ -107,29 +94,15 @@ export default function ArticleCard({
             folders={folders}
             showFolderPicker={showFolderPicker}
             showDelete={showDelete}
-            showAddToReader={!showReaderLink}
           />
-          {showEditors && (
-            <>
-              <ArticleNoteEditor
-                itemId={item.id}
-                note={item.note}
-                onChange={(note) => onUpdate(item.id, { note })}
-              />
-              <ArticleTagEditor
-                itemId={item.id}
-                tags={item.tags}
-                onChange={(tags) => {
-                  const shouldSave = item.tags.length === 0 && tags.length > 0 && item.state !== 'saved'
-                  onUpdate(item.id, {
-                    tags,
-                    ...(shouldSave ? { state: 'saved' as const, archivedAt: null } : {}),
-                  })
-                }}
-              />
-            </>
+          {showNote && (
+            <ArticleNoteEditor
+              itemId={item.id}
+              note={item.note}
+              onChange={(note) => onUpdate(item.id, { note })}
+            />
           )}
-          {actions.error && <p className="text-base text-danger mt-1">{actions.error}</p>}
+          {actions.error && <p className="mt-1 text-base text-danger">{actions.error}</p>}
         </div>
       </div>
     </li>

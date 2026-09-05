@@ -97,8 +97,8 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
             <span>
               <span className="block text-lg font-medium">Partial reset — inbox to zero</span>
               <span className="block text-base text-muted mt-0.5">
-                Archives every unread article in your Articles inbox, as if you&rsquo;d gone through
-                and dismissed each one. Feeds, saved articles, tags, notes, and read history are
+                Archives every unread article in your Inbox, as if you&rsquo;d gone through
+                and dismissed each one. Feeds, saved articles, notes, and read history are
                 untouched.
               </span>
             </span>
@@ -115,8 +115,8 @@ export default function CleanSlateDialog({ onClose }: { onClose: () => void }) {
             <span>
               <span className="block text-lg font-medium">Full reset</span>
               <span className="block text-base text-muted mt-0.5">
-                Permanently deletes everything of yours — every subscription, saved item, tag,
-                note, read record, and folder, plus your display preferences. Your account goes
+                Permanently deletes everything of yours — every subscription, saved item,
+                folder, note, filing rule, and read record, plus your display preferences. Your account goes
                 back to exactly how it looked right after signup. This can&rsquo;t be undone.
               </span>
             </span>

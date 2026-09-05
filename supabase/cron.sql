@@ -35,9 +35,13 @@
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- Fetches new items for every feed, translates/summarizes/scrapes as
--- configured — see src/lib/feeds/ingest.ts. Every 4 hours: frequent enough
--- to keep feeds reasonably fresh without needing to fire on the hour.
+-- Fetches new items for every feed, then for each one translates the
+-- title, applies the keyword filters, reads the article, and writes a
+-- two-sentence summary — see src/lib/feeds/ingest.ts. Every 4 hours:
+-- frequent enough to keep feeds fresh without needing to fire on the hour.
+-- A run that can't finish inside its budget stops starting new items and
+-- lets the next run pick up the rest (RUN_BUDGET_MS in ingest.ts), so a
+-- large backlog drains across several cycles rather than timing out.
 -- Independent of the "Run ingest now" button (src/lib/feeds/actions.ts),
 -- which still runs on demand regardless of this schedule.
 select cron.schedule(
@@ -56,65 +60,31 @@ select cron.schedule(
   $$
 );
 
--- Sweeps every unread article (no article_states row yet) older than 24h
--- into 'archived' for every user — see auto_archive_stale_articles() in the
--- database and src/lib/feeds/retention.ts. Every 4 hours, offset 20
--- minutes after ingest-feeds so the two don't fire in the same instant.
-select cron.schedule(
-  'auto-archive-articles',
-  '20 */4 * * *',
-  $$
-  select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/cron/auto-archive-articles',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret',
-      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
-    )
-  );
-  $$
-);
-
--- Purges cached full article content (article_content rows) 7 days after
--- an article was archived, excluding anything any user has saved or is
--- reading — see purge_expired_article_content(). Metadata (feed_items,
--- tags, folders, summary_ai) is untouched; only the content cache is
--- deleted. Scheduled well clear of the other jobs so nothing overlaps.
-select cron.schedule(
-  'purge-article-content',
-  '15 5 * * *',
-  $$
-  select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/cron/purge-article-content',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret',
-      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
-    )
-  );
-  $$
-);
-
--- purge-unengaged-articles (hard-deleted feed_items 45+ days after
--- publish, regardless of archive state) was retired 2026-09-02 in favor of
--- purge-archived-metadata below — run once, not part of this file's
--- steady-state schedule:
+-- Parable's whole retention policy in one job: unfiled Inbox articles are
+-- deleted 12h after they arrive, archived ones 24h after they're archived,
+-- and shared feed_items rows are reclaimed once nobody wants them — see
+-- src/lib/feeds/retention.ts and the three functions it calls.
 --
---   select cron.unschedule('purge-unengaged-articles');
-
--- Hard-deletes feed_items rows for articles that have sat in Archive 30+
--- days — see purge_archived_article_metadata() and
--- src/lib/feeds/retention.ts::runPurgeArchivedArticleMetadata. Items in
--- Read or Save are never touched by this, unconditionally — that's the
--- one hard exemption. This is the app's only long-term bound on
--- feed_items' storage growth. Daily is plenty since the 30-day window
--- moves slowly; scheduled clear of the other jobs.
+-- Hourly, not daily. The old policy's windows were 24h/7d/30d, where a
+-- once-a-day sweep was plenty of resolution; at 12h and 24h a daily sweep
+-- would mean an article's real lifetime varied by up to a full day
+-- depending on when it happened to arrive relative to the cron. Offset to
+-- :10 so it never fires in the same instant as ingest-feeds on the hours
+-- they share.
+--
+-- Replaces auto-archive-articles, purge-article-content and
+-- purge-archived-metadata. Unschedule those once, they are not part of
+-- this file's steady-state schedule:
+--
+--   select cron.unschedule('auto-archive-articles');
+--   select cron.unschedule('purge-article-content');
+--   select cron.unschedule('purge-archived-metadata');
 select cron.schedule(
-  'purge-archived-metadata',
-  '45 5 * * *',
+  'retention',
+  '10 * * * *',
   $$
   select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/cron/purge-archived-metadata',
+    url := 'https://parable-rss.vercel.app/api/cron/retention',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',
@@ -126,4 +96,4 @@ select cron.schedule(
 
 -- To change a schedule later: re-run the matching cron.schedule() call
 -- above with a new cron expression (same job name updates it in place).
--- To remove a job: select cron.unschedule('auto-archive-articles');
+-- To remove a job: select cron.unschedule('retention');

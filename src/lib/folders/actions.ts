@@ -24,7 +24,7 @@ export async function addFolder(input: {
   revalidatePath('/feeds')
   revalidatePath('/inbox')
   revalidatePath('/read')
-  revalidatePath('/save')
+  revalidatePath('/saved')
   revalidatePath('/archive')
   return { id: data.id, error: null }
 }
@@ -106,35 +106,72 @@ export async function assignFeedToFolders(
   return { error: null }
 }
 
-// One folder per (article, user) — article_folders' PK enforces this, so
-// null means "remove from its folder" rather than "no-op".
-export async function assignArticleToFolder(
+// Replaces an article's folder membership wholesale. An article can sit
+// in several folders at once (article_folders' PK is (feed_item_id,
+// user_id, folder_id)), so this diffs against what's already there rather
+// than deleting and re-inserting the whole set — an unchanged folder
+// keeps its original created_at.
+//
+// Filing an article is what saves it: gaining its first folder promotes it
+// to state='saved' from any other state. Removing the last folder never
+// demotes it, which matches how filing reads to a user ("I put this
+// somewhere, so I kept it") without making Save membership fragile.
+export async function setArticleFolders(
   feedItemId: string,
-  folderId: string | null
+  folderIds: string[]
 ): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
+  const desired = [...new Set(folderIds)]
   const supabase = await createClient()
-  if (folderId === null) {
+
+  const { data: existingRows, error: readError } = await supabase
+    .from('article_folders')
+    .select('folder_id')
+    .eq('user_id', user.id)
+    .eq('feed_item_id', feedItemId)
+  if (readError) return { error: readError.message }
+
+  const existing = new Set((existingRows ?? []).map((row) => row.folder_id))
+  const toAdd = desired.filter((id) => !existing.has(id))
+  const toRemove = [...existing].filter((id) => !desired.includes(id))
+
+  if (toRemove.length > 0) {
     const { error } = await supabase
       .from('article_folders')
       .delete()
       .eq('user_id', user.id)
       .eq('feed_item_id', feedItemId)
-    if (error) return { error: error.message }
-  } else {
-    const { error } = await supabase
-      .from('article_folders')
-      .upsert(
-        { user_id: user.id, feed_item_id: feedItemId, folder_id: folderId },
-        { onConflict: 'feed_item_id,user_id' }
-      )
+      .in('folder_id', toRemove)
     if (error) return { error: error.message }
   }
 
-  revalidatePath('/read')
-  revalidatePath('/save')
+  if (toAdd.length > 0) {
+    const { error } = await supabase.from('article_folders').insert(
+      toAdd.map((folderId) => ({ user_id: user.id, feed_item_id: feedItemId, folder_id: folderId }))
+    )
+    if (error) return { error: error.message }
+  }
+
+  if (desired.length > 0) {
+    const { data: state } = await supabase
+      .from('article_states')
+      .select('state')
+      .eq('user_id', user.id)
+      .eq('feed_item_id', feedItemId)
+      .maybeSingle()
+    if (state?.state !== 'saved') {
+      const { error } = await supabase.from('article_states').upsert(
+        { user_id: user.id, feed_item_id: feedItemId, state: 'saved', archived_at: null },
+        { onConflict: 'user_id,feed_item_id' }
+      )
+      if (error) return { error: error.message }
+    }
+  }
+
+  revalidatePath('/inbox')
+  revalidatePath('/saved')
   revalidatePath('/archive')
   return { error: null }
 }

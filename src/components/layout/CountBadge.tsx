@@ -1,10 +1,11 @@
-// The one deliberate rounded-full element in an otherwise zero-radius
-// design system — a numeric count badge is the conventional exception to
-// the "ink on paper, hairline rules, zero radius" rule (see globals.css).
+// A plain right-aligned number, not a filled pill. The Inbox count is a
+// permanent fixture of the nav rather than an alert, and an accent-filled
+// badge sitting there at all times reads as one — every comparable sidebar
+// (Linear, Attio, Vercel) renders counts as quiet muted digits.
 export default function CountBadge({ count }: { count: number }) {
   if (count <= 0) return null
   return (
-    <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-accent text-accent-foreground text-xs font-medium font-data leading-none">
+    <span className="text-xs font-medium font-data text-muted tabular-nums leading-none">
       {count > 99 ? '99+' : count}
     </span>
   )

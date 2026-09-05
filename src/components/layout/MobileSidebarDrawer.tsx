@@ -10,11 +10,9 @@ import { signOut } from '@/app/login/actions'
 export default function MobileSidebarDrawer({
   userEmail,
   inboxCount,
-  readerCount,
 }: {
   userEmail: string
   inboxCount: number
-  readerCount: number
 }) {
   const [open, setOpen] = useState(false)
 
@@ -39,7 +37,7 @@ export default function MobileSidebarDrawer({
           <Menu size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
         <Link href="/" aria-label="Parable">
-          <ParableLogo height={24} />
+          <ParableLogo height={26} />
         </Link>
       </header>
 
@@ -57,7 +55,7 @@ export default function MobileSidebarDrawer({
             className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border flex flex-col shadow-[var(--shadow-modal)] transition-transform duration-[var(--motion-standard)] ease-out"
           >
             <div className="flex items-center justify-between gap-2 p-4">
-              <ParableLogo height={44} />
+              <ParableLogo height={28} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -68,16 +66,10 @@ export default function MobileSidebarDrawer({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-2">
-              <SidebarNavList
-                inboxCount={inboxCount}
-                readerCount={readerCount}
-                onNavigate={() => setOpen(false)}
-              />
+              <SidebarNavList inboxCount={inboxCount} onNavigate={() => setOpen(false)} />
             </div>
             <div className="border-t border-border-subtle p-3 text-base">
-              <div className="text-xs font-medium uppercase tracking-wider text-muted truncate mb-2">
-                {userEmail}
-              </div>
+              <div className="text-base text-muted truncate mb-2">{userEmail}</div>
               <form action={signOut}>
                 <button
                   type="submit"

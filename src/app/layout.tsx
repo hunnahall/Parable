@@ -4,10 +4,12 @@ import { Hanken_Grotesk, Inter, Work_Sans, Instrument_Sans, Lato } from 'next/fo
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getArticlesUnfiledCount, getReaderCount } from '@/lib/articles/list'
+import { getArticlesUnfiledCount } from '@/lib/articles/list'
 import ParableMark from '@/components/brand/ParableMark'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
+import CommandPalette from '@/components/layout/CommandPalette'
+import { ToastProvider } from '@/components/ui/Toast'
 
 const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken-grotesk' })
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -32,10 +34,9 @@ export default async function RootLayout({
   // on every single navigation, since this layout re-executes on every
   // request (getUser() reads cookies(), which opts the whole tree out of
   // Next.js's route-segment caching).
-  const [prefs, inboxCount, readerCount] = await Promise.all([
+  const [prefs, inboxCount] = await Promise.all([
     getUserPreferences(),
     user ? getArticlesUnfiledCount() : Promise.resolve(0),
-    user ? getReaderCount() : Promise.resolve(0),
   ])
 
   return (
@@ -45,22 +46,19 @@ export default async function RootLayout({
       className={`${hankenGrotesk.variable} ${inter.variable} ${workSans.variable} ${instrumentSans.variable} ${lato.variable}`}
     >
       <body>
+        <ToastProvider>
         {user ? (
           <div className="flex min-h-screen">
             <Sidebar
               initialCollapsed={prefs.sidebarCollapsed}
               userEmail={user.email ?? ''}
               inboxCount={inboxCount}
-              readerCount={readerCount}
             />
             <div className="flex-1 min-w-0 flex flex-col">
-              <MobileSidebarDrawer
-                userEmail={user.email ?? ''}
-                inboxCount={inboxCount}
-                readerCount={readerCount}
-              />
+              <MobileSidebarDrawer userEmail={user.email ?? ''} inboxCount={inboxCount} />
               <main className="flex-1 min-w-0">{children}</main>
             </div>
+            <CommandPalette />
           </div>
         ) : (
           <>
@@ -72,6 +70,7 @@ export default async function RootLayout({
             {children}
           </>
         )}
+        </ToastProvider>
       </body>
     </html>
   )

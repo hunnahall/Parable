@@ -1,34 +1,35 @@
 'use client'
 
+import { Archive, ArchiveRestore, Bookmark, Trash2 } from 'lucide-react'
 import type { ArticleItem } from '@/lib/articles/list'
 import type { FolderOption } from './ArticleCard'
 import type { useArticleCardActions } from './useArticleCardActions'
+import ArticleFolderPicker from './ArticleFolderPicker'
 
-// A sentinel folder-select value distinct from both "" (no folder) and any
-// real folder id, so picking it can be told apart from an actual selection.
-const NEW_FOLDER_OPTION = '__new_folder__'
-
-// Archive/Delete and folder-assignment on one row (unified — these used to
-// be two separate stacked rows). Shared between ArticleCard (list) and
-// ArticleCardGrid (card) so the two layouts can't drift. There's no
-// standalone Save action — filing an article into a folder is what saves
-// it (see handleFolderChange in useArticleCardActions).
+// Archive/Delete and folder filing on one row. Shared between ArticleCard
+// (list) and ArticleCardGrid (card) so the two layouts can't drift. There
+// is no standalone Save action — filing an article into a folder is what
+// saves it (see handleFoldersChange in useArticleCardActions).
+//
+// On a list row the whole row is a hover group, so these stay out of the
+// way until the pointer is on the article they belong to. Keyboard focus
+// reveals them too (focus-within), and coarse pointers get them
+// unconditionally since there is no hover state to reveal them with.
 export default function ArticleCardActionsRow({
   item,
   actions,
   folders,
   showFolderPicker = false,
   showDelete = false,
-  showAddToReader = false,
+  alwaysVisible = false,
 }: {
   item: ArticleItem
   actions: ReturnType<typeof useArticleCardActions>
   folders?: FolderOption[]
   showFolderPicker?: boolean
   showDelete?: boolean
-  // Inbox only — moves this one article to Reader. See ArticleCard/
-  // ArticleCardGrid's showReaderLink prop, which this is tied to.
-  showAddToReader?: boolean
+  // Card tiles have no row to hover, so they opt out of the reveal.
+  alwaysVisible?: boolean
 }) {
   const {
     pending,
@@ -37,42 +38,58 @@ export default function ArticleCardActionsRow({
     newFolderName,
     setNewFolderName,
     handleArchive,
-    handleAddToReader,
     handleUnfile,
     handleDelete,
-    handleFolderChange,
+    handleFoldersChange,
     handleCreateFolder,
   } = actions
 
+  const iconButton =
+    'inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-sm transition-colors disabled:opacity-50'
+
   return (
-    <div className="flex items-center gap-3 mt-1 flex-wrap">
-      {showAddToReader && item.state === null && (
-        <button
-          type="button"
+    <div
+      className={
+        'mt-1.5 flex flex-wrap items-center gap-1 transition-opacity duration-[var(--motion-fast)] ' +
+        (alwaysVisible
+          ? ''
+          : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100')
+      }
+    >
+      {showFolderPicker && folders && (
+        <ArticleFolderPicker
+          selectedIds={item.folderIds}
+          folders={folders}
+          onChange={handleFoldersChange}
+          addingFolder={addingFolder}
+          setAddingFolder={setAddingFolder}
+          newFolderName={newFolderName}
+          setNewFolderName={setNewFolderName}
+          onCreateFolder={handleCreateFolder}
           disabled={pending}
-          onClick={handleAddToReader}
-          className="text-sm text-accent hover:opacity-80 transition-colors disabled:opacity-50"
-        >
-          Read
-        </button>
+        />
       )}
+
       {item.state === 'saved' && (
         <button
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className={`${iconButton} text-muted hover:text-foreground`}
         >
+          <Bookmark size={13} strokeWidth={1.75} aria-hidden="true" />
           Unsave
         </button>
       )}
+
       {item.state === 'archived' ? (
         <button
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className="text-sm text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className={`${iconButton} text-muted hover:text-foreground`}
         >
+          <ArchiveRestore size={13} strokeWidth={1.75} aria-hidden="true" />
           Unarchive
         </button>
       ) : (
@@ -80,62 +97,23 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleArchive}
-          className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
+          className={`${iconButton} text-muted hover:text-foreground`}
         >
+          <Archive size={13} strokeWidth={1.75} aria-hidden="true" />
           Archive
         </button>
       )}
-      {showDelete && (item.state === 'saved' || item.state === 'reading') && (
+
+      {showDelete && item.state === 'saved' && (
         <button
           type="button"
           disabled={pending}
           onClick={handleDelete}
-          className="text-sm text-danger hover:opacity-80 transition-colors disabled:opacity-50"
+          className={`${iconButton} text-muted hover:text-danger`}
         >
+          <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
           Delete
         </button>
-      )}
-      {showFolderPicker && folders && (
-        <div className="flex items-center gap-1">
-          {addingFolder ? (
-            <input
-              type="text"
-              autoFocus
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onBlur={handleCreateFolder}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-                if (e.key === 'Escape') {
-                  setNewFolderName('')
-                  setAddingFolder(false)
-                }
-              }}
-              placeholder="New folder…"
-              className="w-28 border border-border px-2 py-1 text-base bg-background"
-            />
-          ) : (
-            <select
-              value={item.folderId ?? ''}
-              onChange={(e) => {
-                if (e.target.value === NEW_FOLDER_OPTION) {
-                  setAddingFolder(true)
-                  return
-                }
-                handleFolderChange(e.target.value || null)
-              }}
-              className="border border-border px-2 py-1 text-base bg-background"
-            >
-              <option value="">No folder</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-              <option value={NEW_FOLDER_OPTION}>+ New folder</option>
-            </select>
-          )}
-        </div>
       )}
     </div>
   )

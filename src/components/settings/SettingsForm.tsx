@@ -83,10 +83,13 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-lg font-bold font-heading">Rulebook</h2>
         <ul className="text-base text-muted list-disc pl-5 space-y-1">
-          <li>Untouched articles auto-archive after 24 hours.</li>
-          <li>Archived articles&apos; cached full text is cleared after 7 days.</li>
-          <li>Archived articles&apos; metadata is cleared after 30 days.</li>
-          <li>Items in Read and Save are never auto-archived or deleted.</li>
+          <li>Articles you don&apos;t touch are deleted 12 hours after they arrive.</li>
+          <li>Articles you archive are deleted 24 hours after you archive them.</li>
+          <li>Saved articles are kept until you delete them.</li>
+          <li>
+            Article text is never stored — each article is read once to write its summary, then
+            discarded.
+          </li>
         </ul>
       </div>
 

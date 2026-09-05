@@ -1,30 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { after } from 'next/server'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { getArticlesPage, type ArticlesPageFilters, type ArticlesPageResult } from '@/lib/articles/list'
-import { getUserPreferences } from '@/lib/preferences/data'
-import { mapWithConcurrency } from '@/lib/concurrency'
-import { assignArticleToFolder } from '@/lib/folders/actions'
-import {
-  checkArticleContentCache,
-  fetchAndPersistArticleContent,
-  ensureArticleContentTranslated,
-} from '@/lib/articles/content'
-
-// Bounded, same spirit as ingest.ts's PREWARM_CONCURRENCY — moveToReader's
-// background job below is a live scrape (+ possibly a translate call) per
-// item, so a large bulk "Read" selection shouldn't hammer several hosts
-// (or OpenAI) all at once.
-const READER_TRANSLATE_CONCURRENCY = 3
+import { setArticleFolders } from '@/lib/folders/actions'
 
 // 'deleted' is a per-user tombstone, not a state the UI offers as a
 // destination: it hides the article from every one of this user's views
 // without touching the shared feed_items row other subscribers read.
-export type ArticleCuration = 'saved' | 'archived' | 'reading' | 'deleted'
+export type ArticleCuration = 'saved' | 'archived' | 'deleted'
 
-// Thin server-action wrapper around getArticlesPage — the Articles page's
+// Thin server-action wrapper around getArticlesPage — the Inbox page's
 // client component (for "Load more") can't call data.ts functions
 // directly, since createClient() there needs a Server Component/Route
 // Handler/Server Action context.
@@ -46,19 +32,18 @@ async function setState(
       feed_item_id: feedItemId,
       state,
       archived_at: state === 'archived' ? new Date().toISOString() : null,
-      // Archiving takes an article out of every folder/tag it was filed
-      // under — Save membership is derived from having a folder and/or a
-      // tag, so an archived article can't still read as saved.
-      ...(state === 'archived' ? { tags: [] } : {}),
     },
     { onConflict: 'user_id,feed_item_id' }
   )
 
   if (error) return { error: error.message }
 
+  // Archiving takes an article out of every folder it was filed under —
+  // Save membership is derived from folder membership, so an archived
+  // article can't still read as saved.
   if (state === 'archived') {
-    const { error: folderError } = await assignArticleToFolder(feedItemId, null)
-    if (folderError) console.error(`articles/setState: clear folder for ${feedItemId}`, folderError)
+    const { error: folderError } = await setArticleFolders(feedItemId, [])
+    if (folderError) console.error(`articles/setState: clear folders for ${feedItemId}`, folderError)
   }
 
   revalidatePath('/')
@@ -69,16 +54,15 @@ export async function saveArticle(feedItemId: string) {
   return setState(feedItemId, 'saved')
 }
 
-// Manual archive — replaces the old "Ignore" action. Same effect as the
-// 24h auto-archive cron sweep (see src/lib/feeds/retention.ts), just
-// triggered immediately by the user instead of by elapsed time.
+// Manual archive from the Inbox. An archived article is kept for a
+// further 24h before retention deletes it (see src/lib/feeds/retention.ts).
 export async function archiveArticle(feedItemId: string) {
   return setState(feedItemId, 'archived')
 }
 
 // Returns an article to its neutral/unfiled state — neither saved nor
-// archived, so it reappears on the Articles page (or, if 24h have already
-// passed since publish, gets swept back into Archive by the next cron run).
+// archived, so it reappears in the Inbox (until it ages past the 12h
+// retention window, at which point the next sweep deletes it).
 export async function clearArticleState(feedItemId: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -96,72 +80,15 @@ export async function clearArticleState(feedItemId: string): Promise<{ error: st
   return { error: null }
 }
 
-// Permanently deletes an article's curation row (used from the Save page's
-// "Delete" action) — same underlying delete as clearArticleState, exposed
-// under a name that matches what it means from Save (removing it from
-// your library entirely), not "un-saving back to Articles."
+// Un-saves an article, returning it to the Inbox — same underlying delete
+// as clearArticleState. Distinct from purgeArticles below, which removes
+// it from every view for good.
 export async function deleteArticle(feedItemId: string): Promise<{ error: string | null }> {
   return clearArticleState(feedItemId)
 }
 
-// Moves one or more Inbox articles to Read — the bulk "Read" toolbar
-// button and each card's "Read" button both call this (with one or many
-// ids). Full-body translation is fetched eagerly in the background right
-// after the state upsert (not awaited — this action returns as soon as the
-// upsert succeeds), reusing the exact same scrape/translate chain the
-// reading view's lazy on-open path uses (see ensureArticleContentTranslated
-// in src/lib/articles/content.ts), so an article opened on the Read page
-// usually already has its translated body cached instead of paying for the
-// scrape+translate live.
-export async function moveToReader(feedItemIds: string[]): Promise<{ error: string | null }> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
-  if (feedItemIds.length === 0) return { error: null }
-
-  const supabase = await createClient()
-  const { error } = await supabase.from('article_states').upsert(
-    feedItemIds.map((feedItemId) => ({
-      user_id: user.id,
-      feed_item_id: feedItemId,
-      state: 'reading' as const,
-      archived_at: null,
-    })),
-    { onConflict: 'user_id,feed_item_id' }
-  )
-  if (error) return { error: error.message }
-
-  // Resolved up front rather than inside the deferred after() callback —
-  // each item's link/original_language and the user's target language are
-  // all this job needs, and after() runs post-response, so there's
-  // nothing left to gain by deferring these reads too.
-  const [{ data: items }, prefs] = await Promise.all([
-    supabase.from('feed_items').select('id, link, original_language').in('id', feedItemIds),
-    getUserPreferences(),
-  ])
-  const targetLanguage = prefs.language
-
-  after(() =>
-    mapWithConcurrency(items ?? [], READER_TRANSLATE_CONCURRENCY, async (item) => {
-      if (!item.link) return
-      try {
-        const cacheCheck = await checkArticleContentCache(item.id)
-        const content = cacheCheck.hit
-          ? cacheCheck.content
-          : await fetchAndPersistArticleContent(item.id, item.link, cacheCheck.attemptCount, supabase)
-        await ensureArticleContentTranslated(item.id, content, item.original_language, targetLanguage)
-      } catch (err) {
-        console.error(`articles/moveToReader: feed_item ${item.id}`, err)
-      }
-    })
-  )
-
-  revalidatePath('/inbox')
-  revalidatePath('/read')
-  return { error: null }
-}
-
 // Bulk version of archiveArticle — one upsert instead of N sequential
-// ones, for the Articles/Save pages' multi-select toolbar (not shown on
+// ones, for the Inbox/Save pages' multi-select toolbar (not shown on
 // Archive, where every item is already archived — see ArticlesView).
 export async function archiveArticlesBulk(
   feedItemIds: string[]
@@ -178,15 +105,14 @@ export async function archiveArticlesBulk(
       feed_item_id: feedItemId,
       state: 'archived' as const,
       archived_at: now,
-      tags: [] as string[],
     })),
     { onConflict: 'user_id,feed_item_id' }
   )
   if (error) return { error: error.message }
 
-  // Bulk equivalent of setState's single-item assignArticleToFolder(id,
-  // null) — a loop over N ids would be N round trips for what's already a
-  // one-row-per-id delete.
+  // Bulk equivalent of setState's single-item setArticleFolders(id, []) —
+  // a loop over N ids would be N round trips for what's already a
+  // few-rows-per-id delete.
   const { error: folderError } = await supabase
     .from('article_folders')
     .delete()
@@ -206,9 +132,8 @@ export async function archiveArticlesBulk(
 // It marks a 'deleted' state rather than deleting the feed_items row: that
 // row is shared by every subscriber to the feed, so hard-deleting it here
 // would destroy other people's copies — saved ones included — from one
-// click. archived_at is stamped so the retention job can reclaim the
-// shared row on the usual 30-day schedule once nobody wants it (see
-// purge_archived_article_metadata).
+// click. archived_at is stamped so retention can reclaim the shared row
+// once nobody wants it (see reclaim_orphaned_feed_items).
 export async function purgeArticles(feedItemIds: string[]): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -223,7 +148,6 @@ export async function purgeArticles(feedItemIds: string[]): Promise<{ error: str
       state: 'deleted' as const,
       archived_at: now,
       note: null,
-      tags: [],
     })),
     { onConflict: 'user_id,feed_item_id' }
   )
@@ -233,9 +157,10 @@ export async function purgeArticles(feedItemIds: string[]): Promise<{ error: str
   return { error: null }
 }
 
-// Display-only read tracking (see src/app/read/[id]/page.tsx) — must
-// never touch article_states/archived_at, since read state is explicitly
-// independent of the 24h auto-archive timer.
+// Display-only read tracking, fired when a card's title is clicked
+// through to the publisher — must never touch article_states/archived_at,
+// since read state is explicitly independent of the retention timers.
+// Feeds' 7-day engagement rate is the only consumer.
 export async function markArticleRead(feedItemId: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
@@ -252,7 +177,7 @@ export async function markArticleRead(feedItemId: string): Promise<{ error: stri
   return { error: null }
 }
 
-// Notes only make sense once an article has a curation row (Read, Save, or
+// Notes only make sense once an article has a curation row (Save or
 // Archive — its NOT NULL `state` column has to already exist), so this
 // updates rather than upserts; the UI only ever calls it for filed items.
 export async function setArticleNote(
@@ -268,56 +193,6 @@ export async function setArticleNote(
     .update({ note: note.trim() || null })
     .eq('user_id', user.id)
     .eq('feed_item_id', feedItemId)
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/')
-  return { error: null }
-}
-
-// Tagging saves an article, the same way filing it into a folder already
-// does (see handleFolderChange in useArticleCardActions.ts) — a non-empty
-// tag set on a Read article promotes it to Save. Clearing tags never
-// demotes it, mirroring the folder side (removing a folder doesn't unsave
-// either).
-export async function setArticleTags(
-  feedItemId: string,
-  tags: string[]
-): Promise<{ error: string | null }> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
-
-  const normalized = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))]
-
-  const supabase = await createClient()
-
-  let promoteToSaved = false
-  if (normalized.length > 0) {
-    const { data: existing } = await supabase
-      .from('article_states')
-      .select('state')
-      .eq('user_id', user.id)
-      .eq('feed_item_id', feedItemId)
-      .maybeSingle()
-    promoteToSaved = existing?.state !== 'saved'
-  }
-
-  const { error } = promoteToSaved
-    ? await supabase.from('article_states').upsert(
-        {
-          user_id: user.id,
-          feed_item_id: feedItemId,
-          state: 'saved' as const,
-          archived_at: null,
-          tags: normalized,
-        },
-        { onConflict: 'user_id,feed_item_id' }
-      )
-    : await supabase
-        .from('article_states')
-        .update({ tags: normalized })
-        .eq('user_id', user.id)
-        .eq('feed_item_id', feedItemId)
 
   if (error) return { error: error.message }
 

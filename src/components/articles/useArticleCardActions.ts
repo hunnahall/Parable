@@ -3,13 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  saveArticle,
   archiveArticle,
   clearArticleState,
   deleteArticle,
-  moveToReader,
+  markArticleRead,
 } from '@/lib/articles/actions'
-import { assignArticleToFolder, addFolder } from '@/lib/folders/actions'
+import { setArticleFolders, addFolder } from '@/lib/folders/actions'
 import type { ArticleItem } from '@/lib/articles/list'
 import type { FolderOption } from './ArticleCard'
 
@@ -17,7 +16,7 @@ import type { FolderOption } from './ArticleCard'
 // row) and ArticleCardGrid (card tile) — same handlers, same
 // optimistic-update contract, so the two layouts can't drift apart on
 // what these actions actually do. There's no standalone save action:
-// handleFolderChange below is what saves an article.
+// handleFoldersChange below is what saves an article.
 export function useArticleCardActions({
   item,
   onUpdate,
@@ -38,7 +37,7 @@ export function useArticleCardActions({
   async function handleArchive() {
     setPending(true)
     setError(null)
-    onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString(), folderId: null, tags: [] })
+    onUpdate(item.id, { state: 'archived', archivedAt: new Date().toISOString(), folderIds: [] })
     const result = await archiveArticle(item.id)
     setPending(false)
     if (result.error) {
@@ -48,17 +47,12 @@ export function useArticleCardActions({
     router.refresh()
   }
 
-  async function handleAddToReader() {
-    setPending(true)
-    setError(null)
-    onUpdate(item.id, { state: 'reading', archivedAt: null })
-    const result = await moveToReader([item.id])
-    setPending(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    router.push(`/read/${item.id}`)
+  // Clicking a title opens the publisher's own page — Parable never
+  // stores the body, so there's nowhere else to go. Read tracking is
+  // fire-and-forget: it feeds the Feeds page's engagement rate and nothing
+  // that blocks the click.
+  function handleOpen() {
+    void markArticleRead(item.id)
   }
 
   async function handleUnfile() {
@@ -87,20 +81,14 @@ export function useArticleCardActions({
     router.refresh()
   }
 
-  // Filing an article into a folder is a saved-article concept — picking
-  // one from Articles/Archive implicitly saves the article too, so "save
-  // directly to a folder" is one action instead of save-then-refile.
-  async function handleFolderChange(folderId: string | null) {
-    const shouldSave = folderId !== null && item.state !== 'saved'
-    onUpdate(item.id, { folderId, ...(shouldSave ? { state: 'saved', archivedAt: null } : {}) })
-    if (shouldSave) {
-      const saveResult = await saveArticle(item.id)
-      if (saveResult.error) {
-        setError(saveResult.error)
-        return
-      }
-    }
-    const result = await assignArticleToFolder(item.id, folderId)
+  // Filing an article is what saves it, so picking a folder from the Inbox
+  // is one action rather than save-then-refile. setArticleFolders performs
+  // the same promotion server-side; the optimistic patch here just keeps
+  // the card from flickering while that round trip completes.
+  async function handleFoldersChange(folderIds: string[]) {
+    const shouldSave = folderIds.length > 0 && item.state !== 'saved'
+    onUpdate(item.id, { folderIds, ...(shouldSave ? { state: 'saved', archivedAt: null } : {}) })
+    const result = await setArticleFolders(item.id, folderIds)
     if (result.error) {
       setError(result.error)
       return
@@ -120,7 +108,7 @@ export function useArticleCardActions({
       return
     }
     onFolderCreated?.({ id: result.id, label: name })
-    await handleFolderChange(result.id)
+    await handleFoldersChange([...item.folderIds, result.id])
   }
 
   return {
@@ -131,10 +119,10 @@ export function useArticleCardActions({
     newFolderName,
     setNewFolderName,
     handleArchive,
-    handleAddToReader,
+    handleOpen,
     handleUnfile,
     handleDelete,
-    handleFolderChange,
+    handleFoldersChange,
     handleCreateFolder,
   }
 }

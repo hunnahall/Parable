@@ -6,12 +6,12 @@ import { feedItemsRpc, UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
 // Wipes everything that belongs to this account — subscriptions, folders,
-// per-article curation (saved, archived, tags, notes, read state, folder
+// per-article curation (saved, archived, notes, read state, folder
 // placement) and preferences — so the app comes back looking like a brand
 // new signup.
 //
 // Scoped to this user throughout. The shared catalog (feeds, feed_items,
-// article_content) is deliberately untouched: those rows are read by every
+// is deliberately untouched: those rows are read by every
 // subscriber, and a feed nobody subscribes to any more is already
 // soft-deleted by removeFeed and reclaimed by the retention jobs.
 export async function performFullReset(): Promise<{ error: string | null }> {
@@ -26,9 +26,18 @@ export async function performFullReset(): Promise<{ error: string | null }> {
     .eq('user_id', user.id)
   if (subscriptionsError) return { error: subscriptionsError.message }
 
-  // Cascades to feed_folders and article_folders via their FKs.
+  // Cascades to feed_folders, article_folders and filter_rules via their FKs.
   const { error: foldersError } = await supabase.from('folders').delete().eq('user_id', user.id)
   if (foldersError) return { error: foldersError.message }
+
+  // Belt and braces: a rule whose folder is already gone would have
+  // cascaded above, but a full reset shouldn't depend on that to be
+  // complete.
+  const { error: rulesError } = await supabase
+    .from('filter_rules')
+    .delete()
+    .eq('user_id', user.id)
+  if (rulesError) return { error: rulesError.message }
 
   const { error: statesError } = await supabase
     .from('article_states')
@@ -54,10 +63,10 @@ export async function performFullReset(): Promise<{ error: string | null }> {
 // state transition archiveArticle() applies one at a time (see
 // src/lib/articles/actions.ts), and the same "unfiled" predicate the
 // Articles page and its sidebar badge use (see getArticlesUnfiledCount in
-// src/lib/articles/list.ts). Saved articles, tags, notes, read history,
+// src/lib/articles/list.ts). Saved articles, notes, read history,
 // feeds, and folders are all untouched — only feed_items with zero
 // article_states rows are affected, so this can never touch (or need to
-// check) a saved/tagged/read article.
+// check) a saved or filed article.
 export async function performPartialReset(): Promise<{
   error: string | null
   archivedCount: number
@@ -106,7 +115,7 @@ export async function performPartialReset(): Promise<{
 // otherwise never touch it.
 // Scoped to the same "unfiled" predicate as the Inbox page and its sidebar
 // badge (see getArticlesUnfiledCount in src/lib/articles/list.ts):
-// saved/archived/reading articles reflect a user's explicit curation, which
+// saved/archived articles reflect a user's explicit curation, which
 // this blocklist — a pre-triage junk filter, not an override — shouldn't
 // touch.
 export async function runAutoDeleteRulesNow(): Promise<{
@@ -145,7 +154,7 @@ export async function runAutoDeleteRulesNow(): Promise<{
   // your filter list is yours, so it must not delete the shared feed_items
   // row another subscriber is still reading. Safe to write state
   // unconditionally because matchedIds only ever came from the unfiled set
-  // above, so none of them have a saved/archived/reading state to lose.
+  // above, so none of them have a saved/archived state to lose.
   const now = new Date().toISOString()
   const { error: deleteError } = await supabase.from('article_states').upsert(
     matchedIds.map((feedItemId) => ({
