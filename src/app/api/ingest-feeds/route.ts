@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runIngest } from '@/lib/feeds/ingest'
 import { isAuthorizedCronRequest } from '@/lib/cron/route'
+import { formatUsage } from '@/lib/usage'
 
 // Triggered every 4 hours by Supabase Cron (see supabase/cron.sql), which
 // calls this deployed route directly — no separate runner involved.
@@ -36,8 +37,12 @@ async function handle(request: NextRequest) {
       `ingest-feeds: completed in ${Date.now() - startedAt}ms — ` +
         `${summary.feedsProcessed} feeds, ${summary.feedsFailed.length} failed, ` +
         `${summary.itemsInserted} items inserted, ` +
-        `${summary.summariesReused} summaries reused from duplicates`
+        `${summary.summariesReused} summaries reused from duplicates, ` +
+        `${summary.summariesRepaired} repaired`
     )
+    // Separate line, stable field order: this is the one thing to compare
+    // between two runs when judging whether a pipeline change paid off.
+    console.log(`ingest-feeds: usage — ${formatUsage(summary.usage)}`)
     return NextResponse.json(summary)
   } catch (err) {
     // Only reachable for failures outside the per-feed loop (e.g. the

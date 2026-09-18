@@ -146,8 +146,12 @@ async function main() {
     toTranslate.map((index) => stripHtml(samples[index].title)),
     DEFAULT_LANGUAGE
   )
+  console.log(
+    `(${translated.usage.calls} call(s), in=${translated.usage.inputTokens} ` +
+      `out=${translated.usage.outputTokens} reasoning=${translated.usage.reasoningTokens})\n`
+  )
   const titleEnByIndex = new Map<number, string | null>()
-  toTranslate.forEach((index, i) => titleEnByIndex.set(index, translated[i]))
+  toTranslate.forEach((index, i) => titleEnByIndex.set(index, translated.titles[i]))
 
   let failures = 0
 

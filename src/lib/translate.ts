@@ -4,6 +4,7 @@ import { franc } from 'franc'
 import langs from 'langs'
 import OpenAI from 'openai'
 import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
+import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -119,19 +120,22 @@ export function needsTranslation(detectedLanguage: string, targetLanguage: strin
 
 // Translates one batch, keyed by the caller's own indices so a response
 // that drops or reorders an entry can't silently shift every translation
-// onto the wrong article. Returns a map of index -> translated title;
-// indices the model omitted are simply absent.
+// onto the wrong article. Returns a map of index -> translated title
+// (indices the model omitted are simply absent) plus what the call spent —
+// including, via splitAndRetry below, the tokens a truncated batch burned
+// before being split, which is exactly the cost TITLE_BATCH_SIZE trades
+// against.
 async function translateTitleBatch(
   entries: { index: number; title: string }[],
   targetLanguage: string
-): Promise<Map<number, string>> {
+): Promise<{ titles: Map<number, string>; usage: TokenUsage }> {
   const out = new Map<number, string>()
-  if (entries.length === 0) return out
+  if (entries.length === 0) return { titles: out, usage: EMPTY_USAGE }
 
   const api = openai()
   if (!api) {
     console.error('translate: OPENAI_API_KEY not set, skipping translation')
-    return out
+    return { titles: out, usage: EMPTY_USAGE }
   }
 
   const targetName = languageLabel(targetLanguage)
@@ -140,14 +144,22 @@ async function translateTitleBatch(
   // Reached when the response was truncated or unparseable — with an
   // index-keyed JSON array, a cut-off response doesn't parse at all, so
   // without this one oversized batch would leave 40 headlines untranslated.
-  const splitAndRetry = async (): Promise<Map<number, string>> => {
-    if (entries.length === 1) return out
+  // `spent` is what the failed attempt already cost; the halves' usage is
+  // added to it so a split batch reports the whole chain, not just the
+  // retries that happened to succeed.
+  const splitAndRetry = async (
+    spent: TokenUsage
+  ): Promise<{ titles: Map<number, string>; usage: TokenUsage }> => {
+    if (entries.length === 1) return { titles: out, usage: spent }
     const mid = Math.ceil(entries.length / 2)
     const [left, right] = await Promise.all([
       translateTitleBatch(entries.slice(0, mid), targetLanguage),
       translateTitleBatch(entries.slice(mid), targetLanguage),
     ])
-    return new Map([...left, ...right])
+    return {
+      titles: new Map([...left.titles, ...right.titles]),
+      usage: addUsage(spent, addUsage(left.usage, right.usage)),
+    }
   }
 
   try {
@@ -202,17 +214,20 @@ async function translateTitleBatch(
       ],
     })
 
+    // Billed whether or not the response parsed, so counted up front.
+    const usage = usageOf(response.usage)
+
     // max_output_tokens counts reasoning tokens too, so a batch can run out
     // of room even when the titles themselves are short.
     if (response.status === 'incomplete') {
       console.error(`translate: response truncated for ${entries.length} titles, splitting`)
-      return splitAndRetry()
+      return splitAndRetry(usage)
     }
 
     const text = response.output_text
     if (!text) {
       console.error('translate: OpenAI returned no output text')
-      return out
+      return { titles: out, usage }
     }
 
     const parsed: { translations?: { index?: number; title?: string }[] } = JSON.parse(text)
@@ -222,13 +237,16 @@ async function translateTitleBatch(
       if (typeof entry.title !== 'string' || !entry.title.trim()) continue
       out.set(entry.index, entry.title.trim())
     }
-    return out
+    return { titles: out, usage }
   } catch (err) {
     console.error('translate: OpenAI request failed', err)
     // A JSON.parse failure is the other way a truncated/malformed response
-    // shows up; splitting recovers the half that would have parsed.
-    if (err instanceof SyntaxError) return splitAndRetry()
-    return out
+    // shows up; splitting recovers the half that would have parsed. The
+    // response that failed to parse is out of scope by the time we get
+    // here, so its usage is lost — it is counted as zero rather than
+    // guessed at.
+    if (err instanceof SyntaxError) return splitAndRetry(EMPTY_USAGE)
+    return { titles: out, usage: EMPTY_USAGE }
   }
 }
 
@@ -243,9 +261,10 @@ async function translateTitleBatch(
 export async function translateTitles(
   titles: string[],
   targetLanguage: string = DEFAULT_LANGUAGE
-): Promise<(string | null)[]> {
+): Promise<{ titles: (string | null)[]; usage: TokenUsage }> {
   const results: (string | null)[] = new Array(titles.length).fill(null)
-  if (titles.length === 0) return results
+  let usage = EMPTY_USAGE
+  if (titles.length === 0) return { titles: results, usage }
 
   const entries = titles
     .map((title, index) => ({ index, title }))
@@ -265,10 +284,11 @@ export async function translateTitles(
         .slice(i, i + TITLE_BATCH_CONCURRENCY)
         .map((batch) => translateTitleBatch(batch, targetLanguage))
     )
-    for (const map of translated) {
-      for (const [index, title] of map) results[index] = title
+    for (const batch of translated) {
+      for (const [index, title] of batch.titles) results[index] = title
+      usage = addUsage(usage, batch.usage)
     }
   }
 
-  return results
+  return { titles: results, usage }
 }

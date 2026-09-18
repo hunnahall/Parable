@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
 
 const MODEL = 'text-embedding-3-small'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -29,14 +30,17 @@ function openai(): OpenAI | null {
 // couldn't be embedded come back null; callers treat that as "no duplicate
 // check possible for this item" and fall through to summarizing it, so a
 // failure here costs money rather than correctness.
-export async function embedTexts(texts: string[]): Promise<(number[] | null)[]> {
+export async function embedTexts(
+  texts: string[]
+): Promise<{ embeddings: (number[] | null)[]; usage: TokenUsage }> {
   const results: (number[] | null)[] = new Array(texts.length).fill(null)
-  if (texts.length === 0) return results
+  let usage = EMPTY_USAGE
+  if (texts.length === 0) return { embeddings: results, usage }
 
   const api = openai()
   if (!api) {
     console.error('embeddings: OPENAI_API_KEY not set, skipping embeddings')
-    return results
+    return { embeddings: results, usage }
   }
 
   // The API rejects an empty string, and an item with no title has nothing
@@ -53,6 +57,7 @@ export async function embedTexts(texts: string[]): Promise<(number[] | null)[]> 
         dimensions: EMBEDDING_DIMENSIONS,
         input: batch.map((entry) => entry.text),
       })
+      usage = addUsage(usage, usageOf(response.usage))
       // The response carries its own `index` into the input array; trust
       // that rather than the array order it happens to arrive in.
       for (const item of response.data) {
@@ -64,5 +69,5 @@ export async function embedTexts(texts: string[]): Promise<(number[] | null)[]> 
     }
   }
 
-  return results
+  return { embeddings: results, usage }
 }

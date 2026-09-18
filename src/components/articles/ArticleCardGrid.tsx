@@ -112,8 +112,21 @@ export default function ArticleCardGrid({
         ) : (
           <span className="text-lg font-medium break-words">{item.title}</span>
         )}
-        {item.summary && (
-          <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
+        {/* See the matching branch in ArticleCard: a missing summary is
+            stated, not rendered as an absence. */}
+        {item.summary ? (
+          <>
+            <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
+            {item.duplicateOfFeed && (
+              <p className="mt-1 text-sm text-muted">
+                Summary shared with the same story from {item.duplicateOfFeed}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-1 text-base italic leading-relaxed text-muted">
+            No summary available — open the article to read it.
+          </p>
         )}
         <div className="mt-auto pt-2">
           <ArticleCardActionsRow

@@ -79,7 +79,15 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     // mutates/strips the document as it extracts the article body.
     const imageUrl = extractHeaderImage(dom.window.document)
     const article = new Readability(dom.window.document).parse()
-    const text = article?.textContent?.trim() ?? ''
+    // Collapsed, not just trimmed. Readability's textContent carries the
+    // source HTML's own indentation and blank lines through verbatim, and
+    // the summarizer slices this to a fixed character budget
+    // (BODY_INPUT_MAX_LENGTH) — so every run of whitespace inside that
+    // window is budget spent on nothing, displacing real sentences. The
+    // feed-description path already normalizes this way in stripHtml; this
+    // one didn't. Newlines collapse to spaces along with everything else:
+    // the input is a flat "Body:" field, not a structured document.
+    const text = (article?.textContent ?? '').replace(/\s+/g, ' ').trim()
     if (!text) {
       return { error: 'Could not extract readable content from this page.', imageUrl }
     }

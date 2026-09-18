@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
+import { EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -41,19 +42,22 @@ function openai(): OpenAI | null {
 // language costs one request instead of two and avoids the quality loss of
 // translating an already-compressed text. The model reads whatever
 // language the body is in regardless.
+// Returns the usage alongside the summary rather than just the string:
+// this is the most expensive call in the pipeline, and until it reported
+// what it spent, every decision about it was an estimate. See src/lib/usage.ts.
 export async function summarizeToTarget(
   title: string,
   body: string,
   targetLanguage: string = DEFAULT_LANGUAGE
-): Promise<string | null> {
+): Promise<{ summary: string | null; usage: TokenUsage }> {
   const api = openai()
   if (!api) {
     console.error('summarize: OPENAI_API_KEY not set, skipping summary')
-    return null
+    return { summary: null, usage: EMPTY_USAGE }
   }
 
   const trimmed = body.trim()
-  if (!trimmed) return null
+  if (!trimmed) return { summary: null, usage: EMPTY_USAGE }
 
   const targetName = languageLabel(targetLanguage)
 
@@ -81,16 +85,23 @@ export async function summarizeToTarget(
     // sentence in the Inbox permanently — the body is gone by then, so
     // there is no second chance to summarize. Treat it as a failure and
     // fall back to no summary instead.
+    // Billed whether or not the response was usable, so it is counted
+    // before the truncation check below rather than after.
+    const usage = usageOf(response.usage)
+
     if (response.status === 'incomplete') {
       console.error(
         `summarize: response truncated (${response.incomplete_details?.reason ?? 'unknown'})`
       )
-      return null
+      return { summary: null, usage }
     }
 
-    return response.output_text?.trim() || null
+    return { summary: response.output_text?.trim() || null, usage }
   } catch (err) {
     console.error('summarize: OpenAI request failed', err)
-    return null
+    // A thrown request may or may not have been billed and reports no
+    // usage either way; counting it as zero understates rather than
+    // invents.
+    return { summary: null, usage: EMPTY_USAGE }
   }
 }

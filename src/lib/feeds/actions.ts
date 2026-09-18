@@ -13,6 +13,43 @@ const FEED_TITLE_FETCH_TIMEOUT_MS = 15_000
 
 const FEED_SELECT =
   'id, url, title, last_fetched_at, last_error, is_scraped, consecutive_failures'
+const FEED_LOOKUP_SELECT = `${FEED_SELECT}, deleted_at`
+
+// The catalog row for `url`, revived if it had been soft-deleted. Null
+// (with no error) means this URL isn't in the catalog at all and the
+// caller should insert it.
+//
+// removeFeed soft-deletes a feed once its last subscriber leaves, but
+// keeps the row so saved articles hold their FK and so the same URL can be
+// reused if anyone adds it again. Reusing it is the part that was broken:
+// listFeedsDetailed (src/lib/feeds/data.ts) and runIngest
+// (src/lib/feeds/ingest.ts) both filter `deleted_at is null`, so an add
+// that reused a tombstoned row created a real subscription to a feed that
+// never appears on /feeds and is never fetched — reporting success and
+// then silently doing nothing, forever. Clearing deleted_at here is what
+// makes re-adding a feed you previously removed actually work, and it's
+// the only place that matters: addFeed, createBuiltFeed and OPML import
+// (which routes through addFeed) are the three ways in.
+async function findOrReviveFeed(supabase: Awaited<ReturnType<typeof createClient>>, url: string) {
+  const { data: existing, error } = await supabase
+    .from('feeds')
+    .select(FEED_LOOKUP_SELECT)
+    .eq('url', url)
+    .maybeSingle()
+  if (error) return { feed: null, error: error.message }
+  if (!existing) return { feed: null, error: null }
+
+  const { deleted_at: deletedAt, ...feed } = existing
+  if (!deletedAt) return { feed, error: null }
+
+  const { error: reviveError } = await supabase
+    .from('feeds')
+    .update({ deleted_at: null })
+    .eq('id', feed.id)
+  if (reviveError) return { feed: null, error: reviveError.message }
+
+  return { feed, error: null }
+}
 
 // feeds is a shared catalog keyed by url: two users adding the same feed
 // get the same row, so it's only ever fetched and stored once. Subscribing
@@ -68,12 +105,8 @@ export async function addFeed(input: {
   // Reuse the catalog row if this URL is already known (another user's
   // subscription, or one you previously removed), rather than creating a
   // duplicate that would be fetched and stored twice.
-  const { data: existing, error: lookupError } = await supabase
-    .from('feeds')
-    .select(FEED_SELECT)
-    .eq('url', url)
-    .maybeSingle()
-  if (lookupError) return { feed: null, error: lookupError.message }
+  const { feed: existing, error: lookupError } = await findOrReviveFeed(supabase, url)
+  if (lookupError) return { feed: null, error: lookupError }
 
   let feed = existing
   if (!feed) {
@@ -129,12 +162,8 @@ export async function createBuiltFeed(input: {
   if (!title) return { feed: null, error: 'Title is required' }
 
   const supabase = await createClient()
-  const { data: existing, error: lookupError } = await supabase
-    .from('feeds')
-    .select(FEED_SELECT)
-    .eq('url', url)
-    .maybeSingle()
-  if (lookupError) return { feed: null, error: lookupError.message }
+  const { feed: existing, error: lookupError } = await findOrReviveFeed(supabase, url)
+  if (lookupError) return { feed: null, error: lookupError }
 
   let feed = existing
   if (!feed) {

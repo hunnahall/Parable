@@ -115,8 +115,31 @@ export default function ArticleCard({
           </div>
           {showBody && (
             <>
-              {item.summary && (
-                <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
+              {item.summary ? (
+                <>
+                  <p className="mt-1 text-base leading-relaxed text-foreground-muted">
+                    {item.summary}
+                  </p>
+                  {/* Why this reads word-for-word like another card in the
+                      same list: cross-feed dedupe recognized the same story
+                      and copied the summary instead of paying to write a
+                      second one. Unexplained, that repetition just looks
+                      like a bug. */}
+                  {item.duplicateOfFeed && (
+                    <p className="mt-1 text-sm text-muted">
+                      Summary shared with the same story from {item.duplicateOfFeed}
+                    </p>
+                  )}
+                </>
+              ) : (
+                /* Said out loud rather than rendered as nothing. A null
+                   summary means summarization failed or the source gave
+                   nothing summarizable, and the body is discarded at
+                   ingest — so the card silently collapsing to a bare title
+                   read as a design choice instead of a gap. */
+                <p className="mt-1 text-base italic leading-relaxed text-muted">
+                  No summary available — open the article to read it.
+                </p>
               )}
               <ArticleCardActionsRow
                 item={item}

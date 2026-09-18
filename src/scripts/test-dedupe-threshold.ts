@@ -93,7 +93,8 @@ function cosineDistance(a: number[], b: number[]): number {
 
 async function main() {
   const texts = pairs.flatMap((p) => [p.a, p.b])
-  const embeddings = await embedTexts(texts)
+  const { embeddings, usage } = await embedTexts(texts)
+  console.log(`(${usage.calls} embedding call(s), ${usage.inputTokens} tokens)\n`)
 
   if (embeddings.some((e) => e === null)) {
     console.error('FAIL: some embeddings came back null')

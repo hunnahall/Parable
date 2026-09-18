@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
-import { SUPPORTED_LANGUAGES } from '@/lib/languages'
 import ExportFeedsButton from './ExportFeedsButton'
 import CleanSlateSection from './CleanSlateSection'
 
@@ -16,7 +15,15 @@ const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
   { value: 'lato', label: 'Lato' },
 ]
 
-export default function SettingsForm({ initialPreferences }: { initialPreferences: UserPreferences }) {
+export default function SettingsForm({
+  initialPreferences,
+  // Resolved on the server (see src/app/settings/page.tsx) — it is an env
+  // var, not a preference.
+  ingestLanguage,
+}: {
+  initialPreferences: UserPreferences
+  ingestLanguage: string
+}) {
   const router = useRouter()
   const [prefs, setPrefs] = useState(initialPreferences)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -61,23 +68,24 @@ export default function SettingsForm({ initialPreferences }: { initialPreference
         </select>
       </div>
 
+      {/* Read-only on purpose. This was a <select> bound to
+          user_preferences.language, but nothing has read that column since
+          summaries became an ingest-time artifact: ingest writes one
+          translated title and one summary per shared feed_items row, in
+          the project-level INGEST_TARGET_LANGUAGE. Changing the control
+          therefore did nothing, silently, forever. A genuine per-account
+          target needs a feed_item_translations table keyed by language;
+          until then the honest thing is to report the language rather than
+          offer to change it. (The old helper text also promised "other
+          content is translated when opened" — a feature removed with the
+          reading view.) */}
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-lg font-bold font-heading">Language</h2>
         <p className="text-base text-muted">
-          Titles and summaries are translated into this language automatically. Other content is
-          translated when opened.
+          Titles and summaries are written in <strong className="text-foreground">{ingestLanguage}</strong>.
+          This applies to every account — articles are summarized once, when they arrive, and
+          shared by everyone subscribed to the feed.
         </p>
-        <select
-          value={prefs.language}
-          onChange={(e) => applyChange({ language: e.target.value })}
-          className="w-full border border-border px-3 py-2 text-lg bg-background"
-        >
-          {SUPPORTED_LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="card-elevated p-4 space-y-2">

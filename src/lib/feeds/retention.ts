@@ -13,6 +13,9 @@ export interface RetentionSummary {
   expiredArchivedCount: number
   // Shared feed_items rows nobody wants anymore, hard-deleted.
   reclaimedCount: number
+  // Ingest's "already seen this guid" memory, aged out past the window
+  // where it could still prevent a re-summarization.
+  purgedGuidCount: number
 }
 
 function adminClient() {
@@ -39,6 +42,7 @@ async function callRetentionRpc(
 //   1. An article you never touch is deleted 12h after it arrives.
 //   2. An article you archive is deleted 24h after you archive it.
 //   3. A shared feed_items row is reclaimed once nobody wants it.
+//   4. Ingest's record of which guids it has already seen ages out at 72h.
 //
 // Both windows are measured from when Parable first saw the article
 // (feed_items.created_at), not from its own publish date — a feed that
@@ -73,6 +77,16 @@ export async function runRetention(
     dryRun,
     'reclaimed_count'
   )
+  // Last, and independent of the three above: this table is ingest's
+  // memory, not a user's article. It deliberately outlives the feed_items
+  // row stage 3 just deleted — that gap is the whole point of it (see the
+  // ingested_guids migration).
+  const purgedGuidCount = await callRetentionRpc(
+    supabase,
+    'purge_ingested_guids',
+    dryRun,
+    'deleted_count'
+  )
 
-  return { dryRun, staleInboxCount, expiredArchivedCount, reclaimedCount }
+  return { dryRun, staleInboxCount, expiredArchivedCount, reclaimedCount, purgedGuidCount }
 }
