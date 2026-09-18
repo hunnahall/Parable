@@ -3,7 +3,7 @@ import {
   formatUsd,
   USAGE_WINDOW_DAYS,
   type UsageWindow,
-} from '@/lib/usage/data'
+} from '@/lib/usage/tokens'
 
 // Rolling token spend for the shared ingest job.
 //

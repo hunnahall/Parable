@@ -1,16 +1,18 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
-import { estimateCostUsd, type IngestUsage } from '@/lib/usage/tokens'
+import {
+  estimateCostUsd,
+  USAGE_WINDOW_DAYS,
+  type IngestUsage,
+  type UsageWindow,
+} from '@/lib/usage/tokens'
 
-export interface UsageWindow {
-  // Input + output across every path. Embedding tokens are included —
-  // they are real spend, even though they are a rounding error next to
-  // summarization.
-  totalTokens: number
-  estimatedUsd: number
-}
-
-export const USAGE_WINDOW_DAYS = 7
+// Server-only: this reaches next/headers through @/lib/supabase/server, so
+// importing it from a Client Component is a build error rather than a
+// runtime surprise. The presentational half of this module — UsageWindow,
+// the formatters, USAGE_WINDOW_DAYS — deliberately lives in tokens.ts,
+// which imports nothing, so a component can use them without dragging the
+// database in.
 
 // Rolling seven days of ingest spend, summed from ingest_runs.
 //
@@ -85,17 +87,3 @@ function sum<T>(rows: T[], pick: (row: T) => number | null): number {
   return rows.reduce((total, row) => total + (pick(row) ?? 0), 0)
 }
 
-// 1_240_000 -> "1.24M". Kept compact because the Usage box is a third of a
-// column wide.
-export function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
-  return String(tokens)
-}
-
-// Sub-cent spend reads as "$0.00", which looks like a bug rather than a
-// small number — show it as "<$0.01" instead.
-export function formatUsd(usd: number): string {
-  if (usd > 0 && usd < 0.01) return '<$0.01'
-  return `$${usd.toFixed(2)}`
-}

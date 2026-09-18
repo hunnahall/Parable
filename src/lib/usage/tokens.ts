@@ -115,3 +115,33 @@ export function formatUsage(usage: IngestUsage): string {
     `${part('embed', usage.embed)} est=$${estimateCostUsd(usage).toFixed(4)}`
   )
 }
+
+// Rolling-window spend, as the Usage box on /settings renders it. Lives
+// here rather than beside the query that produces it (usage/data.ts)
+// because that module reaches next/headers and cannot be imported from a
+// Client Component; this file imports nothing at all.
+export interface UsageWindow {
+  // Input + output across every path. Embedding tokens are included —
+  // they are real spend, even though they are a rounding error next to
+  // summarization.
+  totalTokens: number
+  estimatedUsd: number
+}
+
+export const USAGE_WINDOW_DAYS = 7
+
+// 1_240_000 -> "1.24M". Kept compact because the Usage box is a third of a
+// column wide.
+export function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
+  return String(tokens)
+}
+
+// Sub-cent spend reads as "$0.00", which looks like a bug rather than a
+// small number — show it as "<$0.01" instead. A true zero still renders as
+// "$0.00", which is the intended reading of an empty window.
+export function formatUsd(usd: number): string {
+  if (usd > 0 && usd < 0.01) return '<$0.01'
+  return `$${usd.toFixed(2)}`
+}
