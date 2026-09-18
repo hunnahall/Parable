@@ -8,9 +8,6 @@ export interface UsageWindow {
   // summarization.
   totalTokens: number
   estimatedUsd: number
-  // Ingest runs the window is built from. Zero means "nothing has run
-  // yet", which the UI reports rather than showing a confident 0.
-  runs: number
 }
 
 export const USAGE_WINDOW_DAYS = 7
@@ -40,7 +37,7 @@ export async function getRecentUsage(): Promise<UsageWindow | null> {
     .select('translate_input_tokens, translate_output_tokens, summarize_input_tokens, summarize_output_tokens, embed_input_tokens')
     .gte('created_at', since)
   logQueryError('usage/getRecentUsage', error)
-  if (!data || data.length === 0) return { totalTokens: 0, estimatedUsd: 0, runs: 0 }
+  if (!data || data.length === 0) return { totalTokens: 0, estimatedUsd: 0 }
 
   const rows = data as {
     translate_input_tokens: number
@@ -81,7 +78,7 @@ export async function getRecentUsage(): Promise<UsageWindow | null> {
     usage.summarize.outputTokens +
     usage.embed.inputTokens
 
-  return { totalTokens, estimatedUsd: estimateCostUsd(usage), runs: rows.length }
+  return { totalTokens, estimatedUsd: estimateCostUsd(usage) }
 }
 
 function sum<T>(rows: T[], pick: (row: T) => number | null): number {
