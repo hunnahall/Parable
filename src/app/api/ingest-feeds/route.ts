@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runIngest } from '@/lib/feeds/ingest'
 import { isAuthorizedCronRequest } from '@/lib/cron/route'
-import { formatUsage } from '@/lib/usage'
+import { formatUsage } from '@/lib/usage/tokens'
 
 // Triggered every 4 hours by Supabase Cron (see supabase/cron.sql), which
 // calls this deployed route directly — no separate runner involved.

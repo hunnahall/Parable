@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
-import { EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
+import { EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage/tokens'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -42,9 +42,11 @@ function openai(): OpenAI | null {
 // language costs one request instead of two and avoids the quality loss of
 // translating an already-compressed text. The model reads whatever
 // language the body is in regardless.
+//
 // Returns the usage alongside the summary rather than just the string:
 // this is the most expensive call in the pipeline, and until it reported
-// what it spent, every decision about it was an estimate. See src/lib/usage.ts.
+// what it spent, every decision about it was an estimate. See
+// src/lib/usage/tokens.ts.
 export async function summarizeToTarget(
   title: string,
   body: string,
@@ -80,15 +82,15 @@ export async function summarizeToTarget(
       ],
     })
 
+    // Billed whether or not the response turns out to be usable, so it is
+    // counted before the truncation check rather than after.
+    const usage = usageOf(response.usage)
+
     // max_output_tokens counts reasoning tokens as well as visible ones, so
     // a response can stop mid-sentence. Storing that would put half a
     // sentence in the Inbox permanently — the body is gone by then, so
     // there is no second chance to summarize. Treat it as a failure and
     // fall back to no summary instead.
-    // Billed whether or not the response was usable, so it is counted
-    // before the truncation check below rather than after.
-    const usage = usageOf(response.usage)
-
     if (response.status === 'incomplete') {
       console.error(
         `summarize: response truncated (${response.incomplete_details?.reason ?? 'unknown'})`

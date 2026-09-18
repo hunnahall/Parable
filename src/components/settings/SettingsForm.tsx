@@ -4,8 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
+import type { UsageWindow } from '@/lib/usage/data'
 import ExportFeedsButton from './ExportFeedsButton'
 import CleanSlateSection from './CleanSlateSection'
+import UsageBox from './UsageBox'
 
 const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
   { value: 'inter', label: 'Inter (default)' },
@@ -20,9 +22,13 @@ export default function SettingsForm({
   // Resolved on the server (see src/app/settings/page.tsx) — it is an env
   // var, not a preference.
   ingestLanguage,
+  // Also resolved on the server: it reads ingest_runs, and there is no
+  // browser Supabase client in this app.
+  usage,
 }: {
   initialPreferences: UserPreferences
   ingestLanguage: string
+  usage: UsageWindow | null
 }) {
   const router = useRouter()
   const [prefs, setPrefs] = useState(initialPreferences)
@@ -53,39 +59,52 @@ export default function SettingsForm({
 
   return (
     <div className="space-y-6">
-      <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-lg font-bold font-heading">Font</h2>
-        <select
-          value={prefs.font}
-          onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
-          className="w-full border border-border px-3 py-2 text-lg bg-background"
-        >
-          {FONT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Font, Language and Usage share one row at a third each. They all
+          hold a single short control or figure, so a full-width card for
+          each was mostly empty space. Stacks to one column on narrow
+          screens. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="card-elevated p-4 space-y-2">
+          <h2 className="text-lg font-bold font-heading">Font</h2>
+          <select
+            value={prefs.font}
+            onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
+            className="w-full border border-border px-2 py-2 text-base bg-background"
+          >
+            {FONT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* Read-only on purpose. This was a <select> bound to
-          user_preferences.language, but nothing has read that column since
-          summaries became an ingest-time artifact: ingest writes one
-          translated title and one summary per shared feed_items row, in
-          the project-level INGEST_TARGET_LANGUAGE. Changing the control
-          therefore did nothing, silently, forever. A genuine per-account
-          target needs a feed_item_translations table keyed by language;
-          until then the honest thing is to report the language rather than
-          offer to change it. (The old helper text also promised "other
-          content is translated when opened" — a feature removed with the
-          reading view.) */}
-      <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-lg font-bold font-heading">Language</h2>
-        <p className="text-base text-muted">
-          Titles and summaries are written in <strong className="text-foreground">{ingestLanguage}</strong>.
-          This applies to every account — articles are summarized once, when they arrive, and
-          shared by everyone subscribed to the feed.
-        </p>
+        {/* Disabled on purpose, not decoratively. This was a live <select>
+            bound to user_preferences.language, but nothing has read that
+            column since summaries became an ingest-time artifact: ingest
+            writes one translated title and one summary per shared
+            feed_items row, in the project-level INGEST_TARGET_LANGUAGE.
+            Changing it did nothing, silently, forever. Rendering the real
+            value in a disabled control keeps the row visually consistent
+            without putting back a knob that lies. A genuine per-account
+            target needs a feed_item_translations table keyed by language.
+            (The old helper text also promised "other content is translated
+            when opened" — a feature removed with the reading view.) */}
+        <div className="card-elevated p-4 space-y-2">
+          <h2 className="text-lg font-bold font-heading">Language</h2>
+          {/* defaultValue, not value: nothing can change it, so making it
+              a controlled input would only require a no-op onChange. */}
+          <select
+            defaultValue={ingestLanguage}
+            disabled
+            title="Set for the whole project by INGEST_TARGET_LANGUAGE — articles are summarized once, when they arrive, and shared by every subscriber."
+            className="w-full cursor-not-allowed border border-border px-2 py-2 text-base bg-background text-muted opacity-70"
+          >
+            <option value={ingestLanguage}>{ingestLanguage}</option>
+          </select>
+        </div>
+
+        <UsageBox usage={usage} />
       </div>
 
       <div className="card-elevated p-4 space-y-2">

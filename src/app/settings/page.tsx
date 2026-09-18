@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
+import { getRecentUsage } from '@/lib/usage/data'
 import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
 import PageHeader from '@/components/layout/PageHeader'
 import SettingsForm from '@/components/settings/SettingsForm'
@@ -9,7 +10,7 @@ export default async function SettingsPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  const preferences = await getUserPreferences()
+  const [preferences, usage] = await Promise.all([getUserPreferences(), getRecentUsage()])
 
   // Read here rather than in the form: ingest's target language is a
   // project-level env var (INGEST_TARGET_LANGUAGE in
@@ -25,7 +26,11 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="mx-auto max-w-2xl p-6">
-        <SettingsForm initialPreferences={preferences} ingestLanguage={ingestLanguage} />
+        <SettingsForm
+          initialPreferences={preferences}
+          ingestLanguage={ingestLanguage}
+          usage={usage}
+        />
       </div>
     </>
   )

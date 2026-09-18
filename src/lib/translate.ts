@@ -4,7 +4,7 @@ import { franc } from 'franc'
 import langs from 'langs'
 import OpenAI from 'openai'
 import { DEFAULT_LANGUAGE, languageLabel } from '@/lib/languages'
-import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
+import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage/tokens'
 
 const MODEL = 'gpt-5-nano'
 const REQUEST_TIMEOUT_MS = 15_000

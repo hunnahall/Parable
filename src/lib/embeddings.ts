@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage'
+import { addUsage, EMPTY_USAGE, usageOf, type TokenUsage } from '@/lib/usage/tokens'
 
 const MODEL = 'text-embedding-3-small'
 const REQUEST_TIMEOUT_MS = 15_000

@@ -16,7 +16,7 @@ import {
   EMPTY_INGEST_USAGE,
   EMPTY_USAGE,
   type IngestUsage,
-} from '@/lib/usage'
+} from '@/lib/usage/tokens'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
 // Below this, an extracted "body" is a cookie banner or a paywall stub
@@ -1122,8 +1122,43 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
 // history in one run.
 const MAX_ITEM_AGE_HOURS = 24
 
+// Persists one row per run, so the token counters accumulated above
+// outlive the log line they used to end up in. This is what the Usage box
+// on /settings reads, and the baseline any later pipeline change is
+// measured against.
+//
+// Best-effort and deliberately last: failing to record what a run did
+// should never fail the run itself.
+async function recordRun(
+  supabase: AdminClient,
+  summary: IngestSummary,
+  durationMs: number
+): Promise<void> {
+  const { usage } = summary
+  const { error } = await supabase.from('ingest_runs').insert({
+    duration_ms: durationMs,
+    feeds_processed: summary.feedsProcessed,
+    feeds_failed: summary.feedsFailed.length,
+    items_inserted: summary.itemsInserted,
+    summaries_reused: summary.summariesReused,
+    summaries_repaired: summary.summariesRepaired,
+    translate_calls: usage.translate.calls,
+    translate_input_tokens: usage.translate.inputTokens,
+    translate_output_tokens: usage.translate.outputTokens,
+    translate_reasoning_tokens: usage.translate.reasoningTokens,
+    summarize_calls: usage.summarize.calls,
+    summarize_input_tokens: usage.summarize.inputTokens,
+    summarize_output_tokens: usage.summarize.outputTokens,
+    summarize_reasoning_tokens: usage.summarize.reasoningTokens,
+    embed_calls: usage.embed.calls,
+    embed_input_tokens: usage.embed.inputTokens,
+  })
+  if (error) console.error('ingest: failed to record run', error.message)
+}
+
 export async function runIngest(): Promise<IngestSummary> {
   const supabase = adminClient()
+  const startedAt = Date.now()
   const cutoffMs = Date.now() - MAX_ITEM_AGE_HOURS * 60 * 60 * 1000
   const deadline = Date.now() + RUN_BUDGET_MS
 
@@ -1158,7 +1193,11 @@ export async function runIngest(): Promise<IngestSummary> {
   const subscribedFeedIds = [...subscribersByFeed.keys()]
 
   if (subscribedFeedIds.length === 0) {
-    return {
+    // Recorded like any other run. A run that processed nothing is exactly
+    // the signal worth having — an empty run looked identical to a working
+    // one for thirteen days once the only subscription pointed at a
+    // soft-deleted feed.
+    const empty: IngestSummary = {
       feedsProcessed: 0,
       feedsFailed: [],
       itemsInserted: 0,
@@ -1167,6 +1206,8 @@ export async function runIngest(): Promise<IngestSummary> {
       summariesRepaired: 0,
       usage: EMPTY_INGEST_USAGE,
     }
+    await recordRun(supabase, empty, Date.now() - startedAt)
+    return empty
   }
 
   const { data: catalogFeeds, error: feedsError } = await supabase
@@ -1224,7 +1265,7 @@ export async function runIngest(): Promise<IngestSummary> {
   const repair = await repairMissingSummaries(supabase, INGEST_TARGET_LANGUAGE, deadline)
   usage = addIngestUsage(usage, repair.usage)
 
-  return {
+  const summary: IngestSummary = {
     feedsProcessed,
     feedsFailed,
     itemsInserted,
@@ -1233,6 +1274,8 @@ export async function runIngest(): Promise<IngestSummary> {
     summariesRepaired: repair.repaired,
     usage,
   }
+  await recordRun(supabase, summary, Date.now() - startedAt)
+  return summary
 }
 
 // How many failed summaries one run will try to repair. Deliberately
