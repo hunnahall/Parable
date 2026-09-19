@@ -19,15 +19,11 @@ const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
 
 export default function SettingsForm({
   initialPreferences,
-  // Resolved on the server (see src/app/settings/page.tsx) — it is an env
-  // var, not a preference.
-  ingestLanguage,
-  // Also resolved on the server: it reads ingest_runs, and there is no
-  // browser Supabase client in this app.
+  // Resolved on the server: it reads ingest_runs, and there is no browser
+  // Supabase client in this app.
   usage,
 }: {
   initialPreferences: UserPreferences
-  ingestLanguage: string
   usage: UsageWindow | null
 }) {
   const router = useRouter()
@@ -59,11 +55,10 @@ export default function SettingsForm({
 
   return (
     <div className="space-y-6">
-      {/* Font, Language and Usage share one row at a third each. They all
-          hold a single short control or figure, so a full-width card for
-          each was mostly empty space. Stacks to one column on narrow
-          screens. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Font and Usage share one row at a half each. Both hold a single
+          short control or figure, so a full-width card for each was mostly
+          empty space. Stacks to one column on narrow screens. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="card-elevated p-4 space-y-2">
           <h2 className="text-lg font-bold font-heading">Font</h2>
           <select
@@ -79,44 +74,15 @@ export default function SettingsForm({
           </select>
         </div>
 
-        {/* Disabled on purpose, not decoratively. This was a live <select>
-            bound to user_preferences.language, but nothing has read that
-            column since summaries became an ingest-time artifact: ingest
-            writes one translated title and one summary per shared
-            feed_items row, in the project-level INGEST_TARGET_LANGUAGE.
-            Changing it did nothing, silently, forever. Rendering the real
-            value in a disabled control keeps the row visually consistent
-            without putting back a knob that lies. A genuine per-account
-            target needs a feed_item_translations table keyed by language.
-            (The old helper text also promised "other content is translated
-            when opened" — a feature removed with the reading view.) */}
-        <div className="card-elevated p-4 space-y-2">
-          <h2 className="text-lg font-bold font-heading">Language</h2>
-          {/* defaultValue, not value: nothing can change it, so making it
-              a controlled input would only require a no-op onChange. */}
-          <select
-            defaultValue={ingestLanguage}
-            disabled
-            title="Set for the whole project by INGEST_TARGET_LANGUAGE — articles are summarized once, when they arrive, and shared by every subscriber."
-            className="w-full cursor-not-allowed border border-border px-2 py-2 text-base bg-background text-muted opacity-70"
-          >
-            <option value={ingestLanguage}>{ingestLanguage}</option>
-          </select>
-        </div>
-
         <UsageBox usage={usage} />
       </div>
 
       <div className="card-elevated p-4 space-y-2">
         <h2 className="text-lg font-bold font-heading">Rulebook</h2>
         <ul className="text-base text-muted list-disc pl-5 space-y-1">
-          <li>Articles you don&apos;t touch are deleted 12 hours after they arrive.</li>
-          <li>Articles you archive are deleted 24 hours after you archive them.</li>
+          <li>Unread articles last 12 hours in the inbox.</li>
+          <li>Archived articles last 24 hours after being archived.</li>
           <li>Saved articles are kept until you delete them.</li>
-          <li>
-            Article text is never stored — each article is read once to write its summary, then
-            discarded.
-          </li>
         </ul>
       </div>
 

@@ -34,7 +34,6 @@ export default function ExportFeedsButton() {
   return (
     <div className="card-elevated p-4 space-y-2">
       <h2 className="text-lg font-bold font-heading">Export feeds</h2>
-      <p className="text-base text-muted">Download an OPML file listing all of your feeds and folders.</p>
       <button
         type="button"
         onClick={handleExport}

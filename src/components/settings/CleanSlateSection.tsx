@@ -9,9 +9,6 @@ export default function CleanSlateSection() {
   return (
     <div className="card-elevated p-4 space-y-2 border-danger/30">
       <h2 className="text-lg font-bold font-heading">Clean slate</h2>
-      <p className="text-base text-muted">
-        Archive your unread inbox, or wipe your account entirely and start over.
-      </p>
       <button
         type="button"
         onClick={() => setOpen(true)}
