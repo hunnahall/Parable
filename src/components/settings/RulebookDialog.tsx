@@ -25,11 +25,11 @@ export default function RulebookDialog({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Rulebook"
+        aria-label="Help"
         className="card-modal absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md p-5"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">Rulebook</h2>
+          <h2 className="text-lg font-bold">Help</h2>
           <button
             type="button"
             onClick={onClose}
