@@ -16,7 +16,6 @@ import type { EngagementRate } from '@/lib/feeds/engagement'
 import { formatFetchedAt } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
-import OpmlImport from './OpmlImport'
 import BuildFeedSection from './BuildFeedSection'
 
 const NO_FOLDER = 'No folder'
@@ -214,10 +213,7 @@ export default function FeedManager({
       </div>
 
       <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold">Add a feed</h2>
-          <OpmlImport />
-        </div>
+        <h2 className="text-lg font-bold">Add a feed</h2>
         <div className="flex flex-wrap gap-3">
           <input
             type="url"

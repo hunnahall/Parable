@@ -130,14 +130,6 @@ export interface UsageWindow {
 
 export const USAGE_WINDOW_DAYS = 7
 
-// 1_240_000 -> "1.24M". Kept compact because the Usage box is a third of a
-// column wide.
-export function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
-  return String(tokens)
-}
-
 // Sub-cent spend reads as "$0.00", which looks like a bug rather than a
 // small number — show it as "<$0.01" instead. A true zero still renders as
 // "$0.00", which is the intended reading of an empty window.

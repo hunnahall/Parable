@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
 import type { UsageWindow } from '@/lib/usage/tokens'
-import ExportFeedsButton from './ExportFeedsButton'
-import CleanSlateSection from './CleanSlateSection'
+import SettingsActions from './SettingsActions'
 import UsageBox from './UsageBox'
 
 const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
@@ -86,9 +85,7 @@ export default function SettingsForm({
         </ul>
       </div>
 
-      <ExportFeedsButton />
-
-      <CleanSlateSection />
+      <SettingsActions />
 
       <div className="text-lg text-muted" role="status">
         {status === 'saving' && 'Saving…'}

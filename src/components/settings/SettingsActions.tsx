@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { addFeed } from '@/lib/feeds/actions'
+import { addFeed, exportFeedsOpml } from '@/lib/feeds/actions'
 import { ensureFolderPath, assignFeedToFolders } from '@/lib/folders/actions'
+import CleanSlateDialog from './CleanSlateDialog'
 
 interface ParsedFeed {
   url: string
@@ -40,14 +41,32 @@ function parseOpml(xml: string): ParsedFeed[] {
   return feeds
 }
 
-export default function OpmlImport() {
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+// The three feed-wide actions, on one row. They share this component rather
+// than a card each because their results (an import report, an export
+// error) belong under the row as a whole — inside a flex item they would
+// stretch one button away from its neighbours.
+export default function SettingsActions() {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{
+  const [importResult, setImportResult] = useState<{
     added: number
     failed: { url: string; error: string }[]
   } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [cleanSlateOpen, setCleanSlateOpen] = useState(false)
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -58,7 +77,7 @@ export default function OpmlImport() {
     const feeds = parseOpml(text)
 
     setImporting(true)
-    setResult(null)
+    setImportResult(null)
 
     // Pre-create every unique folder path found in the OPML so each feed's
     // add just looks up an already-existing leaf folder id.
@@ -85,12 +104,25 @@ export default function OpmlImport() {
     }
 
     setImporting(false)
-    setResult({ added, failed })
+    setImportResult({ added, failed })
     router.refresh()
   }
 
+  async function handleExport() {
+    setExporting(true)
+    setExportError(null)
+    const result = await exportFeedsOpml()
+    setExporting(false)
+    if (result.error || !result.opml) {
+      setExportError(result.error ?? 'Export failed.')
+      return
+    }
+    const date = new Date().toISOString().slice(0, 10)
+    downloadBlob(new Blob([result.opml], { type: 'text/x-opml' }), `parable-feeds-${date}.opml`)
+  }
+
   return (
-    <div>
+    <div className="space-y-2">
       <input
         ref={inputRef}
         type="file"
@@ -98,22 +130,40 @@ export default function OpmlImport() {
         onChange={handleFile}
         className="hidden"
       />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={importing}
-        className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
-      >
-        {importing ? 'Importing…' : 'Import OPML'}
-      </button>
-      {result && (
-        <div className="text-base text-muted mt-2">
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={importing}
+          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
+        >
+          {importing ? 'Importing…' : 'Import OPML'}
+        </button>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
+        >
+          {exporting ? 'Exporting…' : 'Export OPML'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setCleanSlateOpen(true)}
+          className="border border-danger text-danger px-4 py-2 text-base hover:bg-danger/10 transition-colors"
+        >
+          Clean slate…
+        </button>
+      </div>
+
+      {importResult && (
+        <div className="text-base text-muted">
           <p>
-            Imported {result.added} feed{result.added === 1 ? '' : 's'}.
+            Imported {importResult.added} feed{importResult.added === 1 ? '' : 's'}.
           </p>
-          {result.failed.length > 0 && (
+          {importResult.failed.length > 0 && (
             <ul className="mt-1 space-y-0.5">
-              {result.failed.map((f) => (
+              {importResult.failed.map((f) => (
                 <li key={f.url} className="text-danger">
                   {f.url}: {f.error}
                 </li>
@@ -122,6 +172,9 @@ export default function OpmlImport() {
           )}
         </div>
       )}
+      {exportError && <p className="text-base text-danger">{exportError}</p>}
+
+      {cleanSlateOpen && <CleanSlateDialog onClose={() => setCleanSlateOpen(false)} />}
     </div>
   )
 }
