@@ -76,15 +76,6 @@ export default function SettingsForm({
         <UsageBox usage={usage} />
       </div>
 
-      <div className="card-elevated p-4 space-y-2">
-        <h2 className="text-lg font-bold font-heading">Rulebook</h2>
-        <ul className="text-base text-muted list-disc pl-5 space-y-1">
-          <li>Unread articles last 12 hours in the inbox.</li>
-          <li>Archived articles last 24 hours after being archived.</li>
-          <li>Saved articles are kept until you delete them.</li>
-        </ul>
-      </div>
-
       <SettingsActions />
 
       <div className="text-lg text-muted" role="status">

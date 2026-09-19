@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { addFeed, exportFeedsOpml } from '@/lib/feeds/actions'
 import { ensureFolderPath, assignFeedToFolders } from '@/lib/folders/actions'
 import CleanSlateDialog from './CleanSlateDialog'
+import RulebookDialog from './RulebookDialog'
 
 interface ParsedFeed {
   url: string
@@ -52,7 +53,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// The three feed-wide actions, on one row. They share this component rather
+// The settings-page actions, on one row. They share this component rather
 // than a card each because their results (an import report, an export
 // error) belong under the row as a whole — inside a flex item they would
 // stretch one button away from its neighbours.
@@ -67,6 +68,7 @@ export default function SettingsActions() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [cleanSlateOpen, setCleanSlateOpen] = useState(false)
+  const [rulebookOpen, setRulebookOpen] = useState(false)
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -133,6 +135,13 @@ export default function SettingsActions() {
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
+          onClick={() => setRulebookOpen(true)}
+          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors"
+        >
+          Help
+        </button>
+        <button
+          type="button"
           onClick={() => inputRef.current?.click()}
           disabled={importing}
           className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
@@ -152,7 +161,7 @@ export default function SettingsActions() {
           onClick={() => setCleanSlateOpen(true)}
           className="border border-danger text-danger px-4 py-2 text-base hover:bg-danger/10 transition-colors"
         >
-          Clean slate…
+          Clean slate
         </button>
       </div>
 
@@ -174,6 +183,7 @@ export default function SettingsActions() {
       )}
       {exportError && <p className="text-base text-danger">{exportError}</p>}
 
+      {rulebookOpen && <RulebookDialog onClose={() => setRulebookOpen(false)} />}
       {cleanSlateOpen && <CleanSlateDialog onClose={() => setCleanSlateOpen(false)} />}
     </div>
   )
