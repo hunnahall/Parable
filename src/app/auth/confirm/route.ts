@@ -3,11 +3,9 @@ import type { EmailOtpType } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// Where Supabase's confirmation emails land. signup() in
-// src/app/login/actions.ts tells the user to check their email whenever
-// signUp returns no session, but until this route existed the link in that
-// email had nowhere in the app to redeem its token — the account stayed
-// unconfirmed and could never sign in.
+// Where Supabase's confirmation emails land. Sign-up was removed from the
+// app on 2026-10-20 (accounts are invite-only), but accounts created
+// earlier, and the future invite flow, still redeem their token here.
 //
 // Set the Supabase project's redirect URL to <site>/auth/confirm for this
 // to be reachable.

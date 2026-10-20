@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { adminClient, type AdminClient } from '@/lib/supabase/admin'
 import { logQueryError } from '@/lib/supabase/logError'
 import { runIngest, type IngestSummary } from './ingest'
 import { generateFeedsOpml } from './opmlExport'
@@ -30,7 +31,11 @@ const FEED_LOOKUP_SELECT = `${FEED_SELECT}, deleted_at`
 // makes re-adding a feed you previously removed actually work, and it's
 // the only place that matters: addFeed, createBuiltFeed and OPML import
 // (which routes through addFeed) are the three ways in.
-async function findOrReviveFeed(supabase: Awaited<ReturnType<typeof createClient>>, url: string) {
+//
+// The catalog is read-only to signed-in users (lock_down_catalog), so this
+// and the inserts below go through the service-role client. Callers check
+// the user is signed in first.
+async function findOrReviveFeed(supabase: AdminClient, url: string) {
   const { data: existing, error } = await supabase
     .from('feeds')
     .select(FEED_LOOKUP_SELECT)
@@ -102,15 +107,16 @@ export async function addFeed(input: {
   }
 
   const supabase = await createClient()
+  const catalog = adminClient()
   // Reuse the catalog row if this URL is already known (another user's
   // subscription, or one you previously removed), rather than creating a
   // duplicate that would be fetched and stored twice.
-  const { feed: existing, error: lookupError } = await findOrReviveFeed(supabase, url)
+  const { feed: existing, error: lookupError } = await findOrReviveFeed(catalog, url)
   if (lookupError) return { feed: null, error: lookupError }
 
   let feed = existing
   if (!feed) {
-    const { data, error } = await supabase
+    const { data, error } = await catalog
       .from('feeds')
       .insert({ url, title })
       .select(FEED_SELECT)
@@ -162,12 +168,13 @@ export async function createBuiltFeed(input: {
   if (!title) return { feed: null, error: 'Title is required' }
 
   const supabase = await createClient()
-  const { feed: existing, error: lookupError } = await findOrReviveFeed(supabase, url)
+  const catalog = adminClient()
+  const { feed: existing, error: lookupError } = await findOrReviveFeed(catalog, url)
   if (lookupError) return { feed: null, error: lookupError }
 
   let feed = existing
   if (!feed) {
-    const { data, error } = await supabase
+    const { data, error } = await catalog
       .from('feeds')
       .insert({ url, title, is_scraped: true })
       .select(FEED_SELECT)
@@ -185,9 +192,9 @@ export async function createBuiltFeed(input: {
   return { feed: { ...feed, title, folderIds: [] }, error: null }
 }
 
-// Manual trigger, unlike the cron-driven /api/ingest-feeds route — same
-// underlying runIngest, including its 24h cutoff, so clicking this on a
-// feed that's never been ingested doesn't backfill its entire history.
+// Manual trigger, unlike the cron-driven /api/ingest-feeds route. Same
+// runIngest and age cutoff, but limited to the caller's own feeds, so one
+// user's Sync doesn't pay to fetch everyone else's.
 export async function runIngestNow(): Promise<
   { summary: IngestSummary; error: null } | { summary: null; error: string }
 > {
@@ -195,7 +202,7 @@ export async function runIngestNow(): Promise<
   if (!user) return { summary: null, error: 'Not signed in' }
 
   try {
-    const summary = await runIngest()
+    const summary = await runIngest({ onlyUserId: user.id })
     revalidatePath('/feeds')
     revalidatePath('/')
     return { summary, error: null }
@@ -263,14 +270,18 @@ export async function removeFeed(id: string): Promise<{ error: string | null }> 
     .eq('feed_id', id)
   logQueryError('feeds/removeFeed (folder cleanup)', folderError)
 
-  const { count, error: countError } = await supabase
+  // Counted with the service role: under the user's own RLS this only
+  // sees their subscriptions, which read 0 right after unsubscribing and
+  // soft-deleted feeds other people still read.
+  const catalog = adminClient()
+  const { count, error: countError } = await catalog
     .from('subscriptions')
     .select('feed_id', { count: 'exact', head: true })
     .eq('feed_id', id)
   if (countError) return { error: countError.message }
 
   if ((count ?? 0) === 0) {
-    const { error } = await supabase
+    const { error } = await catalog
       .from('feeds')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { login, signup } from './actions'
+import { login } from './actions'
 import { getUser } from '@/lib/supabase/server'
 import ParableLogo from '@/components/brand/ParableLogo'
 
@@ -17,6 +17,7 @@ export default async function LoginPage({
     <div className="p-8 max-w-sm mx-auto space-y-6">
       <ParableLogo height={32} />
       <h1>Sign in</h1>
+      <p className="text-muted">Parable is invite-only.</p>
 
       {error && <p className="text-danger text-lg">{error}</p>}
       {message && <p className="text-green-600 text-lg">{message}</p>}
@@ -53,12 +54,6 @@ export default async function LoginPage({
             className="flex-1 border border-brand bg-brand text-brand-foreground py-2 text-lg transition-colors hover:opacity-90"
           >
             Sign in
-          </button>
-          <button
-            formAction={signup}
-            className="flex-1 border border-border py-2 text-lg transition-colors hover:bg-foreground/5"
-          >
-            Sign up
           </button>
         </div>
       </form>

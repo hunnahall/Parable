@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, type AdminClient } from '@/lib/supabase/admin'
 
 // One sweep, three stages, run in order. Splitting them across separate
 // cron jobs the way the old 24h/7d/30d policy did buys nothing at these
@@ -18,16 +18,8 @@ export interface RetentionSummary {
   purgedGuidCount: number
 }
 
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-    { auth: { persistSession: false } }
-  )
-}
-
 async function callRetentionRpc(
-  supabase: ReturnType<typeof adminClient>,
+  supabase: AdminClient,
   fn: string,
   dryRun: boolean,
   field: string

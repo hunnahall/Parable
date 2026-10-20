@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { adminClient, type AdminClient } from '@/lib/supabase/admin'
 import Parser from 'rss-parser'
 import { detectLanguage, needsTranslation, stripHtml, translateTitles } from '@/lib/translate'
 import { summarizeToTarget } from '@/lib/summarize'
@@ -176,15 +176,6 @@ export interface IngestSummary {
   usage: IngestUsage
 }
 
-type AdminClient = SupabaseClient
-
-function adminClient(): AdminClient {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-    { auth: { persistSession: false } }
-  )
-}
 
 // Ingest is one shared background job writing rows every subscriber
 // reads, so it can't be driven by any single user's preferences.
@@ -1156,7 +1147,14 @@ async function recordRun(
   if (error) console.error('ingest: failed to record run', error.message)
 }
 
-export async function runIngest(): Promise<IngestSummary> {
+export interface RunIngestOptions {
+  // Limit the run to feeds this user subscribes to (the manual Sync
+  // button). Every subscriber of those feeds still gets their filters
+  // applied. Omitted by cron, which runs every subscribed feed.
+  onlyUserId?: string
+}
+
+export async function runIngest(options: RunIngestOptions = {}): Promise<IngestSummary> {
   const supabase = adminClient()
   const startedAt = Date.now()
   const cutoffMs = Date.now() - MAX_ITEM_AGE_HOURS * 60 * 60 * 1000
@@ -1190,7 +1188,11 @@ export async function runIngest(): Promise<IngestSummary> {
     list.push({ userId: sub.user_id, keywords: keywordsByUser.get(sub.user_id) ?? [] })
     subscribersByFeed.set(sub.feed_id, list)
   }
-  const subscribedFeedIds = [...subscribersByFeed.keys()]
+  const subscribedFeedIds = options.onlyUserId
+    ? [...subscribersByFeed.entries()]
+        .filter(([, list]) => list.some((sub) => sub.userId === options.onlyUserId))
+        .map(([feedId]) => feedId)
+    : [...subscribersByFeed.keys()]
 
   if (subscribedFeedIds.length === 0) {
     // Recorded like any other run. A run that processed nothing is exactly
