@@ -440,9 +440,11 @@ function feedParagraphs(item: FeedEntryItem, flattened: string): string {
 function textFrom(feedSummary: string, pageText: string): StoredText {
   if (pageText.length >= MIN_BODY_LENGTH) return { text: pageText, kind: 'full' }
   if (feedSummary.length >= MIN_BODY_LENGTH) return { text: feedSummary, kind: 'full' }
-  const longer = pageText.length >= feedSummary.length ? pageText : feedSummary
-  if (longer.length >= MIN_TEASER_LENGTH) return { text: longer, kind: 'teaser' }
-  return { text: longer, kind: 'none' }
+  // A short page fetch is usually a paywall or an anti-bot notice, so the
+  // feed's own teaser wins whenever it has one.
+  const teaser = feedSummary.length >= MIN_TEASER_LENGTH ? feedSummary : pageText
+  if (teaser.length >= MIN_TEASER_LENGTH) return { text: teaser, kind: 'teaser' }
+  return { text: '', kind: 'none' }
 }
 
 // Writes the article, its text, the seen-set entry and any filter
