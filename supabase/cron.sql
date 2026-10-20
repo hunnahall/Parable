@@ -36,9 +36,11 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
 -- Fetches new items for every feed, then for each one translates the
--- title, applies the keyword filters, reads the article, and writes a
--- two-sentence summary — see src/lib/feeds/ingest.ts. Every 4 hours:
--- frequent enough to keep feeds fresh without needing to fire on the hour.
+-- title, applies the keyword filters, groups it with the same story from
+-- other feeds and stores the article text. No summary: those are made on
+-- request. See src/lib/feeds/ingest.ts. Every 2 hours (changed from 4 on
+-- 2026-10-20), so a 12-hour window holds six runs and a 5-hour gap means
+-- two missed runs (the Inbox health banner).
 -- A run that can't finish inside its budget stops starting new items and
 -- lets the next run pick up the rest (RUN_BUDGET_MS in ingest.ts), so a
 -- large backlog drains across several cycles rather than timing out.
@@ -46,7 +48,7 @@ create extension if not exists pg_net;
 -- which still runs on demand regardless of this schedule.
 select cron.schedule(
   'ingest-feeds',
-  '0 */4 * * *',
+  '0 */2 * * *',
   $$
   select net.http_post(
     url := 'https://parable-rss.vercel.app/api/ingest-feeds',

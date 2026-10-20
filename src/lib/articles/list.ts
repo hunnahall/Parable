@@ -21,11 +21,6 @@ export interface ArticleItem {
   // Card view (ArticleCardGrid) falls back to a favicon derived from
   // `link`'s origin when this is null.
   imageUrl: string | null
-  // When this article's summary was copied from another source's copy of
-  // the same story (cross-feed dedupe), the name of the feed it came from.
-  // Null for the overwhelming majority of articles. Without it, two cards
-  // carry identical summary text and nothing says why.
-  duplicateOfFeed: string | null
 }
 
 export interface FeedOption {
@@ -33,9 +28,8 @@ export interface FeedOption {
   title: string | null
 }
 
-// title_en/summary_ai etc. are only populated once translation/summarization
-// succeed for a given item (see src/lib/translate.ts, src/lib/summarize.ts) —
-// callers should always fall back through the raw fields.
+// title_en is only populated once translation succeeds (see
+// src/lib/translate.ts), so callers fall back to the original title.
 function bestTitle(item: { title: string; title_en: string | null }): string {
   return item.title_en ?? item.title
 }
@@ -153,7 +147,7 @@ async function getArticleFoldersMap(
 export const UNFILED_EXCLUDED_STATES = ['saved', 'archived', 'deleted'] as const
 
 const ARTICLE_SELECT =
-  'id, feed_id, title, title_en, link, summary_ai, published_at, image_url, duplicate_of'
+  'id, feed_id, title, title_en, link, summary_ai, published_at, image_url'
 
 // There's no generated Database type in this project (createClient() has
 // no Schema generic), so postgrest-js can infer a `.from('feed_items')
@@ -185,55 +179,13 @@ type ArticleRow = {
   summary_ai: string | null
   published_at: string | null
   image_url: string | null
-  duplicate_of: string | null
-}
-
-// Feed name for each article a summary was copied *from*, keyed by the
-// borrowing article's id. One extra query, and only when the page actually
-// contains a merged article — which is most of the time zero of them.
-//
-// The source row is looked up directly rather than through
-// feed_items_excluding_states: it belongs to a feed the reader may not
-// subscribe to (that is the whole point of cross-feed dedupe), so their own
-// RLS view would hide it and the attribution would silently vanish exactly
-// where it is most worth showing.
-async function getDuplicateSourceFeeds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  rows: ArticleRow[],
-  user: Awaited<ReturnType<typeof getUser>>
-): Promise<Map<string, string>> {
-  const sourceIds = [...new Set(rows.flatMap((row) => (row.duplicate_of ? [row.duplicate_of] : [])))]
-  if (sourceIds.length === 0) return new Map()
-
-  const { data: sources, error } = await supabase
-    .from('feed_items')
-    .select('id, feed_id')
-    .in('id', sourceIds)
-  logQueryError('articles/getDuplicateSourceFeeds', error)
-  if (!sources || sources.length === 0) return new Map()
-
-  const meta = await attachFeedMeta(supabase, sources as { feed_id: string }[], user)
-  const feedBySourceId = new Map(
-    (sources as { id: string; feed_id: string }[]).map((source) => [
-      source.id,
-      meta.get(source.feed_id)?.title ?? null,
-    ])
-  )
-
-  const out = new Map<string, string>()
-  for (const row of rows) {
-    const title = row.duplicate_of ? feedBySourceId.get(row.duplicate_of) : null
-    if (title) out.set(row.id, title)
-  }
-  return out
 }
 
 function toArticleItem(
   item: ArticleRow,
   feedMeta: Map<string, FeedMeta>,
   states: Map<string, ArticleStateInfo>,
-  folders: Map<string, string[]> = new Map(),
-  duplicateSources: Map<string, string> = new Map()
+  folders: Map<string, string[]> = new Map()
 ): ArticleItem {
   const info = states.get(item.id)
   const meta = feedMeta.get(item.feed_id)
@@ -241,10 +193,7 @@ function toArticleItem(
     id: item.id,
     title: bestTitle(item),
     link: item.link,
-    // The two-sentence summary ingest writes for every article. No
-    // fallback to the feed's own description: the body it was generated
-    // from is discarded at ingest, so summary_ai is the only summary that
-    // exists (see src/lib/feeds/ingest.ts).
+    // Written on request (and when an article is saved), never at ingest.
     summary: item.summary_ai,
     published_at: item.published_at,
     feed_title: meta?.title ?? null,
@@ -253,7 +202,6 @@ function toArticleItem(
     archivedAt: info?.archivedAt ?? null,
     folderIds: folders.get(item.id) ?? [],
     imageUrl: item.image_url,
-    duplicateOfFeed: duplicateSources.get(item.id) ?? null,
   }
 }
 
@@ -302,7 +250,7 @@ const ARTICLES_PAGE_LIMIT = 30
 const UUID_RE = /^[0-9a-f-]{36}$/i
 
 // Cursor-based (keyset) pagination, not offset/limit: feed_items is
-// written to continuously by the ingest cron (every 30 min), so an offset
+// written to continuously by the ingest cron (every 2 hours), so an offset
 // page requested after new rows land would skip or duplicate items as the
 // user pages — keyset pagination filters by value instead of position, so
 // it's immune to that. (published_at, id) as the cursor tuple because
@@ -411,13 +359,8 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
   const hasMore = rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows
 
-  const [feedMeta, duplicateSources] = await Promise.all([
-    attachFeedMeta(supabase, pageRows, user),
-    getDuplicateSourceFeeds(supabase, pageRows as ArticleRow[], user),
-  ])
-  const items = pageRows.map((item: ArticleRow) =>
-    toArticleItem(item, feedMeta, states, folders, duplicateSources)
-  )
+  const feedMeta = await attachFeedMeta(supabase, pageRows, user)
+  const items = pageRows.map((item: ArticleRow) => toArticleItem(item, feedMeta, states, folders))
 
   const last = pageRows.at(-1)
   const nextCursor = hasMore && last?.published_at ? { publishedAt: last.published_at, id: last.id } : null

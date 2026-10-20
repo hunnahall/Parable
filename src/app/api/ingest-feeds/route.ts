@@ -37,8 +37,8 @@ async function handle(request: NextRequest) {
       `ingest-feeds: completed in ${Date.now() - startedAt}ms — ` +
         `${summary.feedsProcessed} feeds, ${summary.feedsFailed.length} failed, ` +
         `${summary.itemsInserted} items inserted, ` +
-        `${summary.summariesReused} summaries reused from duplicates, ` +
-        `${summary.summariesRepaired} repaired`
+        `${summary.duplicatesFound} matched an existing story, ` +
+        `${summary.textsStored} full texts stored`
     )
     // Separate line, stable field order: this is the one thing to compare
     // between two runs when judging whether a pipeline change paid off.

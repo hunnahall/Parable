@@ -25,18 +25,9 @@ export async function performFullReset(): Promise<{ error: string | null }> {
     .eq('user_id', user.id)
   if (subscriptionsError) return { error: subscriptionsError.message }
 
-  // Cascades to feed_folders, article_folders and filter_rules via their FKs.
+  // Cascades to feed_folders and article_folders via their FKs.
   const { error: foldersError } = await supabase.from('folders').delete().eq('user_id', user.id)
   if (foldersError) return { error: foldersError.message }
-
-  // Belt and braces: a rule whose folder is already gone would have
-  // cascaded above, but a full reset shouldn't depend on that to be
-  // complete.
-  const { error: rulesError } = await supabase
-    .from('filter_rules')
-    .delete()
-    .eq('user_id', user.id)
-  if (rulesError) return { error: rulesError.message }
 
   const { error: statesError } = await supabase
     .from('article_states')

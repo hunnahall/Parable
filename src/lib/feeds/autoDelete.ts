@@ -1,7 +1,6 @@
 // Shared by every keyword-matching path in the app so they can't drift:
 // ingest-time filtering (runIngest in ./ingest.ts), the retroactive "Run
-// filters now" sweep (runAutoDeleteRulesNow in src/lib/settings/actions.ts),
-// and the Rules block's automatic filing (src/lib/filters/rules.ts).
+// filters now" sweep (runAutoDeleteRulesNow in src/lib/settings/actions.ts).
 
 // Case-insensitive substring match — deliberately simple (no word-boundary
 // handling) so "soccer" also catches "soccer-related", matching how a user

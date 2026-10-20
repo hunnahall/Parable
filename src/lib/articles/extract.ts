@@ -1,13 +1,9 @@
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 
-// This now runs inside the ingest loop, once per new article, against a
-// route with a ~300s budget shared across every feed (Fluid Compute is
-// confirmed on for this Vercel project — see supabase/cron.sql). A slow
-// origin costs the whole run, not one impatient reader, so the timeout is
-// tighter than the 20s the reading view could afford: an article whose
-// page won't answer in 10s falls back to summarizing the feed's own
-// description rather than holding the budget hostage.
+// Runs inside the ingest loop, once per new article, against a route with
+// a ~300s budget shared across every feed. A page that won't answer in 10s
+// falls back to the feed's own description.
 const FETCH_TIMEOUT_MS = 10_000
 
 // The image is carried on the failure arm too. A page that fetched and
@@ -53,13 +49,12 @@ export async function fetchHeaderImage(url: string): Promise<string | null> {
   }
 }
 
-// Fetches the source article's HTML and extracts the readable body via
-// Readability (the same jsdom-backed approach Firefox's own Reader View
-// uses). Returns plain text only: the body exists solely as input to the
-// summarizer and is discarded the moment the summary is written, so
-// there's nothing left to render and no HTML worth sanitizing. Never
-// throws — failures come back as {error} so ingest can fall back to the
-// feed's own description.
+// Fetches the article's HTML and extracts the readable body with
+// Readability (the jsdom-backed approach Firefox's Reader View uses).
+// Returns plain text with paragraphs separated by a blank line, which is
+// what feed_item_texts stores and the reader view renders. Never throws:
+// failures come back as {error} so ingest can fall back to the feed's own
+// description.
 export async function fetchAndExtractContent(url: string): Promise<ExtractResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -79,15 +74,7 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     // mutates/strips the document as it extracts the article body.
     const imageUrl = extractHeaderImage(dom.window.document)
     const article = new Readability(dom.window.document).parse()
-    // Collapsed, not just trimmed. Readability's textContent carries the
-    // source HTML's own indentation and blank lines through verbatim, and
-    // the summarizer slices this to a fixed character budget
-    // (BODY_INPUT_MAX_LENGTH) — so every run of whitespace inside that
-    // window is budget spent on nothing, displacing real sentences. The
-    // feed-description path already normalizes this way in stripHtml; this
-    // one didn't. Newlines collapse to spaces along with everything else:
-    // the input is a flat "Body:" field, not a structured document.
-    const text = (article?.textContent ?? '').replace(/\s+/g, ' ').trim()
+    const text = article?.content ? paragraphsOf(article.content, url) : ''
     if (!text) {
       return { error: 'Could not extract readable content from this page.', imageUrl }
     }
@@ -99,4 +86,24 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
   } finally {
     clearTimeout(timeout)
   }
+}
+
+// Block-level elements that carry the article's own paragraphs. Headings
+// and list items are kept so structure survives as separate paragraphs.
+const BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figcaption'
+
+// Readability's cleaned HTML, as paragraphs of collapsed text. Only leaf
+// blocks are read (a block with a block inside it would repeat its child's
+// text), and loose text Readability left outside any block falls back to
+// the whole body.
+export function paragraphsOf(html: string, url: string): string {
+  const document = new JSDOM(html, { url }).window.document
+  const blocks = Array.from(document.querySelectorAll(BLOCK_SELECTOR)).filter(
+    (el) => !el.querySelector(BLOCK_SELECTOR)
+  )
+  const paragraphs = blocks
+    .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  if (paragraphs.length > 0) return paragraphs.join('\n\n')
+  return (document.body.textContent ?? '').replace(/\s+/g, ' ').trim()
 }

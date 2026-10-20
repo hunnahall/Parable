@@ -1,36 +1,23 @@
 import { adminClient, type AdminClient } from '@/lib/supabase/admin'
 import Parser from 'rss-parser'
 import { detectLanguage, needsTranslation, stripHtml, translateTitles } from '@/lib/translate'
-import { summarizeToTarget } from '@/lib/summarize'
 import { embedTexts } from '@/lib/embeddings'
-import { fetchAndExtractContent, fetchHeaderImage } from '@/lib/articles/extract'
+import { fetchAndExtractContent, paragraphsOf } from '@/lib/articles/extract'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
-import { applyFilings, planFilings, type RuleRow } from '@/lib/filters/filing'
 import { UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { detectArticles } from './buildFeed'
 import { mapWithConcurrency } from '@/lib/concurrency'
-import {
-  addIngestUsage,
-  addUsage,
-  EMPTY_INGEST_USAGE,
-  EMPTY_USAGE,
-  type IngestUsage,
-} from '@/lib/usage/tokens'
+import { addIngestUsage, EMPTY_INGEST_USAGE, EMPTY_USAGE, type IngestUsage } from '@/lib/usage/tokens'
 
 const FEED_FETCH_TIMEOUT_MS = 15_000
-// Below this, an extracted "body" is a cookie banner or a paywall stub
-// rather than an article — summarizing it produces a worse result than
-// summarizing the feed's own description, so that's what we fall back to.
+// Below this, extracted text is a cookie banner, a paywall stub or a
+// teaser rather than the article. The feed's own description is used
+// instead when it is longer, and the stored text is marked as a teaser so
+// the reader view can say so.
 const MIN_BODY_LENGTH = 500
-// And below *this*, there is no article to summarize at all: extraction
-// failed and the feed shipped a bare teaser ("Read more", a single clause,
-// a repeat of the headline). Asking for two neutral sentences from 60
-// characters buys a padded restatement of the title — worse than no
-// summary, and paid for. Skip the call and leave summary_ai null, which
-// the card now renders as an explicit "no summary" state rather than
-// silently dropping to a bare title.
-const MIN_SUMMARIZABLE_LENGTH = 200
+// Below this there is nothing worth showing at all.
+const MIN_TEASER_LENGTH = 80
 // Some feeds (e.g. huggingface.co/blog, openai.com/news) publish their
 // entire history in one unpaginated RSS file — 1000+ items. Checking
 // which of those already exist by passing every guid into one `.in()`
@@ -48,26 +35,13 @@ const EXISTING_GUID_CHECK_BATCH_SIZE = 200
 // to get past naive UA blocklists without pretending to be a browser.
 const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https://github.com/hunnahall/Parable)'
 
-// Cross-feed duplicate detection. With 30+ sources, wire copy is
-// republished across outlets and each copy would otherwise pay its own
-// page fetch and summarization call.
+// Cross-feed duplicate detection: the same story from several feeds is
+// recognized so the Inbox can group it.
 //   'off' — don't embed, don't look up
-//   'log' — embed and look up, record matches, still summarize normally
-//   'on'  — reuse a matched article's summary and skip the fetch+summarize
-//
-// Defaults to 'on'. This shipped as 'log' first, on the reasoning that a
-// mis-set threshold attaches the wrong summary to an article and should be
-// calibrated against real traffic before it's trusted. That was the wrong
-// call: 'log' still pays for every embedding and every lookup while saving
-// nothing, so its failure mode is "nobody gets around to reading the logs
-// and the feature costs money forever." The blast radius on the other side
-// is one wrong two-sentence summary on one article, in an inbox that
-// deletes itself after 12h — recoverable by unsubscribing/re-ingesting,
-// and not what 'log' was protecting against.
-//
-// Every merge is still logged (see processItem), so the audit happens
-// after the fact instead of before, and DEDUPE_MODE=log in the
-// environment pulls back without a deploy.
+//   'log' — embed and look up, log matches, record nothing
+//   'on'  — record the match on the row (duplicate_of)
+// Every match is logged either way, and DEDUPE_MODE=log in the environment
+// pulls back without a deploy.
 const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'on') as 'off' | 'log' | 'on'
 // Cosine distance, measured rather than guessed — see
 // src/scripts/test-dedupe-threshold.ts, which is what produced these
@@ -83,20 +57,19 @@ const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'on') as 'off' | 'log' | 'on'
 // 0.16 sits above every true duplicate and well below that 0.2226 pair,
 // which is the failure mode that matters: two headlines that are nearly
 // identical lexically and opposite in meaning. Kept on the conservative
-// side of the midpoint (0.1863) because a false miss only costs one
-// summarization call.
+// side of the midpoint (0.1863): a false miss shows one story twice, a
+// false match hides a different story inside another.
 //
 // Six hand-written pairs is a small sample. Re-run the script with pairs
 // pulled from your own feeds before moving this, and read the
 // near-duplicate lines in the ingest logs — those are real matches on real
 // headlines, which is better evidence than anything invented here.
 const DEDUPE_MAX_DISTANCE = Number(process.env.DEDUPE_MAX_DISTANCE ?? '0.16')
-// Retention keeps nothing past 24h, so a match older than this points at a
-// row about to be reclaimed — its summary would be copied onto an article
-// that outlives it.
+// Articles leave the Inbox 12h after ingest; a story picked up by a new
+// feed within a day still belongs with the earlier coverage.
 const DEDUPE_WINDOW_HOURS = 24
 
-// Fetching a feed and translating/summarizing an item are both pure I/O
+// Fetching a feed and reading an article are both mostly I/O
 // wait (network round trips, OpenAI calls) — running several at once cuts
 // wall-clock ingest time roughly in proportion to the concurrency instead
 // of paying for every feed and every item strictly back-to-back, which is
@@ -104,10 +77,7 @@ const DEDUPE_WINDOW_HOURS = 24
 // Kept modest to stay well clear of OpenAI's and any single feed host's
 // per-connection rate limits.
 const FEED_CONCURRENCY = 6
-// Every new item now costs a page fetch plus a summarization call, where
-// it used to cost at most two short OpenAI calls — raised to keep
-// wall-clock per feed roughly where it was despite the heavier per-item
-// work. Still well clear of OpenAI's and any single host's rate limits.
+// Every new item costs a page fetch and a Readability parse (no AI call).
 const ITEM_CONCURRENCY = 8
 
 // The route this runs under has a 300s ceiling (maxDuration in
@@ -160,27 +130,19 @@ export interface IngestSummary {
   feedsFailed: FeedFailure[]
   itemsInserted: number
   itemsAutoDeleted: number
-  // Items that took another source's summary instead of paying for their
-  // own fetch + summarization — the direct measure of what dedupe saved
-  // this run. Always 0 when DEDUPE_MODE is 'log' or 'off'; the matches are
-  // still logged in 'log' mode.
-  summariesReused: number
-  // Articles whose summarization had failed at ingest and whose page was
-  // successfully re-read and summarized on this run — see
-  // repairMissingSummaries.
-  summariesRepaired: number
-  // What this run actually spent at OpenAI, split by path. Reported rather
-  // than estimated so a change to the pipeline can be measured against a
-  // previous run instead of argued from token arithmetic — see
-  // src/lib/usage.ts.
+  // New articles recognized as a story another feed already carried.
+  duplicatesFound: number
+  // Articles whose full text (not a teaser) was stored.
+  textsStored: number
+  // What this run spent at OpenAI: title translation and embeddings. See
+  // src/lib/usage/tokens.ts.
   usage: IngestUsage
 }
 
-
 // Ingest is one shared background job writing rows every subscriber
 // reads, so it can't be driven by any single user's preferences.
-// feed_items stores exactly one translation per item (title_en /
-// summary_en), so the language it translates into is a project-level
+// feed_items stores exactly one translation per item (title_en), so the
+// language it translates into is a project-level
 // setting rather than a per-account one; per-account target languages
 // would need a feed_item_translations table keyed by language.
 //
@@ -188,13 +150,11 @@ export interface IngestSummary {
 // fetch instead — see applyAutoDeleteRules below.
 const INGEST_TARGET_LANGUAGE = process.env.INGEST_TARGET_LANGUAGE || DEFAULT_LANGUAGE
 
-// Auto-delete keywords are per-user but feed_items rows are shared, so a
-// feed carries every subscriber's list. An item whose title matches
-// *every* subscriber's list is dropped before it costs a fetch or a
-// summarization call — that is what "delete immediately without
-// summarizing" means once more than one account can subscribe. An item
-// matching only some subscribers' lists is still ingested and summarized
-// for the others, then tombstoned for the ones who filtered it.
+// Filter keywords are per-user but feed_items rows are shared, so a feed
+// carries every subscriber's list. An item whose title matches *every*
+// subscriber's list is dropped before it costs a fetch. An item matching
+// only some subscribers' lists is ingested for the others and tombstoned
+// for the ones who filtered it.
 type FeedSubscriber = { userId: string; keywords: string[] }
 
 type FeedRow = {
@@ -209,7 +169,7 @@ type FeedRow = {
 // type: real feed items satisfy this shape as-is, and the entries
 // synthesized from detectArticles() (see the is_scraped branch in
 // processFeed below) only need to fill in exactly these fields to flow
-// through the same translate/auto-delete/summarize/insert pipeline.
+// through the same translate/filter/insert pipeline.
 interface FeedEntryItem {
   title?: string
   link?: string
@@ -243,13 +203,12 @@ interface PreparedItem {
   guid: string
   title: string
   // The feed's own description, HTML-stripped. Used for language
-  // detection, and as the summarizer's input when it is already long
-  // enough to be the article (full-text feeds) or when extraction fails.
+  // detection, and as the stored text when it is already the whole
+  // article (full-text feeds) or when extraction fails.
   feedSummary: string
   originalLanguage: string
   titleEn: string | null
-  // titleEn ?? title — what filters match against, what gets summarized,
-  // and what gets embedded.
+  // titleEn ?? title — what filters match against and what gets embedded.
   matchTitle: string
   // Subscribers whose keyword list rejected this title. Empty for most
   // items; when it covers every subscriber the item is dropped before it
@@ -257,25 +216,23 @@ interface PreparedItem {
   filteredOutFor: string[]
   embedding: number[] | null
   // Set when the free exact-match check (identical link, or identical
-  // title) already found this story under another feed. processItem then
-  // skips the vector lookup, the page fetch and the summarization call
-  // outright. Null means "no free answer, do it the normal way".
-  exactMatch: { id: string; summary_ai: string } | null
+  // title) already found this story under another feed; processItem then
+  // skips the vector lookup.
+  exactMatchId: string | null
 }
 
 type DuplicateMatch = {
   id: string
   title: string
   title_en: string | null
-  summary_ai: string
   distance: number
 }
 
 // What one item is assumed to cost in wall time before this run has
-// measured any — a page fetch plus a summarization call. Only used to size
+// measured any — a page fetch and a parse. Only used to size
 // the first feed's preparation batch; every feed after that uses the real
 // observed average.
-const INITIAL_ITEM_MS = 6_000
+const INITIAL_ITEM_MS = 3_000
 
 // How fast this run is actually going, so a feed only pays to translate
 // and embed the items the run can still write.
@@ -325,52 +282,36 @@ function cosineDistance(a: number[], b: number[]): number {
   return 1 - dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
-// What this run has already summarized, before any of it is visible to the
-// database checks.
-//
-// Feeds run FEED_CONCURRENCY at a time with ITEM_CONCURRENCY items inside
-// each, so two feeds carrying the same wire story can both clear
-// findExactMatches and findDuplicate before either has written a row the
-// other could have found. This was a documented known gap, costing "one
-// extra summarization call, occasionally" — but at 30 sources, where the
-// same agency copy lands on many of them within the same cycle,
-// occasionally is a large share of a run's duplicates.
-//
-// It narrows the window rather than closing it: two items genuinely in
-// flight at the same instant still both miss, because nothing is recorded
-// until a summary actually exists. Closing that completely would mean
-// parking each item on an in-flight promise keyed by near-match, which is
-// more machinery than one avoided gpt-5-nano call per collision is worth.
-class RunSummaryCache {
-  // Exact keys (link and title) for the cheap check, mirroring what
-  // find_exact_recent_feed_items does against the database.
-  private byKey = new Map<string, { id: string; summary_ai: string }>()
-  private embedded: { embedding: number[]; id: string; summary_ai: string }[] = []
+// What this run has already written, before any of it is visible to the
+// database checks. Feeds run FEED_CONCURRENCY at a time, so the same wire
+// story lands on several of them before any copy is in the database. Two
+// items in flight at the same instant can still both miss.
+class RunCache {
+  private byKey = new Map<string, string>()
+  private embedded: { embedding: number[]; id: string }[] = []
 
-  find(prepared: PreparedItem): { id: string; summary_ai: string; distance: number } | null {
-    if (DEDUPE_MODE !== 'on') return null
+  find(prepared: PreparedItem): { id: string; distance: number } | null {
+    if (DEDUPE_MODE === 'off') return null
 
     for (const key of this.keysOf(prepared)) {
-      const hit = this.byKey.get(key)
-      if (hit) return { ...hit, distance: 0 }
+      const id = this.byKey.get(key)
+      if (id) return { id, distance: 0 }
     }
 
     if (!prepared.embedding) return null
-    let best: { id: string; summary_ai: string; distance: number } | null = null
+    let best: { id: string; distance: number } | null = null
     for (const entry of this.embedded) {
       const distance = cosineDistance(prepared.embedding, entry.embedding)
       if (distance <= DEDUPE_MAX_DISTANCE && (!best || distance < best.distance)) {
-        best = { id: entry.id, summary_ai: entry.summary_ai, distance }
+        best = { id: entry.id, distance }
       }
     }
     return best
   }
 
-  add(prepared: PreparedItem, id: string, summary_ai: string): void {
-    for (const key of this.keysOf(prepared)) this.byKey.set(key, { id, summary_ai })
-    if (prepared.embedding) {
-      this.embedded.push({ embedding: prepared.embedding, id, summary_ai })
-    }
+  add(prepared: PreparedItem, id: string): void {
+    for (const key of this.keysOf(prepared)) this.byKey.set(key, id)
+    if (prepared.embedding) this.embedded.push({ embedding: prepared.embedding, id })
   }
 
   private keysOf(prepared: PreparedItem): string[] {
@@ -385,21 +326,18 @@ class RunSummaryCache {
 // is embedded: an identical link, or an identical title, against the same
 // 24h window findDuplicate uses.
 //
-// A large share of real syndication isn't reworded — outlets republish
-// wire copy under the agency's own headline, often behind the same
-// canonical URL. Recognizing those needs no embedding and no vector scan,
-// and a hit skips the page fetch and the summarization call as well.
-// Strictly stricter than the 0.16 cosine threshold, so this changes what a
-// merge costs, never which merges happen.
+// A large share of real syndication isn't reworded: outlets republish wire
+// copy under the agency's own headline, often behind the same canonical
+// URL. Recognizing those needs no vector scan. Strictly stricter than the
+// cosine threshold, so it never changes which matches happen.
 //
-// Returns a map keyed by the caller's index. Failures return an empty map:
-// every miss just means "summarize it normally".
+// Returns a map keyed by the caller's index. Failures return an empty map.
 async function findExactMatches(
   supabase: AdminClient,
   entries: PreparedItem[]
-): Promise<Map<number, { id: string; summary_ai: string }>> {
-  const out = new Map<number, { id: string; summary_ai: string }>()
-  if (DEDUPE_MODE !== 'on' || entries.length === 0) return out
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  if (DEDUPE_MODE === 'off' || entries.length === 0) return out
 
   const links = [...new Set(entries.map((e) => e.item.link).filter((l): l is string => !!l))]
   const titles = [...new Set(entries.map((e) => e.matchTitle).filter((t) => t.length > 0))]
@@ -421,7 +359,6 @@ async function findExactMatches(
     link: string | null
     title: string
     title_en: string | null
-    summary_ai: string
   }[]
   if (rows.length === 0) return out
 
@@ -435,14 +372,13 @@ async function findExactMatches(
 
   entries.forEach((entry, index) => {
     const row = (entry.item.link ? byLink.get(entry.item.link) : undefined) ?? byTitle.get(entry.matchTitle)
-    if (row) out.set(index, { id: row.id, summary_ai: row.summary_ai })
+    if (row) out.set(index, row.id)
   })
   return out
 }
 
-// Nearest recent article whose summary could stand in for this one's. Null
-// whenever dedupe is disabled, the embedding is missing, or nothing is
-// close enough — every one of which just means "summarize it normally".
+// Nearest recent article carrying the same story. Null when dedupe is off,
+// the embedding is missing, or nothing is close enough.
 async function findDuplicate(
   supabase: AdminClient,
   prepared: PreparedItem
@@ -469,39 +405,61 @@ async function findDuplicate(
 type ItemResult = {
   inserted: boolean
   feedItemId: string | null
-  title: string
-  titleEn: string | null
-  reusedSummary: boolean
-  summarizeUsage: typeof EMPTY_USAGE
+  duplicate: boolean
+  fullText: boolean
 }
 
-// The write half of processItem, shared by both paths into it: the normal
-// fetch-and-summarize one, and the exact-match short-circuit that skips
-// straight here with another article's summary in hand.
+const SKIPPED: ItemResult = { inserted: false, feedItemId: null, duplicate: false, fullText: false }
+
+type StoredText = { text: string; kind: 'full' | 'teaser' | 'none' }
+
+// The article's text, read once at ingest so the reader view and summary
+// can start without waiting on the publisher's site. No AI call. A
+// full-text feed (content:encoded carrying the whole article) already
+// holds it, so the page fetch is skipped there.
+async function readArticle(
+  prepared: PreparedItem
+): Promise<{ stored: StoredText; imageUrl: string | null }> {
+  const { item, feedSummary } = prepared
+  if (feedSummary.length >= MIN_BODY_LENGTH || !item.link) {
+    return { stored: textFrom(feedParagraphs(item, feedSummary), ''), imageUrl: null }
+  }
+  const extracted = await fetchAndExtractContent(item.link)
+  const pageText = 'text' in extracted ? extracted.text : ''
+  return { stored: textFrom(feedParagraphs(item, feedSummary), pageText), imageUrl: extracted.imageUrl }
+}
+
+// The feed's own description with its paragraphs kept (stripHtml flattens
+// them, which is fine for detection but not for the reader view).
+function feedParagraphs(item: FeedEntryItem, flattened: string): string {
+  const html = item.content ?? item.summary
+  if (!html || !html.includes('<')) return flattened
+  return paragraphsOf(html, item.link ?? 'https://example.invalid/') || flattened
+}
+
+function textFrom(feedSummary: string, pageText: string): StoredText {
+  if (pageText.length >= MIN_BODY_LENGTH) return { text: pageText, kind: 'full' }
+  if (feedSummary.length >= MIN_BODY_LENGTH) return { text: feedSummary, kind: 'full' }
+  const longer = pageText.length >= feedSummary.length ? pageText : feedSummary
+  if (longer.length >= MIN_TEASER_LENGTH) return { text: longer, kind: 'teaser' }
+  return { text: longer, kind: 'none' }
+}
+
+// Writes the article, its text, the seen-set entry and any filter
+// tombstones.
 async function writeItem(
   supabase: AdminClient,
   feed: FeedRow,
   prepared: PreparedItem,
-  summary_ai: string | null,
-  scrapedImage: string | null,
-  outcome: {
-    reusedSummary: boolean
-    summarizeUsage: typeof EMPTY_USAGE
-    // The article this summary was copied from, when it was copied. Stored
-    // so the merge is visible in the product and auditable in SQL, rather
-    // than only in a log line nobody reads — see the duplicate_of
-    // migration.
-    duplicateOf?: string | null
-  }
+  stored: StoredText,
+  imageUrl: string | null,
+  duplicateOf: string | null
 ): Promise<ItemResult> {
   const { item, guid, title, titleEn, filteredOutFor, originalLanguage } = prepared
 
-  // upsert + ignoreDuplicates rather than a plain insert: if this run
-  // overlaps another (cron firing while "Run ingest now" is also
-  // mid-flight for the same feed), both can pass the existingGuids check
-  // for the same new item before either has inserted. A plain insert
-  // would then fail on the (feed_id, guid) unique constraint; ignoring
-  // the duplicate instead just no-ops that one row.
+  // upsert + ignoreDuplicates rather than a plain insert: a cron run and a
+  // manual Sync can overlap and both pass the seen-set check for the same
+  // new item. Ignoring the duplicate no-ops that one row.
   const { data: upserted, error: insertError } = await supabase
     .from('feed_items')
     .upsert(
@@ -513,12 +471,10 @@ async function writeItem(
         published_at: item.isoDate ?? null,
         original_language: originalLanguage,
         title_en: titleEn,
-        summary_ai,
-        duplicate_of: outcome.duplicateOf ?? null,
-        image_url: item.imageUrl ?? scrapedImage ?? null,
-        // Stored even in 'log' mode: the column has to be populated
-        // before any later item can match against it, and populating it
-        // is what makes the log evidence meaningful.
+        duplicate_of: duplicateOf,
+        image_url: item.imageUrl ?? imageUrl ?? null,
+        // Stored even in 'log' mode: a later item can only match a row
+        // whose embedding is populated.
         title_embedding: prepared.embedding ? JSON.stringify(prepared.embedding) : null,
       },
       { onConflict: 'feed_id,guid', ignoreDuplicates: true }
@@ -529,30 +485,30 @@ async function writeItem(
     throw new Error(`Failed to insert item: ${insertError.message}`)
   }
 
-  // Record the guid only once the row is safely written, and once per
-  // item rather than once per feed at the end — for the same reason the
-  // insert above isn't buffered. A run killed mid-feed would otherwise
-  // forget every item it had already paid to summarize, which is exactly
-  // the re-summarization this table exists to prevent. Written even when
-  // the upsert no-opped on a same-run race: the article is in the
-  // catalog either way, and that is what this is a memory of.
-  //
-  // Best-effort: failing here costs one repeated summary later, which is
-  // not worth discarding a successfully ingested article over.
+  // Recorded per item, once the row is written, so a run killed mid-feed
+  // doesn't forget what it already processed. Best-effort.
+  const now = new Date().toISOString()
   const { error: guidError } = await supabase
     .from('ingested_guids')
-    .upsert({ feed_id: feed.id, guid }, { onConflict: 'feed_id,guid', ignoreDuplicates: true })
+    .upsert({ feed_id: feed.id, guid, last_seen_at: now }, { onConflict: 'feed_id,guid' })
   if (guidError) {
     console.error(`ingest: failed to record guid=${guid} for feed ${feed.id}`, guidError.message)
   }
 
   // Empty when ignoreDuplicates skipped a same-run race (see above).
   const insertedId = (upserted?.[0]?.id as string | undefined) ?? null
+  if (!insertedId) return SKIPPED
+
+  const { error: textError } = await supabase
+    .from('feed_item_texts')
+    .upsert({ feed_item_id: insertedId, text: stored.text, kind: stored.kind })
+  if (textError) {
+    console.error(`ingest: failed to store text for ${insertedId}`, textError.message)
+  }
 
   // Subscribers who filtered this title get a tombstone rather than the
-  // article — it exists for the others, but never reaches their inbox.
-  if (insertedId && filteredOutFor.length > 0) {
-    const now = new Date().toISOString()
+  // article: it exists for the others, but never reaches their Inbox.
+  if (filteredOutFor.length > 0) {
     const { error: tombstoneError } = await supabase.from('article_states').upsert(
       filteredOutFor.map((userId) => ({
         user_id: userId,
@@ -570,180 +526,77 @@ async function writeItem(
   return {
     inserted: true,
     feedItemId: insertedId,
-    title,
-    titleEn,
-    reusedSummary: outcome.reusedSummary,
-    summarizeUsage: outcome.summarizeUsage,
+    duplicate: duplicateOf !== null,
+    fullText: !textError && stored.kind === 'full',
   }
 }
 
-// Everything Parable keeps about an article, in the order it becomes
-// available. The body is fetched, read once, and never stored.
-//
-// Title translation and embedding already happened, batched across the
-// whole feed — see prepareItems. What is left is the genuinely per-item
-// work: the duplicate check, the page fetch, the summarization call, and
-// the write.
+// The per-item half of ingest: which story this is, the article text, the
+// write. Title translation and embedding already happened, batched across
+// the feed (prepareItems).
 async function processItem(
   supabase: AdminClient,
   feed: FeedRow,
   prepared: PreparedItem,
-  targetLanguage: string,
-  runCache: RunSummaryCache
+  runCache: RunCache
 ): Promise<ItemResult> {
-  const skipped = {
-    inserted: false,
-    feedItemId: null,
-    title: '',
-    titleEn: null,
-    reusedSummary: false,
-    summarizeUsage: EMPTY_USAGE,
-  }
   try {
-    // Only what this half needs; everything the row is built from is read
-    // inside writeItem.
-    const { item, matchTitle } = prepared
+    const { matchTitle } = prepared
 
-    // Step 1: has another feed already carried this story? Checked before
-    // any fetch or summarization, since reusing an existing summary is the
-    // whole point — it skips both.
-    //
-    // An exact match (same link, or same title) was already found for free
-    // during prepareItems, so the vector lookup is skipped entirely when
-    // one exists — it could only agree.
-    if (prepared.exactMatch) {
-      console.log(
-        `ingest: REUSED summary (exact) from=${prepared.exactMatch.id}\n  this:  "${matchTitle}"`
-      )
-      // Still worth a cover image, and this is the cheap meta-tags-only
-      // fetch rather than the Readability parse we just skipped.
-      const image = item.link && !item.imageUrl ? await fetchHeaderImage(item.link) : null
-      return await writeItem(supabase, feed, prepared, prepared.exactMatch.summary_ai, image, {
-        reusedSummary: true,
-        summarizeUsage: EMPTY_USAGE,
-        duplicateOf: prepared.exactMatch.id,
-      })
-    }
-
-    // Then this run's own output, which the database checks above cannot
-    // see yet — six feeds run at once and the same wire story lands on
-    // several of them in the same cycle.
-    const inFlight = runCache.find(prepared)
-    if (inFlight) {
-      console.log(
-        `ingest: REUSED summary (same run) d=${inFlight.distance.toFixed(4)} ` +
-          `from=${inFlight.id}\n  this:  "${matchTitle}"`
-      )
-      const image = item.link && !item.imageUrl ? await fetchHeaderImage(item.link) : null
-      return await writeItem(supabase, feed, prepared, inFlight.summary_ai, image, {
-        reusedSummary: true,
-        summarizeUsage: EMPTY_USAGE,
-        duplicateOf: inFlight.id,
-      })
-    }
-
-    const duplicate = await findDuplicate(supabase, prepared)
-    const reused = DEDUPE_MODE === 'on' ? duplicate : null
-    if (duplicate) {
-      // The audit trail for every merge, since 'on' is the default and the
-      // decision is otherwise invisible. Both titles are logged so a wrong
-      // merge is recognizable at a glance rather than only as a distance.
-      console.log(
-        `ingest: ${reused ? 'REUSED summary' : 'near-duplicate (not reused)'} ` +
-          `d=${duplicate.distance.toFixed(4)} from=${duplicate.id}\n` +
-          `  this:  "${matchTitle}"\n` +
-          `  match: "${duplicate.title_en ?? duplicate.title}"`
-      )
-    }
-
-    let summary_ai: string | null = reused?.summary_ai ?? null
-    let scrapedImage: string | null = null
-    // Stays empty on the dedupe path — a reused summary costs nothing
-    // here, which is the number the run summary is reporting.
-    let summarizeUsage = EMPTY_USAGE
-
-    if (!summary_ai) {
-      // Step 2: read the article. The body only exists to be summarized —
-      // it is never persisted, so a failure here is a quality regression
-      // (summarize the feed's blurb instead), not an error.
-      //
-      // A full-text feed (content:encoded carrying the whole article —
-      // lemonde.fr's rss_full.xml, for one) already gives us everything the
-      // summarizer needs, so the fetch and the Readability parse are pure
-      // waste there. Check what we were handed before going to the network.
-      let bodyForSummary = prepared.feedSummary
-      if (bodyForSummary.length < MIN_BODY_LENGTH && item.link) {
-        const extracted = await fetchAndExtractContent(item.link)
-        // Carried on both arms: a page that parsed but yielded no usable
-        // body still has its og:image, so there's no second fetch to make.
-        scrapedImage = extracted.imageUrl
-        if ('text' in extracted && extracted.text.length >= MIN_BODY_LENGTH) {
-          bodyForSummary = extracted.text
-        }
-      } else if (item.link && !item.imageUrl) {
-        // Body came from the feed, so nothing above went to the network —
-        // but there's still no cover image. Meta-tags-only fetch: same
-        // request, without the Readability parse that is the expensive half.
-        scrapedImage = await fetchHeaderImage(item.link)
+    // Has another feed already carried this story? Cheapest check first:
+    // the free exact match from prepareItems, then this run's own writes
+    // (invisible to the database checks until committed), then the vector
+    // lookup.
+    let match: { id: string; distance: number; via: string; title?: string } | null = null
+    if (prepared.exactMatchId) {
+      match = { id: prepared.exactMatchId, distance: 0, via: 'exact' }
+    } else {
+      const inRun = runCache.find(prepared)
+      if (inRun) {
+        match = { ...inRun, via: 'same run' }
+      } else {
+        const found = await findDuplicate(supabase, prepared)
+        if (found) match = { id: found.id, distance: found.distance, via: 'vector', title: found.title_en ?? found.title }
       }
-
-      // Step 3: two sentences, in the target language, in one call — see
-      // summarizeToTarget for why translation isn't a second pass. Skipped
-      // when there is nothing here worth summarizing: extraction failed
-      // and the feed's blurb is a teaser, so the call would return a
-      // padded paraphrase of the headline at full price.
-      if (bodyForSummary.length >= MIN_SUMMARIZABLE_LENGTH) {
-        const summarized = await summarizeToTarget(matchTitle, bodyForSummary, targetLanguage)
-        summary_ai = summarized.summary
-        summarizeUsage = summarized.usage
-      }
-    } else if (item.link && !item.imageUrl) {
-      scrapedImage = await fetchHeaderImage(item.link)
     }
-
-    const result = await writeItem(supabase, feed, prepared, summary_ai, scrapedImage, {
-      reusedSummary: reused !== null,
-      summarizeUsage,
-      duplicateOf: reused?.id ?? null,
-    })
-
-    // Only a summary this run actually paid for is worth offering to the
-    // rest of the run. A reused one is already in the database, so the
-    // normal checks will find it without this.
-    if (summary_ai && !reused && result.feedItemId) {
-      runCache.add(prepared, result.feedItemId, summary_ai)
+    if (match) {
+      // The audit trail for every match: both titles, so a wrong one is
+      // recognizable at a glance.
+      console.log(
+        `ingest: same story (${match.via}) d=${match.distance.toFixed(4)} ` +
+          `from=${match.id}${DEDUPE_MODE === 'on' ? '' : ' (not recorded)'}\n` +
+          `  this:  "${matchTitle}"` +
+          (match.title ? `\n  match: "${match.title}"` : '')
+      )
     }
+    const duplicateOf = DEDUPE_MODE === 'on' && match ? match.id : null
+
+    const { stored, imageUrl } = await readArticle(prepared)
+    const result = await writeItem(supabase, feed, prepared, stored, imageUrl, duplicateOf)
+    if (result.feedItemId) runCache.add(prepared, result.feedItemId)
     return result
   } catch (itemErr) {
-    // A single malformed item (missing/garbage fields) or a one-off insert
-    // failure shouldn't sink the rest of an otherwise-healthy feed.
+    // A single malformed item or a one-off insert failure shouldn't sink
+    // the rest of an otherwise healthy feed.
     console.error(
       `ingest-feeds: skipping item guid=${prepared.guid} in feed ${feed.id} (${feed.url})`,
       itemErr
     )
-    return skipped
+    return SKIPPED
   }
-}
-
-// New rows this feed contributed, carried up so runIngest can apply each
-// user's filing rules to them in one pass at the end.
-export interface IngestedItem {
-  id: string
-  title: string
-  title_en: string | null
 }
 
 type FeedResult =
   | {
       ok: true
       itemsInserted: number
-      summariesReused: number
-      newItems: IngestedItem[]
+      duplicatesFound: number
+      textsStored: number
       usage: IngestUsage
     }
-  // A failed feed can still have spent tokens before it threw — a
-  // successful batch translation followed by a failing insert, say — so
-  // usage is carried on this arm too rather than silently dropped.
+  // A failed feed can still have spent tokens before it threw (a batch
+  // translation followed by a failing insert), so usage is carried on
+  // this arm too.
   | { ok: false; failure: FeedFailure; usage: IngestUsage }
 
 // The free half of per-item work — HTML stripping and franc detection —
@@ -795,9 +648,9 @@ async function prepareItems(
     const titleEn = titleEnByIndex.get(index) ?? null
     const matchTitle = titleEn ?? entry.title
 
-    // The filter gate, on the translated title and before anything
-    // expensive. A title every subscriber has filtered never becomes a row
-    // at all — no embedding, no fetch, no summarization call.
+    // The filter gate, on the translated title and before anything else
+    // is paid for. A title every subscriber has filtered never becomes a
+    // row at all: no embedding, no fetch.
     const filteredOutFor = feed.subscribers
       .filter((sub) => matchedAutoDeleteKeyword(matchTitle, sub.keywords) !== null)
       .map((sub) => sub.userId)
@@ -810,26 +663,23 @@ async function prepareItems(
         matchTitle,
         filteredOutFor,
         embedding: null as number[] | null,
-        exactMatch: null as PreparedItem['exactMatch'],
+        exactMatchId: null as string | null,
       },
     ]
   })
 
-  // Free before paid. An identical link or an identical title answers the
-  // duplicate question without an embedding, and a hit here skips the
-  // vector lookup, the fetch and the summarization call in processItem.
+  // Free before paid: an identical link or title answers the duplicate
+  // question without the vector lookup in processItem.
   const exact = await findExactMatches(supabase, gated)
   gated.forEach((entry, index) => {
-    entry.exactMatch = exact.get(index) ?? null
+    entry.exactMatchId = exact.get(index) ?? null
   })
 
   let embedUsage = EMPTY_USAGE
   if (DEDUPE_MODE !== 'off' && gated.length > 0) {
-    // Everything is embedded, exact matches included. The embedding is
-    // what lets a *later* item recognize this row, so skipping it for the
-    // items we just short-circuited would quietly shrink the corpus the
-    // vector check searches — and at $0.02/1M over a ~15-token headline it
-    // costs approximately nothing to keep complete.
+    // Everything is embedded, exact matches included: the embedding is
+    // what lets a later item recognize this row, and at $0.02/1M over a
+    // ~15-token headline it costs next to nothing.
     const embedded = await embedTexts(gated.map((entry) => entry.matchTitle))
     embedUsage = embedded.usage
     gated.forEach((entry, index) => {
@@ -886,7 +736,7 @@ async function processFeed(
   cutoffMs: number,
   targetLanguage: string,
   deadline: number,
-  runCache: RunSummaryCache,
+  runCache: RunCache,
   runPace: RunPace
 ): Promise<FeedResult> {
   // Accumulated outside the try so the catch below can report what a
@@ -904,16 +754,11 @@ async function processFeed(
     const items = rawItems
       .map((item) => ({ item, guid: item.guid ?? item.link ?? null }))
       .filter((entry): entry is { item: FeedEntryItem; guid: string } => entry.guid !== null)
-      // An item with no parseable publish date can't be confirmed to fall
-      // inside or outside the cutoff — INCLUDE rather than exclude, so a
-      // feed using a non-standard/relative date format rss-parser can't
-      // normalize doesn't have its items silently disappear from every
-      // ingest run. (Previously excluded undated items here, which meant a
-      // feed whose dates never parse would look "empty" forever —
-      // dedup-by-guid above already prevents an included-but-actually-old
-      // item from being a repeat problem.) Skipped entirely for scraped
-      // feeds: detectArticles rarely finds a reliable date, so age-filtering
-      // them would just drop everything on every run either way.
+      // Only articles published in the last 12 hours. An item with no
+      // parseable date (and every Build a Feed item, which rarely carries
+      // one) is judged by arrival instead: it's accepted the first time
+      // it's seen, and the seen-set below keeps it from coming back while
+      // it stays on the page.
       .filter((entry) => {
         if (feed.is_scraped) return true
         const publishedMs = entry.item.isoDate ? new Date(entry.item.isoDate).getTime() : NaN
@@ -921,15 +766,9 @@ async function processFeed(
       })
 
     // Checked against ingested_guids, not feed_items. feed_items is
-    // deliberately short-lived — reclaim_orphaned_feed_items hard-deletes a
-    // row 12h after ingest — so using it as the "have I seen this?" memory
-    // meant an article still listed in its feed's XML, and still inside the
-    // 24h MAX_ITEM_AGE_HOURS cutoff, read as brand new again as soon as its
-    // row was reclaimed: re-translated, re-embedded, re-fetched,
-    // re-summarized, and back in an Inbox the reader had already let
-    // expire. Scraped feeds skip the date filter below entirely, so for
-    // them that loop had no upper bound at all. See the ingested_guids
-    // migration.
+    // short-lived (reclaimed 12h after ingest), so an article still listed
+    // in its feed would read as new once its row was gone. See the
+    // ingested_guids migration.
     const existingGuids = new Set<string>()
     const guids = items.map((entry) => entry.guid)
     for (let i = 0; i < guids.length; i += EXISTING_GUID_CHECK_BATCH_SIZE) {
@@ -949,10 +788,22 @@ async function processFeed(
 
     const newItems = items.filter((entry) => !existingGuids.has(entry.guid))
 
+    // Guids still listed in the feed stay remembered: the seen-set forgets
+    // a guid 72h after it was last seen, so an undated story that sits on
+    // a page for days never comes back as new. Best-effort.
+    if (existingGuids.size > 0) {
+      const now = new Date().toISOString()
+      const { error: seenError } = await supabase.from('ingested_guids').upsert(
+        [...existingGuids].map((guid) => ({ feed_id: feed.id, guid, last_seen_at: now })),
+        { onConflict: 'feed_id,guid' }
+      )
+      if (seenError) console.error(`ingest: failed to refresh seen guids for ${feed.id}`, seenError.message)
+    }
+
     // Checked before the batched translate/embed calls rather than only
     // inside the item loop: those are paid for the whole feed up front, so
-    // starting them with no budget left to summarize anything would buy
-    // translations for items this run won't write. Nothing has been
+    // starting them with no budget left would buy translations for items
+    // this run won't write. Nothing has been
     // written for these guids, so the next run finds them again.
     let prepared: PreparedItem[] = []
     if (newItems.length > 0 && Date.now() <= deadline) {
@@ -975,40 +826,25 @@ async function processFeed(
     // Each item is inserted as soon as it's processed (inside processItem)
     // rather than buffering the whole feed's rows for one bulk insert at
     // the end — a large or first-time feed can have enough new items that
-    // a mid-run crash/timeout (each item pays for a page fetch and an
-    // OpenAI call) would otherwise discard every already-processed item
-    // for this feed and re-pay for it on the next run.
+    // a mid-run crash or timeout would otherwise discard every processed
+    // item for this feed.
     //
     // The deadline check is per item rather than per feed: once the run
     // budget is spent, remaining items are simply left for the next cron
     // pass, which finds them again because nothing was written for them.
     const results = await mapWithConcurrency(prepared, ITEM_CONCURRENCY, (entry) => {
-      if (Date.now() > deadline) {
-        return Promise.resolve({
-          inserted: false,
-          feedItemId: null,
-          title: '',
-          titleEn: null,
-          reusedSummary: false,
-          summarizeUsage: EMPTY_USAGE,
-        })
-      }
+      if (Date.now() > deadline) return Promise.resolve(SKIPPED)
       // Timed so later feeds size their preparation batch against what
       // items are actually costing this run, not a guess.
       const startedAt = Date.now()
-      return processItem(supabase, feed, entry, targetLanguage, runCache).finally(() =>
+      return processItem(supabase, feed, entry, runCache).finally(() =>
         runPace.record(Date.now() - startedAt)
       )
     })
 
     const itemsInserted = results.filter((r) => r.inserted).length
-    const summariesReused = results.filter((r) => r.reusedSummary).length
-    for (const result of results) {
-      usage = { ...usage, summarize: addUsage(usage.summarize, result.summarizeUsage) }
-    }
-    const newRows: IngestedItem[] = results.flatMap((r) =>
-      r.feedItemId ? [{ id: r.feedItemId, title: r.title, title_en: r.titleEn }] : []
-    )
+    const duplicatesFound = results.filter((r) => r.duplicate).length
+    const textsStored = results.filter((r) => r.fullText).length
 
     const { error: updateError } = await supabase
       .from('feeds')
@@ -1019,7 +855,7 @@ async function processFeed(
       throw new Error(`Failed to update last_fetched_at: ${updateError.message}`)
     }
 
-    return { ok: true, itemsInserted, summariesReused, newItems: newRows, usage }
+    return { ok: true, itemsInserted, duplicatesFound, textsStored, usage }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`ingest-feeds: feed ${feed.id} (${feed.url}) failed:`, message)
@@ -1045,9 +881,8 @@ async function processFeed(
   }
 }
 
-// A backstop pass over each user's whole inbox, not the primary filter —
-// processItem already drops a matching title before it costs a fetch or a
-// summarization call. This catches the cases that path can't: a keyword
+// A backstop pass over each user's whole Inbox, not the primary filter:
+// prepareItems already drops a matching title before it costs a fetch. This catches the cases that path can't: a keyword
 // added after an article was already ingested, and an article ingested
 // for one subscriber while another's list would have rejected it. Writes
 // the same 'deleted' tombstone the manual "Run filters now" action does
@@ -1103,15 +938,11 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
   return tombstoned
 }
 
-// Shared by the cron-triggered /api/ingest-feeds route and the "Run ingest
-// now" button in the feeds management UI (src/lib/feeds/actions.ts), so
-// both paths run the exact same logic instead of drifting apart — including
-// this cutoff. Parable's own retention policy never keeps an article past
-// 24h in the Inbox anyway (see runRetention), so ingesting anything older
-// would just create work that gets discarded shortly after — including on
-// a feed's very first fetch, which otherwise would backfill its entire
-// history in one run.
-const MAX_ITEM_AGE_HOURS = 24
+// Shared by the cron route and the Sync button, so both apply the same
+// cutoff. Parable covers the last 12 hours (see [[context]]): an older
+// article would leave the Inbox the moment it arrived, and a feed's first
+// fetch would otherwise backfill its whole history.
+const MAX_ITEM_AGE_HOURS = 12
 
 // Persists one row per run, so the token counters accumulated above
 // outlive the log line they used to end up in. This is what the Usage box
@@ -1131,8 +962,8 @@ async function recordRun(
     feeds_processed: summary.feedsProcessed,
     feeds_failed: summary.feedsFailed.length,
     items_inserted: summary.itemsInserted,
-    summaries_reused: summary.summariesReused,
-    summaries_repaired: summary.summariesRepaired,
+    duplicates_found: summary.duplicatesFound,
+    texts_stored: summary.textsStored,
     translate_calls: usage.translate.calls,
     translate_input_tokens: usage.translate.inputTokens,
     translate_output_tokens: usage.translate.outputTokens,
@@ -1160,10 +991,9 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
   const cutoffMs = Date.now() - MAX_ITEM_AGE_HOURS * 60 * 60 * 1000
   const deadline = Date.now() + RUN_BUDGET_MS
 
-  // Only feeds someone actually subscribes to are worth fetching. Each
-  // feed also needs its subscribers' auto-delete keywords, so that an item
-  // nobody wants can be dropped before it costs a fetch and an OpenAI call
-  // (see processItem step 2).
+  // Only feeds someone subscribes to are worth fetching. Each feed also
+  // needs its subscribers' filter keywords, so an item nobody wants is
+  // dropped before it costs anything (see prepareItems).
   const [{ data: subs, error: subsError }, { data: prefRows, error: prefsError }] =
     await Promise.all([
       supabase.from('subscriptions').select('feed_id, user_id'),
@@ -1204,8 +1034,8 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
       feedsFailed: [],
       itemsInserted: 0,
       itemsAutoDeleted: 0,
-      summariesReused: 0,
-      summariesRepaired: 0,
+      duplicatesFound: 0,
+      textsStored: 0,
       usage: EMPTY_INGEST_USAGE,
     }
     await recordRun(supabase, empty, Date.now() - startedAt)
@@ -1229,7 +1059,7 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
 
   // One cache for the whole run, shared across every concurrent feed —
   // that sharing is the entire point of it.
-  const runCache = new RunSummaryCache()
+  const runCache = new RunCache()
   const runPace = new RunPace()
   const results = await mapWithConcurrency(feeds, FEED_CONCURRENCY, (feed) =>
     processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE, deadline, runCache, runPace)
@@ -1237,10 +1067,10 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
 
   let feedsProcessed = 0
   let itemsInserted = 0
-  let summariesReused = 0
+  let duplicatesFound = 0
+  let textsStored = 0
   let usage = EMPTY_INGEST_USAGE
   const feedsFailed: FeedFailure[] = []
-  const newItems: IngestedItem[] = []
 
   for (const result of results) {
     // Counted on both arms: a feed that failed partway through can still
@@ -1249,145 +1079,24 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
     if (result.ok) {
       feedsProcessed++
       itemsInserted += result.itemsInserted
-      summariesReused += result.summariesReused
-      newItems.push(...result.newItems)
+      duplicatesFound += result.duplicatesFound
+      textsStored += result.textsStored
     } else {
       feedsFailed.push(result.failure)
     }
   }
 
-  // Filing rules run after the filter backstop, so a title matching both a
-  // delete keyword and a rule is deleted rather than filed — the blocklist
-  // is the stronger signal.
   const itemsAutoDeleted = await applyAutoDeleteRules(supabase)
-  await applyFilterRules(supabase, newItems)
-
-  // Last, on whatever budget is left: new articles are worth more than
-  // retries of old ones.
-  const repair = await repairMissingSummaries(supabase, INGEST_TARGET_LANGUAGE, deadline)
-  usage = addIngestUsage(usage, repair.usage)
 
   const summary: IngestSummary = {
     feedsProcessed,
     feedsFailed,
     itemsInserted,
     itemsAutoDeleted,
-    summariesReused,
-    summariesRepaired: repair.repaired,
+    duplicatesFound,
+    textsStored,
     usage,
   }
   await recordRun(supabase, summary, Date.now() - startedAt)
   return summary
-}
-
-// How many failed summaries one run will try to repair. Deliberately
-// small: this is opportunistic cleanup competing for the same budget as
-// actually ingesting new articles, and an article only lives 12h anyway,
-// so a backlog that can't be cleared in a few runs was never going to be
-// read.
-const SUMMARY_REPAIR_MAX_ITEMS = 10
-// Only worth repairing while the article is still reachable in someone's
-// Inbox. Matches stage 1 of retention.
-const SUMMARY_REPAIR_MAX_AGE_HOURS = 12
-
-// Second chance for articles whose summarization failed at ingest.
-//
-// summarizeToTarget fails soft — a timeout, a truncated response, a
-// missing key all return null — and the row is inserted anyway, because a
-// title and a link still beat nothing. But the body is discarded in the
-// same tick, so without this the article spends its entire 12h life as a
-// bare title and there is no path back: nothing in the app ever
-// re-summarizes anything. The page is still there, though, so this simply
-// reads it again.
-//
-// Items the thin-body guard skipped on purpose are re-checked here too and
-// skipped again by the same guard, costing a page fetch and no API call.
-async function repairMissingSummaries(
-  supabase: AdminClient,
-  targetLanguage: string,
-  deadline: number
-): Promise<{ repaired: number; usage: IngestUsage }> {
-  const empty = { repaired: 0, usage: EMPTY_INGEST_USAGE }
-  if (Date.now() > deadline) return empty
-
-  const since = new Date(Date.now() - SUMMARY_REPAIR_MAX_AGE_HOURS * 60 * 60 * 1000).toISOString()
-  const { data: rows, error } = await supabase
-    .from('feed_items')
-    .select('id, title, title_en, link')
-    .is('summary_ai', null)
-    .not('link', 'is', null)
-    .gte('created_at', since)
-    .limit(SUMMARY_REPAIR_MAX_ITEMS)
-  if (error) {
-    console.error('ingest: summary repair lookup failed', error.message)
-    return empty
-  }
-  if (!rows || rows.length === 0) return empty
-
-  let usage = EMPTY_USAGE
-  let repaired = 0
-
-  for (const row of rows as { id: string; title: string; title_en: string | null; link: string }[]) {
-    if (Date.now() > deadline) break
-
-    const extracted = await fetchAndExtractContent(row.link)
-    if (!('text' in extracted) || extracted.text.length < MIN_SUMMARIZABLE_LENGTH) continue
-
-    const summarized = await summarizeToTarget(
-      row.title_en ?? row.title,
-      extracted.text,
-      targetLanguage
-    )
-    usage = addUsage(usage, summarized.usage)
-    if (!summarized.summary) continue
-
-    const { error: updateError } = await supabase
-      .from('feed_items')
-      .update({ summary_ai: summarized.summary })
-      .eq('id', row.id)
-      // Don't overwrite a summary another concurrent run just wrote.
-      .is('summary_ai', null)
-    if (updateError) {
-      console.error(`ingest: summary repair write failed for ${row.id}`, updateError.message)
-      continue
-    }
-    repaired += 1
-  }
-
-  if (repaired > 0) console.log(`ingest: repaired ${repaired} missing summaries`)
-  return {
-    repaired,
-    usage: { translate: EMPTY_USAGE, summarize: usage, embed: EMPTY_USAGE },
-  }
-}
-
-// Applies each user's Rules block (see RulesBlock on /filters) to the rows
-// this run just added. Runs once at the end rather than inline per item
-// for the same reason auto-delete does: rules are per-account, feed_items
-// rows are shared, and a rule can only ever file the article into the
-// folder of the user who wrote it.
-async function applyFilterRules(supabase: AdminClient, newItems: IngestedItem[]): Promise<void> {
-  if (newItems.length === 0) return
-
-  const { data: rules, error } = await supabase
-    .from('filter_rules')
-    .select('user_id, keyword, folder_id')
-  if (error) {
-    console.error('ingest: failed to load filter rules', error.message)
-    return
-  }
-  if (!rules || rules.length === 0) return
-
-  const rulesByUser = new Map<string, RuleRow[]>()
-  for (const rule of rules) {
-    const list = rulesByUser.get(rule.user_id) ?? []
-    list.push({ keyword: rule.keyword, folder_id: rule.folder_id })
-    rulesByUser.set(rule.user_id, list)
-  }
-
-  for (const [userId, userRules] of rulesByUser) {
-    const filings = planFilings(newItems, userRules)
-    const { error: writeError } = await applyFilings(supabase, userId, filings)
-    if (writeError) console.error(`ingest: filing rules failed for ${userId}`, writeError)
-  }
 }
