@@ -36,7 +36,7 @@ export default function ArticleNoteEditor({
         type="text"
         autoFocus
         value={value}
-        placeholder="Add a note…"
+        placeholder="Add a note"
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -46,7 +46,7 @@ export default function ArticleNoteEditor({
             setEditing(false)
           }
         }}
-        className="w-full border border-border px-1.5 py-0.5 text-base bg-background mt-1"
+        className="cw-input mt-1"
       />
     )
   }
@@ -55,7 +55,7 @@ export default function ArticleNoteEditor({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="block text-left text-base italic text-muted hover:text-accent transition-colors mt-1"
+      className="mt-1 block text-left text-sm text-foreground-muted transition-colors hover:text-foreground"
     >
       {note}
     </button>
@@ -63,7 +63,7 @@ export default function ArticleNoteEditor({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="text-base text-muted hover:text-accent transition-colors mt-1"
+      className="mt-1 text-sm text-muted transition-colors hover:text-foreground"
     >
       + Note
     </button>

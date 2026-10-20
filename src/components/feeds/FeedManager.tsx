@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, X } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
 import {
   addFeed,
   updateFeed,
@@ -17,6 +17,10 @@ import { formatFetchedAt } from '@/lib/formatting'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import BuildFeedSection from './BuildFeedSection'
+import Button from '@/components/ui/Button'
+import Badge, { Tag } from '@/components/ui/Badge'
+import { Field, Input, Select } from '@/components/ui/Input'
+import Tooltip from '@/components/ui/Tooltip'
 
 const NO_FOLDER = 'No folder'
 
@@ -27,7 +31,7 @@ function folderLabelsFor(folderIds: string[], folders: { id: string; label: stri
 }
 
 function formatRate(rate: EngagementRate | undefined): string {
-  if (!rate || rate.rate === null) return '—'
+  if (!rate || rate.rate === null) return 'none yet'
   return `${Math.round(rate.rate * 100)}%`
 }
 
@@ -43,7 +47,6 @@ export default function FeedManager({
   engagement: Record<string, EngagementRate>
 }) {
   const router = useRouter()
-  const [feedsExpanded, setFeedsExpanded] = useState(false)
   const [folderFilter, setFolderFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -168,256 +171,197 @@ export default function FeedManager({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between pb-6 border-b border-border">
-        <div>
-          <h2 className="text-lg font-bold">Sync now</h2>
-          <p className="text-base text-muted mt-0.5">
-            Fetches new items published in the last 24 hours.
-          </p>
-          {ingestSummary && (
-            <div className="text-base text-muted mt-1">
-              <p>
-                Processed {ingestSummary.feedsProcessed} feed
-                {ingestSummary.feedsProcessed === 1 ? '' : 's'}, added{' '}
-                {ingestSummary.itemsInserted} new item
-                {ingestSummary.itemsInserted === 1 ? '' : 's'}
-                {ingestSummary.itemsAutoDeleted > 0 && (
-                  <>
-                    , auto-deleted {ingestSummary.itemsAutoDeleted} item
-                    {ingestSummary.itemsAutoDeleted === 1 ? '' : 's'}
-                  </>
-                )}
-                .
-              </p>
-              {ingestSummary.feedsFailed.length > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {ingestSummary.feedsFailed.map((failure) => (
-                    <li key={failure.feedId} className="text-danger">
-                      {failure.url}: {failure.error}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          {ingestError && <p className="text-base text-danger mt-1">{ingestError}</p>}
+      <section className="cw-panel">
+        <div className="cw-panel__head">
+          <h2 className="cw-panel__title">Add a feed</h2>
         </div>
-        <button
-          type="button"
-          onClick={handleRunIngest}
-          disabled={ingesting}
-          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50 shrink-0"
-        >
-          {ingesting ? 'Syncing…' : 'Sync'}
-        </button>
-      </div>
-
-      <form onSubmit={handleAdd} className="card-elevated p-4 space-y-3">
-        <h2 className="text-lg font-bold">Add a feed</h2>
-        <div className="flex flex-wrap gap-3">
-          <input
-            type="url"
-            placeholder="https://example.com/rss.xml"
-            required
-            value={newUrl}
-            onChange={(e) => setNewUrl(e.target.value)}
-            className="flex-1 min-w-[16rem] border border-border px-3 py-2 text-lg bg-background"
-          />
-          <input
-            type="text"
-            placeholder="Title (auto-detected if left blank)"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
-          />
-          <select
-            value={newFolderIds[0] ?? ''}
-            onChange={(e) => setNewFolderIds(e.target.value ? [e.target.value] : [])}
-            className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
-          >
-            <option value="">{NO_FOLDER}</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={pending}
-            className="bg-foreground text-background px-4 py-2 text-base transition-colors hover:opacity-90 disabled:opacity-50"
-          >
-            Add feed
-          </button>
-        </div>
-      </form>
-
-      {error && <p className="text-lg text-danger">{error}</p>}
+        <form onSubmit={handleAdd} className="cw-panel__body grid gap-3 min-[640px]:grid-cols-[2fr_1.5fr_1fr_auto] min-[640px]:items-end">
+          <Field label="Feed URL" htmlFor="new-feed-url">
+            <Input
+              id="new-feed-url"
+              type="url"
+              placeholder="https://example.com/rss.xml"
+              required
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+            />
+          </Field>
+          <Field label="Title" htmlFor="new-feed-title">
+            <Input
+              id="new-feed-title"
+              placeholder="Detected if left blank"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+            />
+          </Field>
+          <Field label="Folder" htmlFor="new-feed-folder">
+            <Select
+              id="new-feed-folder"
+              value={newFolderIds[0] ?? ''}
+              onChange={(e) => setNewFolderIds(e.target.value ? [e.target.value] : [])}
+            >
+              <option value="">{NO_FOLDER}</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? 'Adding' : 'Add feed'}
+          </Button>
+        </form>
+        {error && <p className="cw-error px-4 pb-4">{error}</p>}
+      </section>
 
       <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
 
-
       <FolderManager folders={folderRows} />
 
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => setFeedsExpanded((prev) => !prev)}
-          aria-expanded={feedsExpanded}
-          className="flex items-center gap-2 text-left"
-        >
-          <ChevronRight
-            size={18}
-            strokeWidth={1.75}
-            className={`shrink-0 text-muted transition-transform ${feedsExpanded ? 'rotate-90' : ''}`}
-            aria-hidden="true"
-          />
-          <h2 className="text-lg font-bold">Manage feeds</h2>
-        </button>
+      <section className="cw-panel">
+        <div className="cw-panel__head flex-wrap">
+          <h2 className="cw-panel__title">
+            Your feeds{' '}
+            <span className="font-mono text-xs font-normal text-muted tabular-nums">{localFeeds.length}</span>
+          </h2>
+          <Button size="sm" onClick={handleRunIngest} disabled={ingesting}>
+            {ingesting ? 'Syncing' : 'Sync now'}
+          </Button>
+        </div>
 
-        {feedsExpanded && (
-          <>
-            <div className="flex items-center gap-2 text-lg overflow-x-auto pb-1">
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'uncategorized', label: NO_FOLDER },
-                ...folders,
-              ].map((option) => {
-                const active = folderFilter === option.id
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setFolderFilter(option.id)}
-                    className={
-                      active
-                        ? 'shrink-0 border border-accent text-accent bg-accent/10 px-3 py-1 text-base font-medium transition-colors'
-                        : 'shrink-0 border border-border text-muted px-3 py-1 text-base font-medium hover:border-accent hover:text-accent transition-colors'
-                    }
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {visibleFeeds.length === 0 ? (
-              <p className="text-lg text-muted">No feeds yet.</p>
-            ) : (
-              <ul className="card-elevated divide-y divide-border">
-                {visibleFeeds.map((feed) => (
-                  <li key={feed.id} className="p-4">
-                    {editingId === feed.id ? (
-                      <div className="flex flex-wrap items-center gap-3">
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-lg bg-background"
-                        />
-                        <select
-                          value={editFolderIds[0] ?? ''}
-                          onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
-                          className="flex-1 min-w-[10rem] border border-border px-3 py-1.5 text-lg bg-background"
-                        >
-                          <option value="">{NO_FOLDER}</option>
-                          {folders.map((folder) => (
-                            <option key={folder.id} value={folder.id}>
-                              {folder.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => handleSaveEdit(feed.id)}
-                          className="bg-foreground text-background px-3 py-1.5 text-base transition-colors hover:opacity-90 disabled:opacity-50"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          className="text-base text-muted hover:text-accent transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-lg">{feed.title}</span>
-                            {feed.is_scraped && (
-                              <span
-                                className="text-base bg-accent/10 text-accent px-2 py-0.5"
-                                title="Built from a page with no RSS feed of its own — re-scraped on every ingest"
-                              >
-                                Built
-                              </span>
-                            )}
-                            <span className="text-base bg-foreground/5 text-muted px-2 py-0.5">
-                              {folderLabelsFor(feed.folderIds, folders)}
-                            </span>
-                            <span
-                              className="text-base text-muted"
-                              title="Rolling 7-day read rate: articles you've read from this feed ÷ articles it produced"
-                            >
-                              Engagement: {formatRate(engagement[feed.id])}
-                            </span>
-                          </div>
-                          <a
-                            href={feed.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-base text-muted hover:underline truncate block"
-                          >
-                            {feed.url}
-                          </a>
-                          <p className="text-base text-muted mt-0.5">
-                            Last fetched: {formatFetchedAt(feed.last_fetched_at)}
-                          </p>
-                          {feed.last_error && (
-                            <p className="text-base text-danger mt-0.5">
-                              {feed.consecutive_failures >= 3 ? (
-                                <span className="border border-danger text-danger px-1 py-0.5 mr-1 font-medium">
-                                  Failing {feed.consecutive_failures}x
-                                </span>
-                              ) : (
-                                '⚠ '
-                              )}
-                              {feed.last_error}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(feed)}
-                            className="text-base text-muted hover:text-accent transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => handleRemove(feed.id)}
-                            aria-label="Remove feed"
-                            title="Remove feed"
-                            className="text-accent hover:opacity-80 transition-colors disabled:opacity-50"
-                          >
-                            <X size={16} strokeWidth={1.75} aria-hidden="true" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+        {(ingestSummary || ingestError) && (
+          <div className="border-b border-border px-4 py-3 text-sm text-muted">
+            {ingestSummary && (
+              <>
+                <p>
+                  Checked {ingestSummary.feedsProcessed} feed
+                  {ingestSummary.feedsProcessed === 1 ? '' : 's'} and added {ingestSummary.itemsInserted} article
+                  {ingestSummary.itemsInserted === 1 ? '' : 's'}
+                  {ingestSummary.itemsAutoDeleted > 0 &&
+                    `, ${ingestSummary.itemsAutoDeleted} filtered out`}
+                  .
+                </p>
+                {ingestSummary.feedsFailed.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {ingestSummary.feedsFailed.map((failure) => (
+                      <li key={failure.feedId} className="text-danger">
+                        {failure.url}: {failure.error}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
-          </>
+            {ingestError && <p className="text-danger">{ingestError}</p>}
+          </div>
         )}
-      </div>
+
+        <div className="overflow-x-auto border-b border-border px-4 py-3">
+          <div className="cw-seg" role="group" aria-label="Show feeds in">
+            {[{ id: 'all', label: 'All' }, { id: 'uncategorized', label: NO_FOLDER }, ...folders].map(
+              (option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={folderFilter === option.id}
+                  onClick={() => setFolderFilter(option.id)}
+                >
+                  {option.label}
+                </button>
+              )
+            )}
+          </div>
+        </div>
+
+        {visibleFeeds.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No feeds here yet.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {visibleFeeds.map((feed) => (
+              <li key={feed.id} className="group px-4 py-3 transition-colors hover:bg-fill-hover">
+                {editingId === feed.id ? (
+                  <div className="grid gap-3 min-[640px]:grid-cols-[2fr_1fr_auto_auto] min-[640px]:items-end">
+                    <Field label="Title" htmlFor={`edit-title-${feed.id}`}>
+                      <Input
+                        id={`edit-title-${feed.id}`}
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Folder" htmlFor={`edit-folder-${feed.id}`}>
+                      <Select
+                        id={`edit-folder-${feed.id}`}
+                        value={editFolderIds[0] ?? ''}
+                        onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
+                      >
+                        <option value="">{NO_FOLDER}</option>
+                        {folders.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            {folder.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Button variant="primary" disabled={pending} onClick={() => handleSaveEdit(feed.id)}>
+                      Save feed
+                    </Button>
+                    <Button variant="ghost" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-medium">{feed.title}</span>
+                        {feed.is_scraped && <Tag>BUILT</Tag>}
+                        <Tag>{folderLabelsFor(feed.folderIds, folders)}</Tag>
+                        {feed.consecutive_failures >= 3 && (
+                          <Badge tone="danger">Failing {feed.consecutive_failures} runs</Badge>
+                        )}
+                      </div>
+                      <a
+                        href={feed.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block truncate text-xs text-muted hover:underline"
+                      >
+                        {feed.url}
+                      </a>
+                      <p className="text-xs text-muted">
+                        Last loaded {formatFetchedAt(feed.last_fetched_at)} · Opened{' '}
+                        {formatRate(engagement[feed.id])}
+                      </p>
+                      {feed.last_error && <p className="text-xs text-danger">{feed.last_error}</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Tooltip label="Edit feed">
+                        <Button variant="ghost" size="sm" icon aria-label="Edit feed" onClick={() => startEdit(feed)}>
+                          <Pencil strokeWidth={1.5} aria-hidden="true" />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip label="Remove feed">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon
+                          aria-label="Remove feed"
+                          disabled={pending}
+                          onClick={() => handleRemove(feed.id)}
+                          className="hover:text-danger"
+                        >
+                          <X strokeWidth={1.5} aria-hidden="true" />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }

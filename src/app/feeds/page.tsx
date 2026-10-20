@@ -20,7 +20,7 @@ export default async function FeedsPage() {
   return (
     <>
       <PageHeader title="Feeds" count={feeds.length} />
-      <div className="mx-auto max-w-3xl space-y-6 p-6">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 min-[1000px]:px-8">
         <FeedManager
           feeds={feeds}
           folders={folderOptions}

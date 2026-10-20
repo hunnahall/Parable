@@ -1,38 +1,38 @@
 import Link from 'next/link'
-import { Rss, Bookmark } from 'lucide-react'
-import ParableLogo from '@/components/brand/ParableLogo'
+import ParableMark from '@/components/brand/ParableMark'
 import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
+import { buttonClass } from '@/components/ui/Button'
 
-const FEATURES = [
-  { icon: Rss, label: 'Read RSS feeds' },
-  { icon: Bookmark, label: 'Save what matters' },
+const POINTS = [
+  'Every headline in English',
+  'The last 12 hours, nothing older',
+  'Summaries only when you ask',
 ]
 
 export default function LandingPage() {
   return (
-    <div className="relative bg-dot-grid min-h-[calc(100vh-65px)]">
-      <div className="animate-landing-reveal flex flex-col items-center text-center px-8 py-24 max-w-2xl mx-auto">
-        <h1 className="sr-only">Parable</h1>
-        <ParableLogo height={144} />
-        <p className="text-3xl text-muted mt-6 mb-10">
-          Your feeds in one place.
+    <div className="flex min-h-[calc(100dvh-57px)] flex-col">
+      <div className="animate-landing-reveal mx-auto flex w-full max-w-2xl flex-1 flex-col items-start justify-center px-4 py-16 min-[640px]:px-8">
+        <ParableMark size={96} tone="accent" drawIn />
+        <h1 className="mt-8 text-[length:var(--text-3xl)] leading-[var(--leading-tight)] tracking-[var(--tracking-display)]">
+          Parable
+        </h1>
+        <p className="mt-3 max-w-[40ch] text-lg text-foreground-muted">
+          Everything important about your countries and topics from the last 12 hours, in about two
+          minutes.
         </p>
-        <Link
-          href="/login"
-          className="border border-brand bg-background text-foreground px-8 py-3 text-base font-semibold mb-16 transition-colors duration-[var(--motion-fast)] ease-out hover:bg-brand hover:text-brand-foreground"
-        >
-          Sign in to get started
-        </Link>
-        <ul className="inline-flex items-center gap-8">
-          {FEATURES.map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-2 text-base font-bold uppercase tracking-[0.14em] font-label text-muted">
-              <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
-              {label}
+        <ul className="mt-8 space-y-2">
+          {POINTS.map((point) => (
+            <li key={point} className="cw-eyebrow">
+              {point}
             </li>
           ))}
         </ul>
+        <Link href="/login" className={`${buttonClass({ variant: 'primary', size: 'lg' })} mt-10`}>
+          Sign in
+        </Link>
       </div>
-      <CovenantWorksCredit className="absolute bottom-8 right-8" />
+      <CovenantWorksCredit className="border-t border-border px-4 py-4 min-[640px]:px-8" />
     </div>
   )
 }

@@ -107,7 +107,7 @@ export default function RulesBlock({
       </p>
 
       {rules.length > 0 && (
-        <ul className="divide-y divide-border-subtle">
+        <ul className="divide-y divide-border">
           {rules.map((rule) => (
             <li key={rule.id} className="flex items-center gap-2 py-1.5 text-base">
               <span className="truncate font-medium">{rule.keyword}</span>

@@ -1,19 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import type { UserPreferences } from '@/lib/preferences/data'
+import type { ThemeChoice, UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
+import { applyTheme } from '@/lib/preferences/applyTheme'
 import type { UsageWindow } from '@/lib/usage/tokens'
+import Segmented from '@/components/ui/Segmented'
+import { useToast } from '@/components/ui/Toast'
 import SettingsActions from './SettingsActions'
 import UsageBox from './UsageBox'
 
-const FONT_OPTIONS: { value: UserPreferences['font']; label: string }[] = [
-  { value: 'inter', label: 'Inter (default)' },
-  { value: 'hanken-grotesk', label: 'Hanken Grotesk' },
-  { value: 'work-sans', label: 'Work Sans' },
-  { value: 'instrument-sans', label: 'Instrument Sans' },
-  { value: 'lato', label: 'Lato' },
+const THEME_OPTIONS: { value: ThemeChoice; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
 ]
 
 export default function SettingsForm({
@@ -25,64 +25,41 @@ export default function SettingsForm({
   initialPreferences: UserPreferences
   usage: UsageWindow | null
 }) {
-  const router = useRouter()
-  const [prefs, setPrefs] = useState(initialPreferences)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
+  const [theme, setTheme] = useState(initialPreferences.theme)
 
-  // No Save button — every control commits on change. Local state updates
-  // immediately (so the control feels instant); the save + refresh happen
-  // in the background after.
-  async function applyChange(patch: Partial<UserPreferences>) {
-    const next = { ...prefs, ...patch }
-    setPrefs(next)
-    setStatus('saving')
-    setError(null)
-    const result = await updatePreferences(next)
+  // No Save button: the theme applies on the page at once and is saved in
+  // the background, so the server renders it on every later visit.
+  async function changeTheme(next: ThemeChoice) {
+    const previous = theme
+    setTheme(next)
+    applyTheme(next)
+    const result = await updatePreferences({ theme: next })
     if (result.error !== null) {
-      setStatus('error')
-      setError(result.error)
-      return
+      setTheme(previous)
+      applyTheme(previous)
+      toast(`Theme not saved. ${result.error}`, 'danger')
     }
-    setStatus('saved')
-    // Theme/font apply via attributes rendered on <html> in the root
-    // layout (a Server Component) — a client-only state update can't
-    // reach those, so this needs the real page refresh other mutations in
-    // this app avoid.
-    router.refresh()
   }
 
   return (
     <div className="space-y-6">
-      {/* Font and Usage share one row at a half each. Both hold a single
-          short control or figure, so a full-width card for each was mostly
-          empty space. Stacks to one column on narrow screens. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="card-elevated p-4 space-y-2">
-          <h2 className="text-lg font-bold font-heading">Font</h2>
-          <select
-            value={prefs.font}
-            onChange={(e) => applyChange({ font: e.target.value as UserPreferences['font'] })}
-            className="w-full border border-border px-2 py-2 text-base bg-background"
-          >
-            {FONT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Theme and Usage share one row at a half each; one column on phones. */}
+      <div className="grid grid-cols-1 gap-4 min-[640px]:grid-cols-2">
+        <section className="cw-panel">
+          <div className="cw-panel__head">
+            <h2 className="cw-panel__title">Theme</h2>
+          </div>
+          <div className="cw-panel__body space-y-2">
+            <Segmented label="Theme" options={THEME_OPTIONS} value={theme} onChange={changeTheme} />
+            <p className="text-xs text-muted">System follows your device.</p>
+          </div>
+        </section>
 
         <UsageBox usage={usage} />
       </div>
 
       <SettingsActions />
-
-      <div className="text-lg text-muted" role="status">
-        {status === 'saving' && 'Saving…'}
-        {status === 'saved' && 'Saved.'}
-        {status === 'error' && <span className="text-danger">{error}</span>}
-      </div>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { addFeed, exportFeedsOpml } from '@/lib/feeds/actions'
 import { ensureFolderPath, assignFeedToFolders } from '@/lib/folders/actions'
 import CleanSlateDialog from './CleanSlateDialog'
 import RulebookDialog from './RulebookDialog'
+import Button from '@/components/ui/Button'
 
 interface ParsedFeed {
   url: string
@@ -132,41 +133,21 @@ export default function SettingsActions() {
         onChange={handleFile}
         className="hidden"
       />
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => setRulebookOpen(true)}
-          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors"
-        >
-          Help
-        </button>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={importing}
-          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
-        >
-          {importing ? 'Importing…' : 'Import OPML'}
-        </button>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting}
-          className="border border-border px-4 py-2 text-base hover:bg-foreground/5 transition-colors disabled:opacity-50"
-        >
-          {exporting ? 'Exporting…' : 'Export OPML'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setCleanSlateOpen(true)}
-          className="border border-danger text-danger px-4 py-2 text-base hover:bg-danger/10 transition-colors"
-        >
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setRulebookOpen(true)}>Help</Button>
+        <Button onClick={() => inputRef.current?.click()} disabled={importing}>
+          {importing ? 'Importing' : 'Import OPML'}
+        </Button>
+        <Button onClick={handleExport} disabled={exporting}>
+          {exporting ? 'Exporting' : 'Export OPML'}
+        </Button>
+        <Button variant="danger" onClick={() => setCleanSlateOpen(true)}>
           Clean slate
-        </button>
+        </Button>
       </div>
 
       {importResult && (
-        <div className="text-base text-muted">
+        <div className="text-sm text-muted">
           <p>
             Imported {importResult.added} feed{importResult.added === 1 ? '' : 's'}.
           </p>
@@ -181,7 +162,7 @@ export default function SettingsActions() {
           )}
         </div>
       )}
-      {exportError && <p className="text-base text-danger">{exportError}</p>}
+      {exportError && <p className="text-sm text-danger">{exportError}</p>}
 
       {rulebookOpen && <RulebookDialog onClose={() => setRulebookOpen(false)} />}
       {cleanSlateOpen && <CleanSlateDialog onClose={() => setCleanSlateOpen(false)} />}

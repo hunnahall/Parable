@@ -89,23 +89,23 @@ export default function ArticleCardGrid({
             rel="noopener noreferrer"
             onClick={actions.handleOpen}
             aria-label={item.title}
-            className="flex h-full w-full items-center justify-center bg-surface-border"
+            className="flex h-full w-full items-center justify-center bg-fill-active"
           >
             {image}
           </a>
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-surface-border">{image}</div>
+          <div className="flex h-full w-full items-center justify-center bg-fill-active">{image}</div>
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-3">
-        <div className="mb-0.5 truncate text-base text-muted">{metaParts.join(' · ')}</div>
+        <div className="mb-0.5 truncate text-xs text-muted">{metaParts.join(' · ')}</div>
         {item.link ? (
           <a
             href={item.link}
             target="_blank"
             rel="noopener noreferrer"
             onClick={actions.handleOpen}
-            className="text-lg font-medium break-words hover:text-accent hover:underline"
+            className="text-lg font-medium break-words underline-offset-4 hover:underline"
           >
             {item.title}
           </a>
@@ -116,16 +116,16 @@ export default function ArticleCardGrid({
             stated, not rendered as an absence. */}
         {item.summary ? (
           <>
-            <p className="mt-1 text-base leading-relaxed text-foreground-muted">{item.summary}</p>
+            <p className="mt-1 text-base text-foreground-muted">{item.summary}</p>
             {item.duplicateOfFeed && (
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-xs text-muted">
                 Summary shared with the same story from {item.duplicateOfFeed}
               </p>
             )}
           </>
         ) : (
-          <p className="mt-1 text-base italic leading-relaxed text-muted">
-            No summary available — open the article to read it.
+          <p className="mt-1 text-base text-muted">
+            No summary yet. Open the article to read it.
           </p>
         )}
         <div className="mt-auto pt-2">
@@ -145,7 +145,7 @@ export default function ArticleCardGrid({
             onChange={(note) => onUpdate(item.id, { note })}
           />
         )}
-        {actions.error && <p className="text-base text-danger mt-1">{actions.error}</p>}
+        {actions.error && <p className="text-sm text-danger mt-1">{actions.error}</p>}
       </div>
     </div>
   )

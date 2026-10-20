@@ -20,7 +20,7 @@ export default async function FiltersPage() {
   return (
     <>
       <PageHeader title="Filters" />
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 min-[1000px]:px-8">
         <FiltersForm initialPreferences={preferences} />
         <RulesBlock rules={rules} folders={folders} />
       </div>

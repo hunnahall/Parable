@@ -61,25 +61,26 @@ export default function ArticleCard({
   return (
     <li
       className={
-        'group transition-colors hover:bg-foreground/[0.03] ' +
+        'group transition-colors hover:bg-fill-hover ' +
         (compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'px-4 py-3')
       }
     >
       <div className="flex items-start gap-2.5">
         {onToggleSelect && (
-          <input
-            type="checkbox"
-            checked={selected ?? false}
-            onChange={() => onToggleSelect(item.id)}
-            aria-label={`Select ${item.title}`}
-            className="mt-1 shrink-0"
-          />
+          <label className="cw-check mt-0.5 shrink-0">
+            <input
+              type="checkbox"
+              checked={selected ?? false}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Select ${item.title}`}
+            />
+          </label>
         )}
         <div className="min-w-0 flex-1">
           {/* A middot, not a pipe — the separator should recede behind the
               two values it joins, and neither is more important than the
               other, so the feed name carries no extra weight either. */}
-          <div className="mb-0.5 text-base text-muted">
+          <div className="mb-0.5 text-xs text-muted">
             {metaParts.join(' · ')}
           </div>
           <div className="flex items-start gap-2">
@@ -89,7 +90,7 @@ export default function ArticleCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={actions.handleOpen}
-                className="min-w-0 flex-1 text-lg font-medium break-words hover:text-accent hover:underline"
+                className="min-w-0 flex-1 text-lg font-medium break-words underline-offset-4 hover:underline"
               >
                 {item.title}
               </a>
@@ -103,12 +104,13 @@ export default function ArticleCard({
                 onClick={() => setExpanded((v) => !v)}
                 aria-expanded={expanded}
                 aria-label={expanded ? 'Hide details' : 'Show details'}
-                className="mt-0.5 shrink-0 px-1"
+                icon
+                className="shrink-0"
               >
                 {expanded ? (
-                  <Minus size={13} strokeWidth={1.75} aria-hidden="true" />
+                  <Minus strokeWidth={1.5} aria-hidden="true" />
                 ) : (
-                  <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                  <Plus strokeWidth={1.5} aria-hidden="true" />
                 )}
               </Button>
             )}
@@ -117,7 +119,7 @@ export default function ArticleCard({
             <>
               {item.summary ? (
                 <>
-                  <p className="mt-1 text-base leading-relaxed text-foreground-muted">
+                  <p className="mt-1 text-base text-foreground-muted">
                     {item.summary}
                   </p>
                   {/* Why this reads word-for-word like another card in the
@@ -126,7 +128,7 @@ export default function ArticleCard({
                       second one. Unexplained, that repetition just looks
                       like a bug. */}
                   {item.duplicateOfFeed && (
-                    <p className="mt-1 text-sm text-muted">
+                    <p className="mt-1 text-xs text-muted">
                       Summary shared with the same story from {item.duplicateOfFeed}
                     </p>
                   )}
@@ -137,8 +139,8 @@ export default function ArticleCard({
                    nothing summarizable, and the body is discarded at
                    ingest — so the card silently collapsing to a bare title
                    read as a design choice instead of a gap. */
-                <p className="mt-1 text-base italic leading-relaxed text-muted">
-                  No summary available — open the article to read it.
+                <p className="mt-1 text-base text-muted">
+                  No summary yet. Open the article to read it.
                 </p>
               )}
               <ArticleCardActionsRow
@@ -158,7 +160,7 @@ export default function ArticleCard({
               )}
             </>
           )}
-          {actions.error && <p className="mt-1 text-base text-danger">{actions.error}</p>}
+          {actions.error && <p className="mt-1 text-sm text-danger">{actions.error}</p>}
         </div>
       </div>
     </li>

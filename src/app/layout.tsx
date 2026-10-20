@@ -1,25 +1,32 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Hanken_Grotesk, Inter, Work_Sans, Instrument_Sans, Lato } from 'next/font/google'
+import { Hanken_Grotesk, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
 import { getArticlesUnfiledCount } from '@/lib/articles/list'
-import ParableMark from '@/components/brand/ParableMark'
+import ParableLogo from '@/components/brand/ParableLogo'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
 import CommandPalette from '@/components/layout/CommandPalette'
 import { ToastProvider } from '@/components/ui/Toast'
 
-const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken-grotesk' })
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const workSans = Work_Sans({ subsets: ['latin'], variable: '--font-work-sans' })
-const instrumentSans = Instrument_Sans({ subsets: ['latin'], variable: '--font-instrument-sans' })
-const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-lato' })
+// Covenant Works Design System v2: one sans for display and interface, one
+// mono for labels, figures and keyboard hints.
+const hankenGrotesk = Hanken_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-hanken-grotesk',
+})
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-plex-mono',
+})
 
 export const metadata: Metadata = {
   title: 'Parable',
-  description: 'A personal RSS reader.',
+  description: 'The last 12 hours of your countries and topics, in English.',
 }
 
 export default async function RootLayout({
@@ -29,11 +36,7 @@ export default async function RootLayout({
 }) {
   const user = await getUser()
   // Independent of each other (both only need `user`, already resolved
-  // above and memoized by React's cache() for the rest of this request) —
-  // running them sequentially was paying for two round trips end-to-end
-  // on every single navigation, since this layout re-executes on every
-  // request (getUser() reads cookies(), which opts the whole tree out of
-  // Next.js's route-segment caching).
+  // above and memoized by React's cache() for the rest of this request).
   const [prefs, inboxCount] = await Promise.all([
     getUserPreferences(),
     user ? getArticlesUnfiledCount() : Promise.resolve(0),
@@ -42,34 +45,31 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      data-font={prefs.font === 'inter' ? undefined : prefs.font}
-      className={`${hankenGrotesk.variable} ${inter.variable} ${workSans.variable} ${instrumentSans.variable} ${lato.variable}`}
+      // Parable's signature color. "system" leaves data-theme off so
+      // tokens.css follows the device (dark unless it asks for light).
+      data-accent="slate-blue"
+      data-theme={prefs.theme === 'system' ? undefined : prefs.theme}
+      className={`${hankenGrotesk.variable} ${plexMono.variable}`}
     >
-      <body>
+      <body className="min-h-dvh">
         <ToastProvider>
-        {user ? (
-          <div className="flex min-h-screen">
-            <Sidebar
-              initialCollapsed={prefs.sidebarCollapsed}
-              userEmail={user.email ?? ''}
-              inboxCount={inboxCount}
-            />
-            <div className="flex-1 min-w-0 flex flex-col">
+          {user ? (
+            <div className="flex min-h-dvh flex-col min-[1000px]:flex-row">
+              <Sidebar userEmail={user.email ?? ''} inboxCount={inboxCount} />
               <MobileSidebarDrawer userEmail={user.email ?? ''} inboxCount={inboxCount} />
-              <main className="flex-1 min-w-0">{children}</main>
+              <main className="min-w-0 flex-1">{children}</main>
+              <CommandPalette />
             </div>
-            <CommandPalette />
-          </div>
-        ) : (
-          <>
-            <header className="flex items-center gap-4 p-4 border-b border-border text-base">
-              <Link href="/" aria-label="Parable">
-                <ParableMark size={22} />
-              </Link>
-            </header>
-            {children}
-          </>
-        )}
+          ) : (
+            <>
+              <header className="flex h-14 items-center border-b border-border px-4 min-[1000px]:px-8">
+                <Link href="/" aria-label="Parable">
+                  <ParableLogo height={22} tone="accent" />
+                </Link>
+              </header>
+              {children}
+            </>
+          )}
         </ToastProvider>
       </body>
     </html>

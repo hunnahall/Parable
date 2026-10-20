@@ -4,43 +4,38 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import type { UserPreferences } from './data'
 
+const COLUMNS: Record<keyof UserPreferences, string> = {
+  theme: 'theme',
+  sidebarCollapsed: 'sidebar_collapsed',
+  language: 'language',
+  autoDeleteKeywords: 'auto_delete_keywords',
+}
+
+// Writes only the fields passed. Sending the whole preferences object from
+// a page-load snapshot overwrote anything changed elsewhere since, such as
+// keywords edited on /filters in another tab.
 export async function updatePreferences(
-  prefs: UserPreferences
+  changes: Partial<UserPreferences>
 ): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }
 
+  const row: Record<string, unknown> = { user_id: user.id, updated_at: new Date().toISOString() }
+  for (const [key, value] of Object.entries(changes)) {
+    const column = COLUMNS[key as keyof UserPreferences]
+    if (column && value !== undefined) row[column] = value
+  }
+
   const supabase = await createClient()
-  const { error } = await supabase.from('user_preferences').upsert({
-    user_id: user.id,
-    font: prefs.font,
-    sidebar_collapsed: prefs.sidebarCollapsed,
-    language: prefs.language,
-    auto_delete_keywords: prefs.autoDeleteKeywords,
-    updated_at: new Date().toISOString(),
-  })
+  const { error } = await supabase.from('user_preferences').upsert(row)
   if (error) return { error: error.message }
 
-  // Font applies via an attribute rendered on <html> in the root layout
-  // (see src/app/layout.tsx) — a client-only state update can't reach
-  // that, so this needs the full server round-trip, unlike most other
-  // mutations in this app.
+  // Theme renders as data-theme on <html> in the root layout, which only a
+  // server round trip can reach.
   revalidatePath('/', 'layout')
   return { error: null }
 }
 
 export async function setSidebarCollapsed(collapsed: boolean): Promise<{ error: string | null }> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in' }
-
-  const supabase = await createClient()
-  const { error } = await supabase.from('user_preferences').upsert({
-    user_id: user.id,
-    sidebar_collapsed: collapsed,
-    updated_at: new Date().toISOString(),
-  })
-  if (error) return { error: error.message }
-
-  revalidatePath('/', 'layout')
-  return { error: null }
+  return updatePreferences({ sidebarCollapsed: collapsed })
 }

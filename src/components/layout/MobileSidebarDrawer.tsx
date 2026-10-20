@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import ParableLogo from '@/components/brand/ParableLogo'
-import SidebarNavList from './SidebarNavList'
-import { signOut } from '@/app/login/actions'
+import ParableMark from '@/components/brand/ParableMark'
+import NavColumn from './NavColumn'
+import { SIDEBAR_NAV, isNavEntryActive } from './sidebarNav'
 
+// Under 1000px the sidebar collapses to a top bar (logo, page title, menu
+// button); the menu opens the same navigation as a Level 2 sheet from the
+// left.
 export default function MobileSidebarDrawer({
   userEmail,
   inboxCount,
@@ -15,6 +19,11 @@ export default function MobileSidebarDrawer({
   inboxCount: number
 }) {
   const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+  const current = SIDEBAR_NAV.find(
+    (entry) => entry.type === 'link' && isNavEntryActive(entry.href, pathname)
+  )
+  const title = current && current.type === 'link' ? current.label : 'Parable'
 
   useEffect(() => {
     if (!open) return
@@ -27,58 +36,46 @@ export default function MobileSidebarDrawer({
 
   return (
     <>
-      <header className="md:hidden flex items-center gap-4 p-4 border-b border-border">
+      <header className="sticky top-0 z-[var(--z-sticky)] flex h-14 items-center gap-3 border-b border-border bg-background px-4 min-[1000px]:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          className="text-muted hover:text-foreground transition-colors shrink-0"
+          aria-label="Open navigation"
+          aria-expanded={open}
+          className="cw-btn cw-btn--ghost cw-btn--icon -ml-2"
         >
-          <Menu size={16} strokeWidth={1.75} aria-hidden="true" />
+          <Menu strokeWidth={1.5} aria-hidden="true" />
         </button>
-        <Link href="/" aria-label="Parable">
-          <ParableLogo height={26} />
+        <Link href="/inbox" aria-label="Parable, Inbox">
+          <ParableMark size={22} tone="accent" />
         </Link>
+        <span className="truncate text-base font-semibold">{title}</span>
       </header>
 
       {open && (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-foreground/40 transition-opacity duration-[var(--motion-standard)]"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
+        <div className="fixed inset-0 z-[var(--z-modal)] min-[1000px]:hidden">
+          <div className="cw-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation menu"
-            className="absolute inset-y-0 left-0 w-64 bg-surface border-r border-border flex flex-col shadow-[var(--shadow-modal)] transition-transform duration-[var(--motion-standard)] ease-out"
+            aria-label="Navigation"
+            className="card-modal absolute inset-y-0 left-0 z-[61] w-[min(var(--sidebar-w),85vw)] border-y-0 border-l-0"
           >
-            <div className="flex items-center justify-between gap-2 p-4">
-              <ParableLogo height={28} />
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close menu"
-                className="text-muted hover:text-foreground transition-colors"
-              >
-                <X size={16} strokeWidth={1.75} aria-hidden="true" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-2">
-              <SidebarNavList inboxCount={inboxCount} onNavigate={() => setOpen(false)} />
-            </div>
-            <div className="border-t border-border-subtle p-3 text-base">
-              <div className="text-base text-muted truncate mb-2">{userEmail}</div>
-              <form action={signOut}>
+            <NavColumn
+              userEmail={userEmail}
+              inboxCount={inboxCount}
+              onNavigate={() => setOpen(false)}
+              headerAction={
                 <button
-                  type="submit"
-                  className="underline text-muted hover:text-foreground transition-colors"
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close navigation"
+                  className="cw-btn cw-btn--ghost cw-btn--icon -mr-2"
                 >
-                  Sign out
+                  <X strokeWidth={1.5} aria-hidden="true" />
                 </button>
-              </form>
-            </div>
+              }
+            />
           </div>
         </div>
       )}

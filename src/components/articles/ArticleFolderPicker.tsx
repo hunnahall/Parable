@@ -69,18 +69,15 @@ export default function ArticleFolderPicker({
         aria-expanded={open}
         aria-haspopup="true"
         className={
-          'inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-sm transition-colors disabled:opacity-50 ' +
-          (selectedIds.length > 0
-            ? 'text-accent hover:opacity-80'
-            : 'text-muted hover:text-foreground')
+          'cw-btn cw-btn--ghost cw-btn--sm ' + (selectedIds.length > 0 ? 'text-foreground' : '')
         }
       >
-        <FolderPlus size={13} strokeWidth={1.75} aria-hidden="true" />
+        <FolderPlus strokeWidth={1.5} aria-hidden="true" />
         {label}
       </button>
 
       {open && (
-        <div className="card-modal absolute left-0 top-full z-30 mt-1 w-52 p-1">
+        <div className="cw-menu absolute left-0 top-full z-30 mt-1 w-56">
           {folders.length === 0 && !addingFolder && (
             <p className="px-2 py-1.5 text-sm text-muted">No folders yet.</p>
           )}
@@ -90,11 +87,11 @@ export default function ArticleFolderPicker({
                 <button
                   type="button"
                   onClick={() => toggle(f.id)}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-base transition-colors hover:bg-foreground/5"
+                  className="cw-menu__item"
                 >
                   <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                     {selected.has(f.id) && (
-                      <Check size={13} strokeWidth={2.25} aria-hidden="true" className="text-accent" />
+                      <Check size={16} strokeWidth={1.5} aria-hidden="true" className="!text-accent" />
                     )}
                   </span>
                   <span className="truncate">{f.label}</span>
@@ -103,7 +100,7 @@ export default function ArticleFolderPicker({
             ))}
           </ul>
 
-          <div className="mt-1 border-t border-border-subtle pt-1">
+          <div className="mt-1 border-t border-border pt-1">
             {addingFolder ? (
               <input
                 type="text"
@@ -120,13 +117,13 @@ export default function ArticleFolderPicker({
                 }}
                 placeholder="New folder…"
                 aria-label="New folder name"
-                className="w-full rounded-sm border border-border bg-background px-2 py-1 text-base"
+                className="cw-input"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => setAddingFolder(true)}
-                className="w-full rounded-sm px-2 py-1.5 text-left text-base text-muted transition-colors hover:bg-foreground/5 hover:text-foreground"
+                className="cw-menu__item text-muted"
               >
                 + New folder
               </button>

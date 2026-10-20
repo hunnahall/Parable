@@ -24,12 +24,12 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
   async function applyChange(patch: Partial<UserPreferences>) {
     const next = { ...prefs, ...patch }
     setPrefs(next)
-    const result = await updatePreferences(next)
+    const result = await updatePreferences(patch)
     if (result.error !== null) {
       toast(result.error, 'danger')
       return
     }
-    toast('Saved')
+    toast('Filters saved')
     router.refresh()
   }
 
@@ -68,12 +68,14 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
   }
 
   return (
-    <div className="space-y-6">
-      <div className="card-elevated space-y-2 p-4">
-        <h2 className="text-lg font-bold">Filters</h2>
-        <p className="text-base text-muted">
-          New articles with a title matching one of these filters will be automatically
-          discarded. A filter can be a single word or a phrase.
+    <section className="cw-panel">
+      <div className="cw-panel__head">
+        <h2 className="cw-panel__title">Filtered words</h2>
+      </div>
+      <div className="cw-panel__body space-y-4">
+        <p className="text-sm text-muted">
+          New articles whose English title contains one of these words or phrases are removed before
+          they reach your Inbox.
         </p>
         <div className="flex gap-2">
           <Input
@@ -86,45 +88,42 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
                 addFilter()
               }
             }}
-            placeholder="e.g. soccer or transfer rumors"
+            placeholder="A word or phrase"
+            aria-label="Word or phrase to filter"
             className="flex-1"
           />
-          <Button onClick={addFilter}>Add</Button>
+          <Button variant="primary" onClick={addFilter}>
+            Add word
+          </Button>
         </div>
         {prefs.autoDeleteKeywords.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {prefs.autoDeleteKeywords.map((word) => (
-              <li
-                key={word}
-                className="flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-base"
-              >
+              <li key={word} className="cw-badge cw-badge--plain h-7 gap-1 pr-1 text-sm">
                 {word}
                 <button
                   type="button"
                   onClick={() => removeFilter(word)}
                   aria-label={`Remove ${word}`}
-                  className="text-muted hover:text-foreground transition-colors"
+                  title={`Remove ${word}`}
+                  className="cw-btn cw-btn--ghost cw-btn--icon cw-btn--sm h-5 w-5"
                 >
-                  <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                  <X strokeWidth={1.5} aria-hidden="true" />
                 </button>
               </li>
             ))}
           </ul>
         )}
-        <div>
-          <Button
-            onClick={handleRunRulesNow}
-            disabled={runningRules || prefs.autoDeleteKeywords.length === 0}
-          >
-            {runningRules ? 'Running…' : 'Run filters now'}
+        <div className="space-y-1 border-t border-border pt-4">
+          <Button onClick={handleRunRulesNow} disabled={runningRules || prefs.autoDeleteKeywords.length === 0}>
+            {runningRules ? 'Running' : 'Run filters now'}
           </Button>
-          <p className="mt-1 text-base text-muted">
-            Deletes any article currently in your Inbox whose title matches one of these filters.
-            Saved and archived articles are left alone.
+          <p className="text-xs text-muted">
+            Removes Inbox articles that match. Saved and archived articles are left alone.
           </p>
-          {rulesRunResult && <p className="mt-1 text-base text-muted">{rulesRunResult}</p>}
+          {rulesRunResult && <p className="text-xs text-muted">{rulesRunResult}</p>}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

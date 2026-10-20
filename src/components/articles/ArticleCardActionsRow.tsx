@@ -44,13 +44,12 @@ export default function ArticleCardActionsRow({
     handleCreateFolder,
   } = actions
 
-  const iconButton =
-    'inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-sm transition-colors disabled:opacity-50'
+  const iconButton = 'cw-btn cw-btn--ghost cw-btn--sm'
 
   return (
     <div
       className={
-        'mt-1.5 flex flex-wrap items-center gap-1 transition-opacity duration-[var(--motion-fast)] ' +
+        '-ml-2 mt-1.5 flex flex-wrap items-center gap-1 transition-opacity duration-[var(--dur-fast)] ' +
         (alwaysVisible
           ? ''
           : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100')
@@ -75,9 +74,9 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className={`${iconButton} text-muted hover:text-foreground`}
+          className={iconButton}
         >
-          <Bookmark size={13} strokeWidth={1.75} aria-hidden="true" />
+          <Bookmark strokeWidth={1.5} aria-hidden="true" />
           Unsave
         </button>
       )}
@@ -87,9 +86,9 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleUnfile}
-          className={`${iconButton} text-muted hover:text-foreground`}
+          className={iconButton}
         >
-          <ArchiveRestore size={13} strokeWidth={1.75} aria-hidden="true" />
+          <ArchiveRestore strokeWidth={1.5} aria-hidden="true" />
           Unarchive
         </button>
       ) : (
@@ -97,9 +96,9 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleArchive}
-          className={`${iconButton} text-muted hover:text-foreground`}
+          className={iconButton}
         >
-          <Archive size={13} strokeWidth={1.75} aria-hidden="true" />
+          <Archive strokeWidth={1.5} aria-hidden="true" />
           Archive
         </button>
       )}
@@ -109,9 +108,9 @@ export default function ArticleCardActionsRow({
           type="button"
           disabled={pending}
           onClick={handleDelete}
-          className={`${iconButton} text-muted hover:text-danger`}
+          className={`${iconButton} hover:text-danger`}
         >
-          <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+          <Trash2 strokeWidth={1.5} aria-hidden="true" />
           Delete
         </button>
       )}

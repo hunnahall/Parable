@@ -46,8 +46,8 @@ export default async function ArchivePage({
 
   return (
     <>
-      <PageHeader title="Archive" />
-      <div className={filters.display === 'card' ? 'mx-auto max-w-6xl p-6' : 'mx-auto max-w-3xl p-6'}>
+      <PageHeader title="Archive" wide={filters.display === 'card'} />
+      <div className={filters.display === 'card' ? 'mx-auto max-w-[var(--content-max)] px-4 py-6 min-[1000px]:px-8' : 'mx-auto max-w-3xl px-4 py-6 min-[1000px]:px-8'}>
         <ArticlesView
           basePath="/archive"
           items={page.items}

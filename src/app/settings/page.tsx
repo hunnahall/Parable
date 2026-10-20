@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" />
-      <div className="mx-auto max-w-2xl p-6">
+      <div className="mx-auto max-w-3xl px-4 py-6 min-[1000px]:px-8">
         <SettingsForm initialPreferences={preferences} usage={usage} />
       </div>
     </>

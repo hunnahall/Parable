@@ -1,270 +1,251 @@
 @import "tailwindcss";
+@import "./covenant/tokens.css";
+@import "./covenant/components.css";
+
+/* ---------------------------------------------------------------------------
+   Covenant Works Design System v2 (see ~/Drive/Projects/covenant_works/).
+   tokens.css and components.css are copies of that folder's files; edit them
+   there and re-copy. Parable's signature color is Slate Blue, set with
+   data-accent="slate-blue" on <html> (src/app/layout.tsx). This file maps
+   the tokens onto Tailwind's theme so utilities (bg-surface, text-muted,
+   border-border, ...) resolve to the v2 palette in both themes, and wires
+   the fonts next/font loads.
+--------------------------------------------------------------------------- */
+
+:root {
+  --font-sans: var(--font-hanken-grotesk), "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-foreground-muted: var(--foreground-muted);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-brand: var(--brand);
-  --color-brand-foreground: var(--brand-foreground);
-  --color-muted: var(--muted);
-  --color-danger: var(--danger);
-  --color-danger-foreground: var(--danger-foreground);
-  --color-border: var(--border);
-  --color-border-subtle: var(--border-subtle);
+  --color-background: var(--bg);
   --color-surface: var(--surface);
-  --color-surface-border: var(--surface-border);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--fg);
+  --color-foreground-muted: var(--fg-2);
+  --color-muted: var(--fg-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-rule: var(--rule);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-scrim: var(--scrim);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-on-fg: var(--on-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
 
-  /* rounded-sm / rounded-md / rounded-lg. Defined on :root below rather
-     than literally here so .card-elevated and friends can reach the same
-     value through var() — @theme inline deliberately does not emit its
-     own custom properties. */
-  --radius-sm: var(--radius-tight);
-  --radius-md: var(--radius);
-  --radius-lg: var(--radius);
+  /* The spec's type scale. text-base is the spec's md (default UI text). */
+  --text-2xs: 11px;
+  --text-2xs--line-height: 1.45;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.45;
+  --text-base: 14px;
+  --text-base--line-height: 1.45;
+  --text-md: 14px;
+  --text-md--line-height: 1.45;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 20px;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 40px;
+  --text-3xl--line-height: 1.1;
+  --text-4xl: 60px;
+  --text-4xl--line-height: 1.1;
 
-  /* Compact app type scale. Parable's utility usage is text-lg for titles
-     and primary content, text-base for metadata, text-sm for inline
-     actions, text-xs for counts — Tailwind's defaults (18/16/14/12px) run
-     one full step larger than every comparable product UI, so the whole
-     app reads as a zoomed-in page. Rescaling the four tokens here retunes
-     every call site at once and keeps the names in the right order, which
-     rewriting ~190 class strings would not. text-2xl and up are left at
-     Tailwind's defaults — those are the landing page's display sizes. */
-  --text-xs: 0.6875rem; /* 11px — counts, badges */
-  --text-sm: 0.75rem; /* 12px — inline actions, labels */
-  --text-base: 0.8125rem; /* 13px — metadata, secondary text */
-  --text-lg: 0.9375rem; /* 15px — titles, primary content */
+  /* Square corners everywhere. rounded-full stays for radios, avatars and
+     status dots. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
 
-  --font-heading: var(--font-hanken-grotesk);
-  --font-label: var(--font-instrument-sans);
-  --font-data: var(--font-lato);
-  /* --font-sans is Tailwind's own default-body namespace — mapping it to
-     the active body font variable (set per-request in layout.tsx from
-     data-font on <html>, see the [data-font] rules below) means plain
-     text without an explicit font-* class already gets the right font. */
-  --font-sans: var(--font-body-active);
+  /* Shadows exist only on things that float. */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: var(--shadow-overlay);
+  --shadow-lg: var(--shadow-overlay);
+  --shadow-overlay: var(--shadow-overlay);
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
-/* Covenant Works design system: ink on paper, hairline rules, one
-   functional accent per surface — see
-   ~/Downloads/Design System/covenant-works-design-system_updated.html.
-   The system's original zero-radius rule was dropped: every product this
-   app is measured against (Linear, Vercel, Attio, Resend, Railway) softens
-   its controls, and sharp corners were the single loudest thing dating the
-   UI. One --radius token now carries every surface and control.
-   Parable is dark-only (Reader branch dropped light mode/the theme
-   switcher) — these are the values that used to live in a
-   prefers-color-scheme/[data-theme="dark"] override, now the sole
-   palette. Surface sits brighter than the page behind it ("elevated"),
-   the same discipline the (now-removed) light mode followed, just
-   running the other direction — box shadows are close to invisible on a
-   dark background, so cards skip shadow-card entirely and rely on the
-   brighter surface tone + a light-on-dark hairline border instead;
-   floating panels (modals/drawers) sit over a dimmed backdrop where a
-   real shadow is visible again, so shadow-modal stays a true shadow. */
-:root {
-  --background: #0b0c0f;
-  --foreground: #f4f5f7;
-  --foreground-muted: #b3b6c0;
-  --border: #33353d;
-  --border-subtle: #26272c;
-
-  /* One radius for the whole app. --radius is the default for cards,
-     panels, dialogs, buttons and inputs; --radius-tight is for small
-     inline chrome (chips, icon buttons) where 6px looks bulbous. */
-  --radius: 6px;
-  --radius-tight: 4px;
-
-  --surface: #17181c;
-  --surface-border: rgba(255, 255, 255, 0.09);
-  --shadow-card: none;
-  --shadow-card-hover: none;
-  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.25);
-
-  /* Grain texture for the page background only (never cards — see
-     .card-elevated below, which sets no background-image of its own).
-     A self-contained feTurbulence SVG rather than a fetched asset — same
-     technique tools like fffuel's nnnoise generate, just authored inline
-     so there's no external asset/network dependency. Desaturated
-     (saturate 0) so it's neutral gray speckle, then the outer <rect>'s
-     opacity keeps it near-invisible (~4%) at normal viewing distance. The
-     tile is a fixed 180x180 px region with stitchTiles="stitch" so it
-     repeats seamlessly via the default CSS background-repeat. */
-  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
-
-  /* Action blue: the Parable mark's own brand blue, reserved as a true
-     accent (links, focus, active nav, primary button borders) — never a
-     decorative fill; see the button-styling convention below. --brand
-     is the same hue/value as --accent here (there's no longer a
-     lighter/darker split between them now that light mode is gone), kept
-     as a separate token since call sites still reach for --brand
-     specifically for the mark/logo treatment. */
-  --accent: #92afd7;
-  --accent-foreground: #131418;
-  --brand: #92afd7;
-  --brand-foreground: #131418;
-  /* Danger red: the design system's actual dark-mode red (Rose, #CC8B8C)
-     with dark ink text — see
-     ~/Downloads/Design System/covenant-works-design-system_updated.html.
-     Contrast checked: Rose+ink 6.70:1, comfortably passes AA. */
-  --danger: #cc8b8c;
-  --danger-foreground: #131418;
-  /* "Label gray" from the design system's core neutrals — the app's
-     existing secondary/de-emphasized text color, most call sites already
-     use it via text-muted. */
-  --muted: #9a9daa;
-
-  /* Body font default (Inter) — the [data-font="..."] rules below
-     override this. Defined on :root, not body, since Tailwind's preflight
-     resolves the page's default font-family on <html> itself (:root),
-     which has no ancestor to inherit a body-scoped custom property from. */
-  --font-body-active: var(--font-inter);
-
-  /* Motion tokens per the design system's Motion table — a state
-     changing, not a flourish. Fast: hover/focus/press. Standard: panel,
-     tab, section transitions. Slow: page-level reveals, modal in/out. */
-  --motion-fast: 120ms;
-  --motion-standard: 200ms;
-  --motion-slow: 360ms;
-}
-
-/* Body font choice (Settings page) — Inter is the unset/default case, so
-   it needs no rule of its own. Headings stay Hanken Grotesk regardless of
-   this setting (see h1-h4 below) — the font preference only ever affects
-   body/UI text, not the brand's heading identity. */
-[data-font="hanken-grotesk"] { --font-body-active: var(--font-hanken-grotesk); }
-[data-font="work-sans"] { --font-body-active: var(--font-work-sans); }
-[data-font="instrument-sans"] { --font-body-active: var(--font-instrument-sans); }
-[data-font="lato"] { --font-body-active: var(--font-lato); }
-
-body {
-  background-color: var(--background);
-  background-image: var(--grain-image);
-  color: var(--foreground);
-  /* Explicit rather than relying solely on Tailwind preflight's
-     `--default-font-family` -> `--font-sans` chain — this is the one
-     property the whole font-switching setting hinges on, so it's set
-     directly and unambiguously here rather than through an indirect,
-     harder-to-verify path. */
-  font-family: var(--font-body-active);
-}
-
-/* Element-level typography, in @layer base so Tailwind's utilities (a
-   later layer) win over it. Unlayered rules beat every layered one
-   regardless of specificity, which is why these have to be in a layer at
-   all: without it a bare `h1` rule silently overrode `<h1 className="...">`
-   at every call site, including PageHeader's. */
 @layer base {
-  h1, h2, h3, h4 {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    letter-spacing: -0.01em;
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-sans);
+    font-weight: 600;
   }
 
-  /* A default for headings that don't opt into a size, not a display
-     treatment. The page-title role this used to serve (a 36-48px clamp
-     used as a graphic element) belongs to PageHeader now — every app page
-     opens with that compact sticky bar instead, so nothing was left
-     wanting a 48px <h1> except the login form, where it read as shouting. */
   h1 {
-    font-size: 1.375rem; /* 22px */
-    line-height: 1.2;
+    font-size: var(--text-2xl);
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-title);
   }
+
   h2 {
-    font-size: 1.125rem; /* 18px */
-    line-height: 1.3;
+    font-size: var(--text-xl);
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-title);
   }
+
   h3 {
-    font-size: 1rem; /* 16px */
-    line-height: 1.4;
+    font-size: var(--text-lg);
+    line-height: var(--leading-snug);
   }
+
   h4 {
-    font-size: 0.8125rem; /* 13px */
-    line-height: 1.4;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    font-size: var(--text-sm);
+    line-height: var(--leading-ui);
+  }
+
+  /* Figures use tabular digits so counts line up. */
+  .tabular-nums,
+  input,
+  td {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-/* Elevation system (design-instructions.md #2): one shared surface for
-   every card/panel/modal/popover instead of hand-tuning border+shadow
-   per component. See globals.css :root for --surface/--shadow-card
-   (shadow-card is `none` in this dark-only palette — see the comment
-   above the tokens for why). Radius lives here too, so every card in the
-   app rounds without touching a single call site. */
+/* Square corners everywhere except radios, avatars and status dots. Utility
+   classes live in a cascade layer, so this unlayered rule wins over every
+   rounded-* in the codebase, including plain `rounded`. */
+[class*="rounded"]:not(.rounded-full) {
+  border-radius: 0;
+}
+
+/* Level 1: panels, cards, inputs. Solid surface, hairline, no shadow. */
 .card-elevated {
   background-color: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
 }
 
-/* Modals/drawers/popovers — same surface, a taller shadow tier since
-   these float above a dimmed backdrop rather than sitting flush on the
-   page. */
+/* Level 2: menus, popovers, modals, toasts, the mobile nav sheet. The only
+   things that carry a shadow. */
 .card-modal {
-  background-color: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-modal);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-overlay);
 }
 
-/* Native checkboxes/radios otherwise render in the browser's default blue
-   rather than the brand accent. */
-input[type="checkbox"], input[type="radio"] {
+/* Mono uppercase label (table headers, nav groups, eyebrows). */
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* Native checkboxes and radios take the signature color. */
+input[type="checkbox"],
+input[type="radio"] {
   accent-color: var(--accent);
 }
 
 /* iOS Safari zooms the viewport whenever a focused field's text is under
-   16px, and the compact type scale above puts every input below that. The
-   desktop scale is the one worth having, so the guard is scoped to the
-   viewports where the zoom actually fires. */
+   16px. Scoped to phone widths, where the zoom fires. */
 @media (max-width: 767px) {
-  input, select, textarea {
+  input,
+  select,
+  textarea {
     font-size: 16px;
   }
 }
 
-.bg-dot-grid {
-  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
-  background-size: 20px 20px;
+/* Loading blocks are flat (no shimmer) and stay hidden for the first 300ms
+   so fast loads never flash a skeleton. */
+@keyframes skeleton-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.skeleton {
+  background: var(--fill-active);
+  animation: skeleton-in 1ms linear 300ms backwards;
 }
 
 @keyframes landing-reveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
 .animate-landing-reveal {
-  animation: landing-reveal var(--motion-slow) ease-in-out both;
+  animation: landing-reveal var(--dur-slow) var(--ease-in-out) both;
 }
 
-/* Empty-state watermark (design-instructions.md #8): a large, pale outline
-   of the existing Parable mark behind empty-state copy, instead of
-   inventing new illustration. Position: relative on the container,
-   this absolutely-centered behind its text content (z-index left at
-   default stacking order — text is a later sibling so it paints on top). */
-.empty-state-watermark {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  opacity: 0.05;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-landing-reveal {
-    animation: none;
+/* Modals fade and rise 4px over 360ms. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
+.animate-overlay-in {
+  animation: overlay-in var(--dur-slow) var(--ease-in-out) both;
+}
 
-a, button, input, select, [tabindex] {
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+/* The Parable mark draws itself in once per session (ParableMark, the
+   sidebar header). tokens.css cuts all animation under reduced motion. */
+@keyframes mark-draw {
+  from {
+    stroke-dashoffset: 1;
   }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.mark-draw path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: mark-draw 720ms var(--ease-out) forwards;
+}
+
+/* Danger fills red only inside a confirm step. */
+.cw-btn--danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-fg);
+}
+.cw-btn--danger-solid:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 86%, var(--bg));
 }

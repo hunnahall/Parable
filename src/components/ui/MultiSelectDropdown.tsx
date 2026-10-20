@@ -54,20 +54,20 @@ export default function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 w-full border border-border px-3 py-2 text-base bg-background text-left truncate"
+        className="cw-btn cw-btn--secondary w-full justify-between"
       >
         <span className="flex-1 truncate">{buttonLabel}</span>
-        <ChevronDown size={14} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
+        <ChevronDown strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
       </button>
       {open && (
-        <div className="card-modal absolute z-10 mt-1 max-h-64 w-56 overflow-y-auto py-1">
+        <div className="cw-menu absolute z-30 mt-1 max-h-64 w-56 overflow-y-auto">
           {options.length === 0 ? (
-            <p className="px-3 py-2 text-base text-muted">No options.</p>
+            <p className="px-2 py-2 text-sm text-muted">Nothing to filter by yet</p>
           ) : (
             options.map((option) => (
               <label
                 key={option.id}
-                className="flex items-center gap-2 px-3 py-1.5 text-base hover:bg-foreground/5 cursor-pointer"
+                className="cw-check cw-menu__item"
               >
                 <input
                   type="checkbox"
@@ -82,7 +82,7 @@ export default function MultiSelectDropdown({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 text-sm text-muted hover:text-foreground border-t border-border-subtle mt-1 pt-1.5"
+              className="cw-menu__item mt-1 border-t border-border text-muted"
             >
               Clear
             </button>

@@ -46,8 +46,8 @@ export default async function SavedPage({
 
   return (
     <>
-      <PageHeader title="Saved" />
-      <div className={filters.display === 'card' ? 'mx-auto max-w-6xl p-6' : 'mx-auto max-w-3xl p-6'}>
+      <PageHeader title="Saved" wide={filters.display === 'card'} />
+      <div className={filters.display === 'card' ? 'mx-auto max-w-[var(--content-max)] px-4 py-6 min-[1000px]:px-8' : 'mx-auto max-w-3xl px-4 py-6 min-[1000px]:px-8'}>
         <ArticlesView
           basePath="/saved"
           items={page.items}

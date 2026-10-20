@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="136" viewBox="0 0 160 136" fill="none" stroke="#92afd7" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M34 30 H126 V130 H34 Z"></path><path d="M56 30 V130"></path><path d="M56 30 V4"></path><path d="M56 4 L68 16 L80 4"></path></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 160 160" fill="none">
+  <style>
+    .tile{fill:#F7F7F5}.edge{stroke:rgba(19,20,24,.22)}.hatch{stroke:rgba(19,20,24,.05)}.mark{stroke:#4F719F}
+    @media (prefers-color-scheme:dark){.tile{fill:#0E0F12}.edge{stroke:rgba(255,255,255,.18)}.hatch{stroke:rgba(255,255,255,.06)}.mark{stroke:#92AFD7}}
+  </style>
+  <defs>
+    <pattern id="h" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="9" class="hatch" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect class="tile" x="0" y="0" width="160" height="160"/>
+  <rect x="0" y="0" width="160" height="160" fill="url(#h)"/>
+  <rect class="edge" x="2" y="2" width="156" height="156" stroke-width="4"/>
+  <g class="mark" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" transform="translate(80 80) scale(0.86) translate(-80 -67)">
+    <path d="M34 30 H126 V130 H34 Z"/>
+    <path d="M56 30 V130"/>
+    <path d="M56 30 V4"/>
+    <path d="M56 4 L68 16 L80 4"/>
+  </g>
+</svg>

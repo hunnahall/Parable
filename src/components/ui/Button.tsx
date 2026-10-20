@@ -1,44 +1,44 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-// The app previously carried six button treatments as copy-pasted class
-// strings across a dozen files, which is why they had already drifted
-// (three different paddings, two different disabled opacities). One
-// component, one source of truth.
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid'
-export type ButtonSize = 'sm' | 'md'
-
-const BASE =
-  'inline-flex items-center justify-center gap-1.5 rounded-md font-medium ' +
-  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-
-const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-7 px-2.5 text-sm',
-  md: 'h-8 px-3 text-base',
-}
+// Covenant Works buttons (components.css .cw-btn). Primary is ink; accent
+// (the signature color) is for one button per screen, the screen's most
+// frequent action; danger is outlined and fills red only inside a confirm
+// step (danger-solid). While an action runs, callers swap the label for
+// the action in progress ("Archiving") and disable the button. No spinners.
+export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger' | 'danger-solid'
+export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'border border-brand bg-brand text-brand-foreground hover:opacity-90',
-  secondary: 'border border-border text-foreground hover:bg-foreground/5',
-  ghost: 'text-muted hover:text-foreground hover:bg-foreground/5',
-  danger: 'border border-danger text-danger hover:bg-danger/10',
-  'danger-solid': 'border border-danger bg-danger text-danger-foreground hover:opacity-90',
+  primary: 'cw-btn--primary',
+  secondary: 'cw-btn--secondary',
+  accent: 'cw-btn--accent',
+  ghost: 'cw-btn--ghost',
+  danger: 'cw-btn--danger',
+  'danger-solid': 'cw-btn--danger-solid',
+}
+
+const SIZES: Record<ButtonSize, string> = { sm: 'cw-btn--sm', md: '', lg: 'cw-btn--lg' }
+
+export function buttonClass({
+  variant = 'secondary',
+  size = 'md',
+  icon = false,
+}: { variant?: ButtonVariant; size?: ButtonSize; icon?: boolean } = {}) {
+  return ['cw-btn', VARIANTS[variant], SIZES[size], icon ? 'cw-btn--icon' : ''].filter(Boolean).join(' ')
 }
 
 export default function Button({
   variant = 'secondary',
   size = 'md',
+  icon = false,
   className = '',
   type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant
   size?: ButtonSize
+  // Square icon-only button; pass aria-label and title.
+  icon?: boolean
 }) {
-  return (
-    <button
-      type={type}
-      className={`${BASE} ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
-      {...props}
-    />
-  )
+  return <button type={type} className={`${buttonClass({ variant, size, icon })} ${className}`} {...props} />
 }

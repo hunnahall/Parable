@@ -2,13 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { Monitor, Moon, Search, Sun, type LucideIcon } from 'lucide-react'
 import { SIDEBAR_NAV } from './sidebarNav'
+import { updatePreferences } from '@/lib/preferences/actions'
+import { applyTheme } from '@/lib/preferences/applyTheme'
+import type { ThemeChoice } from '@/lib/preferences/data'
 
-type Command = { id: string; label: string; hint?: string; run: () => void }
+// Dispatched by the sidebar's Search button, so touch screens (no ⌘K)
+// reach the same palette.
+export const PALETTE_OPEN_EVENT = 'parable:open-palette'
 
-// Subsequence match, not substring — "arch" and "acv" both find Archive,
-// which is what makes a palette feel like a palette rather than a filter box.
+type Command = { id: string; label: string; group: string; icon: LucideIcon; run: () => void }
+
+// Subsequence match, not substring: "arch" and "acv" both find Archive.
 function matches(query: string, label: string): boolean {
   if (!query) return true
   const haystack = label.toLowerCase()
@@ -21,6 +27,12 @@ function matches(query: string, label: string): boolean {
   return true
 }
 
+const THEMES: { value: ThemeChoice; label: string; icon: LucideIcon }[] = [
+  { value: 'system', label: 'Use device theme', icon: Monitor },
+  { value: 'dark', label: 'Use dark theme', icon: Moon },
+  { value: 'light', label: 'Use light theme', icon: Sun },
+]
+
 export default function CommandPalette() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -29,16 +41,27 @@ export default function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    function reset() {
+      setQuery('')
+      setSelected(0)
+    }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         setOpen((v) => !v)
-        setQuery('')
-        setSelected(0)
+        reset()
       }
     }
+    function onOpen() {
+      setOpen(true)
+      reset()
+    }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    window.addEventListener(PALETTE_OPEN_EVENT, onOpen)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener(PALETTE_OPEN_EVENT, onOpen)
+    }
   }, [])
 
   useEffect(() => {
@@ -48,20 +71,27 @@ export default function CommandPalette() {
   // Built from SIDEBAR_NAV so the palette can never list a destination the
   // sidebar has dropped, or miss one it has gained.
   const commands = useMemo<Command[]>(
-    () =>
-      SIDEBAR_NAV.filter((e) => e.type === 'link').map((e) => ({
-        id: e.href,
-        label: e.label,
-        hint: 'Go to',
-        run: () => router.push(e.href),
+    () => [
+      ...SIDEBAR_NAV.flatMap((e) =>
+        e.type === 'link'
+          ? [{ id: e.href, label: e.label, group: 'Go to', icon: e.icon, run: () => router.push(e.href) }]
+          : []
+      ),
+      ...THEMES.map((t) => ({
+        id: `theme-${t.value}`,
+        label: t.label,
+        group: 'Theme',
+        icon: t.icon,
+        run: () => {
+          applyTheme(t.value)
+          void updatePreferences({ theme: t.value })
+        },
       })),
+    ],
     [router]
   )
 
-  const results = useMemo(
-    () => commands.filter((c) => matches(query, c.label)),
-    [commands, query]
-  )
+  const results = useMemo(() => commands.filter((c) => matches(query, c.label)), [commands, query])
 
   function close() {
     setOpen(false)
@@ -91,20 +121,16 @@ export default function CommandPalette() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[55]">
-      <div
-        className="absolute inset-0 bg-foreground/40 transition-opacity duration-[var(--motion-standard)]"
-        onClick={close}
-        aria-hidden="true"
-      />
+    <div className="fixed inset-0 z-[var(--z-modal)] flex justify-center px-4 pt-[15vh]">
+      <div className="cw-scrim" onClick={close} aria-hidden="true" />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="card-modal absolute left-1/2 top-[20%] w-full max-w-md -translate-x-1/2 overflow-hidden"
+        className="cw-command animate-overlay-in relative z-[61] self-start"
       >
-        <div className="flex items-center gap-2 border-b border-border-subtle px-3">
-          <Search size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-muted" />
+        <div className="cw-command__input">
+          <Search strokeWidth={1.5} aria-hidden="true" />
           <input
             ref={inputRef}
             value={query}
@@ -113,18 +139,20 @@ export default function CommandPalette() {
               setSelected(0)
             }}
             onKeyDown={onInputKeyDown}
-            placeholder="Go to…"
+            placeholder="Go to a page or change the theme"
             aria-label="Command"
-            className="h-10 flex-1 bg-transparent text-lg placeholder:text-muted focus-visible:outline-none"
           />
         </div>
 
         {results.length === 0 ? (
-          <div className="px-3 py-6 text-center text-base text-muted">No matches.</div>
+          <div className="px-4 py-6 text-center text-sm text-muted">No matches</div>
         ) : (
-          <ul className="max-h-72 overflow-y-auto p-1">
+          <ul className="cw-command__list max-h-80 overflow-y-auto">
             {results.map((c, i) => (
               <li key={c.id}>
+                {(i === 0 || results[i - 1].group !== c.group) && (
+                  <div className="cw-menu__label">{c.group}</div>
+                )}
                 <button
                   type="button"
                   onMouseEnter={() => setSelected(i)}
@@ -132,18 +160,28 @@ export default function CommandPalette() {
                     close()
                     c.run()
                   }}
-                  className={
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-base transition-colors ' +
-                    (i === selected ? 'bg-foreground/[0.08] text-foreground' : 'text-muted')
-                  }
+                  data-active={i === selected}
+                  className="cw-menu__item"
                 >
-                  {c.hint && <span className="text-sm text-muted">{c.hint}</span>}
-                  <span className="text-foreground">{c.label}</span>
+                  <c.icon strokeWidth={1.5} aria-hidden="true" />
+                  {c.label}
                 </button>
               </li>
             ))}
           </ul>
         )}
+
+        <div className="cw-command__foot [@media(hover:none)]:hidden">
+          <span>
+            <kbd className="cw-kbd">↵</kbd>Open
+          </span>
+          <span>
+            <kbd className="cw-kbd">↑↓</kbd>Move
+          </span>
+          <span>
+            <kbd className="cw-kbd">esc</kbd>Close
+          </span>
+        </div>
       </div>
     </div>
   )

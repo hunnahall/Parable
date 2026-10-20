@@ -7,8 +7,7 @@ import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
 
 // Wipes everything that belongs to this account — subscriptions, folders,
 // per-article curation (saved, archived, notes, read state, folder
-// placement) and preferences — so the app comes back looking like a brand
-// new signup.
+// placement) and preferences, leaving an empty account.
 //
 // Scoped to this user throughout. The shared catalog (feeds, feed_items,
 // is deliberately untouched: those rows are read by every
@@ -56,56 +55,6 @@ export async function performFullReset(): Promise<{ error: string | null }> {
 
   revalidatePath('/', 'layout')
   return { error: null }
-}
-
-// "Bring my inbox to zero": archives every currently-unfiled article (no
-// article_states row at all) for this user in one shot — the same
-// state transition archiveArticle() applies one at a time (see
-// src/lib/articles/actions.ts), and the same "unfiled" predicate the
-// Articles page and its sidebar badge use (see getArticlesUnfiledCount in
-// src/lib/articles/list.ts). Saved articles, notes, read history,
-// feeds, and folders are all untouched — only feed_items with zero
-// article_states rows are affected, so this can never touch (or need to
-// check) a saved or filed article.
-export async function performPartialReset(): Promise<{
-  error: string | null
-  archivedCount: number
-}> {
-  const user = await getUser()
-  if (!user) return { error: 'Not signed in', archivedCount: 0 }
-
-  const supabase = await createClient()
-
-  // The same unfiled predicate the Inbox uses, done as a SQL anti-join
-  // instead of fetching every filed id and interpolating it into a
-  // `.not('id', 'in', ...)` filter, which blows past PostgREST's URL limit
-  // once article_states is into the hundreds.
-  const { data: unfiledItems, error: itemsError } = await feedItemsRpc(
-    supabase,
-    'feed_items_excluding_states',
-    { p_user_id: user.id, p_exclude_states: UNFILED_EXCLUDED_STATES }
-  ).select('id')
-  if (itemsError) return { error: itemsError.message, archivedCount: 0 }
-
-  const unfiledIds = ((unfiledItems ?? []) as { id: string }[]).map((row) => row.id)
-  if (unfiledIds.length === 0) return { error: null, archivedCount: 0 }
-
-  const now = new Date().toISOString()
-  // Plain insert, not upsert: unfiledIds is definitionally the set of
-  // items with no existing article_states row, so there's no conflict to
-  // handle.
-  const { error: insertError } = await supabase.from('article_states').insert(
-    unfiledIds.map((feedItemId) => ({
-      user_id: user.id,
-      feed_item_id: feedItemId,
-      state: 'archived' as const,
-      archived_at: now,
-    }))
-  )
-  if (insertError) return { error: insertError.message, archivedCount: 0 }
-
-  revalidatePath('/')
-  return { error: null, archivedCount: unfiledIds.length }
 }
 
 // Retroactively applies the Filters list (see FiltersForm) to whatever's

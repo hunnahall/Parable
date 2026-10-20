@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation'
 import { login } from './actions'
 import { getUser } from '@/lib/supabase/server'
-import ParableLogo from '@/components/brand/ParableLogo'
+import Button from '@/components/ui/Button'
+import Alert from '@/components/ui/Alert'
+import { Field, Input } from '@/components/ui/Input'
 
 export default async function LoginPage({
   searchParams,
@@ -14,48 +16,25 @@ export default async function LoginPage({
   const { error, message } = await searchParams
 
   return (
-    <div className="p-8 max-w-sm mx-auto space-y-6">
-      <ParableLogo height={32} />
-      <h1>Sign in</h1>
-      <p className="text-muted">Parable is invite-only.</p>
+    <div className="mx-auto max-w-sm space-y-6 px-4 py-16">
+      <div className="space-y-1">
+        <h1>Sign in</h1>
+        <p className="text-sm text-muted">Parable is invite-only.</p>
+      </div>
 
-      {error && <p className="text-danger text-lg">{error}</p>}
-      {message && <p className="text-green-600 text-lg">{message}</p>}
+      {error && <Alert tone="danger" title="Couldn't sign in">{error}</Alert>}
+      {message && <Alert tone="success" title={message} />}
 
-      <form className="space-y-3">
-        <div className="space-y-1">
-          <label htmlFor="email" className="block text-base">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            className="w-full border border-border px-3 py-2 bg-background"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="password" className="block text-base">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={6}
-            className="w-full border border-border px-3 py-2 bg-background"
-          />
-        </div>
-        <div className="flex gap-3 pt-2">
-          <button
-            formAction={login}
-            className="flex-1 border border-brand bg-brand text-brand-foreground py-2 text-lg transition-colors hover:opacity-90"
-          >
-            Sign in
-          </button>
-        </div>
+      <form className="cw-panel cw-panel__body space-y-4">
+        <Field label="Email" htmlFor="email">
+          <Input id="email" name="email" type="email" autoComplete="email" required />
+        </Field>
+        <Field label="Password" htmlFor="password">
+          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+        </Field>
+        <Button type="submit" formAction={login} variant="primary" size="lg" className="w-full">
+          Sign in
+        </Button>
       </form>
     </div>
   )

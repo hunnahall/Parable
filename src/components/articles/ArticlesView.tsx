@@ -10,8 +10,9 @@ import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
 import ArticleCardGrid from './ArticleCardGrid'
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
-import Button from '@/components/ui/Button'
+import Button, { buttonClass } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import EmptyState from '@/components/ui/EmptyState'
 
 export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
 export type ArticlesDisplayMode = 'list' | 'card'
@@ -24,6 +25,21 @@ export interface ArticlesFilters {
   dateFrom: string | null
   dateTo: string | null
   display: ArticlesDisplayMode
+}
+
+const EMPTY_COPY: Record<ArticlesViewMode, { title: string; text: string }> = {
+  unfiled: {
+    title: 'Nothing new',
+    text: 'Stories from the last 12 hours show up here as your feeds publish them.',
+  },
+  saved: {
+    title: 'Nothing saved yet',
+    text: 'Articles you save stay here until you delete them.',
+  },
+  archived: {
+    title: 'Nothing archived',
+    text: 'Archived articles wait here for 24 hours, then go.',
+  },
 }
 
 function buildUrl(basePath: string, filters: ArticlesFilters): string {
@@ -267,11 +283,11 @@ export default function ArticlesView({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3 border-b border-border-subtle pb-4">
+      <div className="space-y-3 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             type="search"
-            placeholder="Search articles…"
+            placeholder="Search titles"
             value={queryDraft}
             onChange={(e) => setQueryDraft(e.target.value)}
             onBlur={commitSearch}
@@ -316,42 +332,32 @@ export default function ArticlesView({
               </label>
             </>
           )}
-          <div className="ml-auto flex items-center overflow-hidden rounded-md border border-border">
+          <div className="cw-seg ml-auto" role="group" aria-label="Display">
             <button
               type="button"
               onClick={() => navigate({ display: 'list' })}
               aria-label="List view"
+              title="List view"
               aria-pressed={filters.display === 'list'}
-              className={
-                'flex h-8 w-8 items-center justify-center transition-colors ' +
-                (filters.display === 'list'
-                  ? 'bg-foreground/10 text-foreground'
-                  : 'text-muted hover:text-foreground')
-              }
             >
-              <LayoutList size={15} strokeWidth={1.75} aria-hidden="true" />
+              <LayoutList size={16} strokeWidth={1.5} aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={() => navigate({ display: 'card' })}
               aria-label="Card view"
+              title="Card view"
               aria-pressed={filters.display === 'card'}
-              className={
-                'flex h-8 w-8 items-center justify-center border-l border-border transition-colors ' +
-                (filters.display === 'card'
-                  ? 'bg-foreground/10 text-foreground'
-                  : 'text-muted hover:text-foreground')
-              }
             >
-              <LayoutGrid size={15} strokeWidth={1.75} aria-hidden="true" />
+              <LayoutGrid size={16} strokeWidth={1.5} aria-hidden="true" />
             </button>
           </div>
         </div>
       </div>
 
       {enableBulkActions && localItems.length > 0 && (
-        <div className="flex items-center gap-2 text-base">
-          <label className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="cw-check">
             <input
               type="checkbox"
               checked={selectedIds.size > 0 && selectedIds.size === localItems.length}
@@ -360,7 +366,7 @@ export default function ArticlesView({
               }}
               onChange={toggleSelectAll}
             />
-            <span className="text-muted">
+            <span className="text-muted tabular-nums">
               {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
             </span>
           </label>
@@ -369,7 +375,7 @@ export default function ArticlesView({
               {filters.view !== 'archived' && (
                 <Button size="sm" variant="secondary" disabled={bulkPending} onClick={handleBulkArchive}>
                   {archivingAllCount !== null
-                    ? `Archiving ${archivingAllCount}…`
+                    ? `Archiving ${archivingAllCount}`
                     : 'Archive selected'}
                 </Button>
               )}
@@ -384,7 +390,7 @@ export default function ArticlesView({
                   onClick={handleBulkDelete}
                 >
                   {confirmingDelete
-                    ? `Really delete ${selectedIds.size}? Click to confirm`
+                    ? `Delete ${selectedIds.size} articles`
                     : 'Delete selected'}
                 </Button>
               )}
@@ -397,30 +403,27 @@ export default function ArticlesView({
           )}
         </div>
       )}
-      {bulkError && <p className="text-base text-danger">{bulkError}</p>}
+      {bulkError && <p className="text-sm text-danger">{bulkError}</p>}
 
       {localItems.length === 0 ? (
-        <div className="relative py-16 text-center">
-          <div className="empty-state-watermark" aria-hidden="true">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/parable-mark.svg" alt="" className="w-40 h-40" />
-          </div>
-          <p className="relative text-lg text-muted">
-            {activeFilterCount > 0 ? 'No articles match your filters.' : 'No articles yet.'}
-          </p>
-          {/* An empty state that only reports emptiness leaves the reader
-              at a dead end — the one thing that resolves it goes here. */}
-          {activeFilterCount === 0 && (
-            <Link
-              href="/feeds"
-              className="relative mt-3 inline-flex h-8 items-center rounded-md border border-brand bg-brand px-3 text-base font-medium text-brand-foreground transition-opacity hover:opacity-90"
-            >
-              Add a feed
-            </Link>
-          )}
-        </div>
+        activeFilterCount > 0 ? (
+          <EmptyState title="No matching articles">Try a different search or clear the filters.</EmptyState>
+        ) : (
+          <EmptyState
+            title={EMPTY_COPY[filters.view].title}
+            action={
+              filters.view === 'unfiled' ? (
+                <Link href="/feeds" className={buttonClass({ variant: 'primary' })}>
+                  Add a feed
+                </Link>
+              ) : undefined
+            }
+          >
+            {EMPTY_COPY[filters.view].text}
+          </EmptyState>
+        )
       ) : filters.display === 'card' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 min-[640px]:grid-cols-2 min-[1200px]:grid-cols-3">
           {localItems.map((item) => (
             <ArticleCardGrid
               key={item.id}
@@ -437,7 +440,7 @@ export default function ArticlesView({
           ))}
         </div>
       ) : (
-        <ul className="card-elevated divide-y divide-border-subtle overflow-hidden">
+        <ul className="card-elevated divide-y divide-border overflow-hidden">
           {localItems.map((item) => (
             <ArticleCard
               key={item.id}
@@ -459,7 +462,7 @@ export default function ArticlesView({
       {cursor && (
         <div className="flex justify-center">
           <Button onClick={handleLoadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
+            {loadingMore ? 'Loading' : 'Load more'}
           </Button>
         </div>
       )}

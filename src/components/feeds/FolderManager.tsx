@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { X } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
+import Button from '@/components/ui/Button'
+import { Field, Input, Select } from '@/components/ui/Input'
 import { addFolder, updateFolder, removeFolder } from '@/lib/folders/actions'
 import type { FolderRow } from '@/lib/folders/data'
 
@@ -111,111 +113,93 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
   }
 
   return (
-    <div className="card-elevated p-4 space-y-3">
-      <h2 className="text-lg font-bold">Manage folders</h2>
-      <form onSubmit={handleAdd} className="flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="New folder name"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="flex-1 min-w-[12rem] border border-border px-3 py-2 text-lg bg-background"
-        />
-        <select
-          value={parentId}
-          onChange={(e) => setParentId(e.target.value)}
-          className="flex-1 min-w-[10rem] border border-border px-3 py-2 text-lg bg-background"
-        >
-          <option value="">No parent (top level)</option>
-          {rows.map(({ folder, depth }) => (
-            <option key={folder.id} value={folder.id}>
-              {'—'.repeat(depth)} {folder.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-foreground text-background px-4 py-2 text-base transition-colors hover:opacity-90 disabled:opacity-50"
-        >
+    <section className="cw-panel">
+      <div className="cw-panel__head">
+        <h2 className="cw-panel__title">Folders</h2>
+      </div>
+      <form onSubmit={handleAdd} className="cw-panel__body grid gap-3 border-b border-border min-[640px]:grid-cols-[2fr_1.5fr_auto] min-[640px]:items-end">
+        <Field label="New folder" htmlFor="new-folder-name">
+          <Input id="new-folder-name" placeholder="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Inside" htmlFor="new-folder-parent">
+          <Select id="new-folder-parent" value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">Top level</option>
+            {rows.map(({ folder, depth }) => (
+              <option key={folder.id} value={folder.id}>
+                {'  '.repeat(depth)}
+                {folder.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Button type="submit" variant="primary" disabled={pending}>
           Add folder
-        </button>
+        </Button>
       </form>
-      {error && <p className="text-lg text-danger">{error}</p>}
+      {error && <p className="cw-error px-4 pt-3">{error}</p>}
       {rows.length === 0 ? (
-        <p className="text-lg text-muted">No folders yet.</p>
+        <p className="px-4 py-6 text-sm text-muted">No folders yet.</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map(({ folder, depth }) =>
             editingId === folder.id ? (
-              <li key={folder.id} className="py-2 flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-lg bg-background"
-                />
-                <select
-                  value={editParentId}
-                  onChange={(e) => setEditParentId(e.target.value)}
-                  className="flex-1 min-w-[10rem] border border-border px-2 py-1 text-lg bg-background"
-                >
-                  <option value="">No parent (top level)</option>
-                  {rows
-                    .filter(({ folder: f }) => f.id !== folder.id)
-                    .map(({ folder: f, depth: d }) => (
-                      <option key={f.id} value={f.id}>
-                        {'—'.repeat(d)} {f.name}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => handleSaveEdit(folder.id)}
-                  className="bg-foreground text-background px-3 py-1.5 text-base transition-colors hover:opacity-90 disabled:opacity-50"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingId(null)}
-                  className="text-base text-muted hover:text-accent transition-colors"
-                >
+              <li key={folder.id} className="grid gap-3 px-4 py-3 min-[640px]:grid-cols-[2fr_1.5fr_auto_auto] min-[640px]:items-end">
+                <Field label="Name" htmlFor={`edit-folder-${folder.id}`}>
+                  <Input id={`edit-folder-${folder.id}`} value={editName} onChange={(e) => setEditName(e.target.value)} />
+                </Field>
+                <Field label="Inside" htmlFor={`edit-folder-parent-${folder.id}`}>
+                  <Select
+                    id={`edit-folder-parent-${folder.id}`}
+                    value={editParentId}
+                    onChange={(e) => setEditParentId(e.target.value)}
+                  >
+                    <option value="">Top level</option>
+                    {rows
+                      .filter(({ folder: f }) => f.id !== folder.id)
+                      .map(({ folder: f, depth: d }) => (
+                        <option key={f.id} value={f.id}>
+                          {'  '.repeat(d)}
+                          {f.name}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+                <Button variant="primary" disabled={pending} onClick={() => handleSaveEdit(folder.id)}>
+                  Save folder
+                </Button>
+                <Button variant="ghost" onClick={() => setEditingId(null)}>
                   Cancel
-                </button>
+                </Button>
               </li>
             ) : (
-              <li key={folder.id} className="py-2 flex items-center justify-between gap-2 text-lg">
+              <li key={folder.id} className="flex items-center justify-between gap-2 px-4 py-2 text-sm hover:bg-fill-hover">
                 <span style={{ paddingLeft: depth * 16 }}>
-                  <Link href={`/read?folder=${folder.id}`} className="hover:text-accent hover:underline">
+                  <Link href={`/saved?folder=${folder.id}`} className="underline-offset-4 hover:underline">
                     {folder.name}
                   </Link>
                 </span>
-                <span className="flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(folder)}
-                    className="text-sm text-muted hover:text-accent transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
+                <span className="flex shrink-0 items-center gap-1">
+                  <Button variant="ghost" size="sm" icon aria-label={`Edit folder ${folder.name}`} title="Edit folder" onClick={() => startEdit(folder)}>
+                    <Pencil strokeWidth={1.5} aria-hidden="true" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon
                     disabled={pending}
                     onClick={() => handleRemove(folder.id)}
-                    className="text-muted hover:text-danger transition-colors disabled:opacity-50"
                     aria-label={`Delete folder ${folder.name}`}
+                    title="Delete folder"
+                    className="hover:text-danger"
                   >
-                    <X size={12} strokeWidth={1.75} />
-                  </button>
+                    <X strokeWidth={1.5} aria-hidden="true" />
+                  </Button>
                 </span>
               </li>
             )
           )}
         </ul>
       )}
-    </div>
+    </section>
   )
 }
