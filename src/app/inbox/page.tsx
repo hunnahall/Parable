@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getArticlesPage, listFeeds } from '@/lib/articles/list'
 import { listFolderOptions } from '@/lib/folders/data'
+import { getHealth } from '@/lib/health/data'
+import HealthBanners from '@/components/health/HealthBanners'
 import PageHeader from '@/components/layout/PageHeader'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
@@ -31,7 +33,7 @@ export default async function InboxPage({
     display: params.display === 'card' ? 'card' : 'list',
   }
 
-  const [page, folders, feedOptions] = await Promise.all([
+  const [page, folders, feedOptions, health] = await Promise.all([
     getArticlesPage({
       query: filters.query || undefined,
       view: filters.view,
@@ -42,12 +44,14 @@ export default async function InboxPage({
     }),
     listFolderOptions(),
     listFeeds(),
+    getHealth(),
   ])
 
   return (
     <>
       <PageHeader title="Inbox" wide={filters.display === 'card'} />
-      <div className={filters.display === 'card' ? 'mx-auto max-w-[var(--content-max)] px-4 py-6 min-[1000px]:px-8' : 'mx-auto max-w-3xl px-4 py-6 min-[1000px]:px-8'}>
+      <div className={filters.display === 'card' ? 'mx-auto max-w-[var(--content-max)] space-y-4 px-4 py-6 min-[1000px]:px-8' : 'mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8'}>
+        <HealthBanners health={health} />
         <ArticlesView
           basePath="/inbox"
           items={page.items}
