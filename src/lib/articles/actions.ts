@@ -199,3 +199,23 @@ export async function setArticleNote(
   revalidatePath('/')
   return { error: null }
 }
+
+// Returns archived articles to the Inbox in one call: a whole story's
+// sources at once, from the Archive page.
+export async function unarchiveArticles(feedItemIds: string[]): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (feedItemIds.length === 0) return { error: null }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('article_states')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('state', 'archived')
+    .in('feed_item_id', feedItemIds)
+  if (error) return { error: error.message }
+
+  revalidatePath('/')
+  return { error: null }
+}

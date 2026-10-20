@@ -4,7 +4,7 @@ import { Hanken_Grotesk, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getArticlesUnfiledCount } from '@/lib/articles/list'
+import { getInboxStoryCount } from '@/lib/stories/data'
 import ParableLogo from '@/components/brand/ParableLogo'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
@@ -39,7 +39,7 @@ export default async function RootLayout({
   // above and memoized by React's cache() for the rest of this request).
   const [prefs, inboxCount] = await Promise.all([
     getUserPreferences(),
-    user ? getArticlesUnfiledCount() : Promise.resolve(0),
+    user ? getInboxStoryCount() : Promise.resolve(0),
   ])
 
   return (

@@ -205,31 +205,6 @@ function toArticleItem(
   }
 }
 
-// Sidebar badge count: articles with no curation row at all (not saved,
-// not archived) — same "unfiled" predicate the Articles page uses as its
-// default view. feed_items_excluding_states does the anti-join in SQL
-// (see the migration that added it) rather than fetching every filed id
-// and building a `.not('id', 'in', ...)` filter, which broke once
-// article_states grew past a few hundred rows.
-export async function getArticlesUnfiledCount(): Promise<number> {
-  const user = await getUser()
-  if (!user) return 0
-
-  const supabase = await createClient()
-  // Not `.select('id', { count: 'exact', head: true })`: PostgREST doesn't
-  // return a Content-Range count header for a HEAD request against an RPC
-  // endpoint (only plain table queries), so that combination silently came
-  // back with count === null here — the badge was always rendering as 0.
-  // The inbox is bounded (excludes saved/archived/deleted), so fetching ids
-  // and counting them client-side is cheap and actually works.
-  const { data, error } = await feedItemsRpc(supabase, 'feed_items_excluding_states', {
-    p_user_id: user.id,
-    p_exclude_states: UNFILED_EXCLUDED_STATES,
-  }).select('id')
-  logQueryError('articles/getArticlesUnfiledCount', error)
-  return data?.length ?? 0
-}
-
 export interface ArticlesPageFilters {
   query?: string
   view?: 'unfiled' | 'saved' | 'archived'

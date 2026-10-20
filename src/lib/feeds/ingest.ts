@@ -39,7 +39,7 @@ const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; ParableRSSReader/1.0; +https:/
 // recognized so the Inbox can group it.
 //   'off' — don't embed, don't look up
 //   'log' — embed and look up, log matches, record nothing
-//   'on'  — record the match on the row (duplicate_of)
+//   'on'  — the new article joins the matched article's story (story_id)
 // Every match is logged either way, and DEDUPE_MODE=log in the environment
 // pulls back without a deploy.
 const DEDUPE_MODE = (process.env.DEDUPE_MODE ?? 'on') as 'off' | 'log' | 'on'
@@ -215,14 +215,14 @@ interface PreparedItem {
   // reaches processItem at all.
   filteredOutFor: string[]
   embedding: number[] | null
-  // Set when the free exact-match check (identical link, or identical
-  // title) already found this story under another feed; processItem then
-  // skips the vector lookup.
-  exactMatchId: string | null
+  // The story found by the free exact-match check (identical link or
+  // title under another feed); processItem then skips the vector lookup.
+  exactMatchStoryId: string | null
 }
 
 type DuplicateMatch = {
   id: string
+  story_id: string
   title: string
   title_en: string | null
   distance: number
@@ -288,30 +288,30 @@ function cosineDistance(a: number[], b: number[]): number {
 // items in flight at the same instant can still both miss.
 class RunCache {
   private byKey = new Map<string, string>()
-  private embedded: { embedding: number[]; id: string }[] = []
+  private embedded: { embedding: number[]; storyId: string }[] = []
 
-  find(prepared: PreparedItem): { id: string; distance: number } | null {
+  find(prepared: PreparedItem): { storyId: string; distance: number } | null {
     if (DEDUPE_MODE === 'off') return null
 
     for (const key of this.keysOf(prepared)) {
-      const id = this.byKey.get(key)
-      if (id) return { id, distance: 0 }
+      const storyId = this.byKey.get(key)
+      if (storyId) return { storyId, distance: 0 }
     }
 
     if (!prepared.embedding) return null
-    let best: { id: string; distance: number } | null = null
+    let best: { storyId: string; distance: number } | null = null
     for (const entry of this.embedded) {
       const distance = cosineDistance(prepared.embedding, entry.embedding)
       if (distance <= DEDUPE_MAX_DISTANCE && (!best || distance < best.distance)) {
-        best = { id: entry.id, distance }
+        best = { storyId: entry.storyId, distance }
       }
     }
     return best
   }
 
-  add(prepared: PreparedItem, id: string): void {
-    for (const key of this.keysOf(prepared)) this.byKey.set(key, id)
-    if (prepared.embedding) this.embedded.push({ embedding: prepared.embedding, id })
+  add(prepared: PreparedItem, storyId: string): void {
+    for (const key of this.keysOf(prepared)) this.byKey.set(key, storyId)
+    if (prepared.embedding) this.embedded.push({ embedding: prepared.embedding, storyId })
   }
 
   private keysOf(prepared: PreparedItem): string[] {
@@ -331,7 +331,8 @@ class RunCache {
 // URL. Recognizing those needs no vector scan. Strictly stricter than the
 // cosine threshold, so it never changes which matches happen.
 //
-// Returns a map keyed by the caller's index. Failures return an empty map.
+// Returns each entry's matched story id, keyed by the caller's index.
+// Failures return an empty map.
 async function findExactMatches(
   supabase: AdminClient,
   entries: PreparedItem[]
@@ -356,6 +357,7 @@ async function findExactMatches(
 
   const rows = (data ?? []) as {
     id: string
+    story_id: string
     link: string | null
     title: string
     title_en: string | null
@@ -372,7 +374,7 @@ async function findExactMatches(
 
   entries.forEach((entry, index) => {
     const row = (entry.item.link ? byLink.get(entry.item.link) : undefined) ?? byTitle.get(entry.matchTitle)
-    if (row) out.set(index, row.id)
+    if (row) out.set(index, row.story_id)
   })
   return out
 }
@@ -455,7 +457,8 @@ async function writeItem(
   prepared: PreparedItem,
   stored: StoredText,
   imageUrl: string | null,
-  duplicateOf: string | null
+  storyId: string,
+  matched: boolean
 ): Promise<ItemResult> {
   const { item, guid, title, titleEn, filteredOutFor, originalLanguage } = prepared
 
@@ -473,7 +476,7 @@ async function writeItem(
         published_at: item.isoDate ?? null,
         original_language: originalLanguage,
         title_en: titleEn,
-        duplicate_of: duplicateOf,
+        story_id: storyId,
         image_url: item.imageUrl ?? imageUrl ?? null,
         // Stored even in 'log' mode: a later item can only match a row
         // whose embedding is populated.
@@ -528,7 +531,7 @@ async function writeItem(
   return {
     inserted: true,
     feedItemId: insertedId,
-    duplicate: duplicateOf !== null,
+    duplicate: matched,
     fullText: !textError && stored.kind === 'full',
   }
 }
@@ -549,16 +552,23 @@ async function processItem(
     // the free exact match from prepareItems, then this run's own writes
     // (invisible to the database checks until committed), then the vector
     // lookup.
-    let match: { id: string; distance: number; via: string; title?: string } | null = null
-    if (prepared.exactMatchId) {
-      match = { id: prepared.exactMatchId, distance: 0, via: 'exact' }
+    let match: { storyId: string; distance: number; via: string; title?: string } | null = null
+    if (prepared.exactMatchStoryId) {
+      match = { storyId: prepared.exactMatchStoryId, distance: 0, via: 'exact' }
     } else {
       const inRun = runCache.find(prepared)
       if (inRun) {
         match = { ...inRun, via: 'same run' }
       } else {
         const found = await findDuplicate(supabase, prepared)
-        if (found) match = { id: found.id, distance: found.distance, via: 'vector', title: found.title_en ?? found.title }
+        if (found) {
+          match = {
+            storyId: found.story_id,
+            distance: found.distance,
+            via: 'vector',
+            title: found.title_en ?? found.title,
+          }
+        }
       }
     }
     if (match) {
@@ -566,16 +576,19 @@ async function processItem(
       // recognizable at a glance.
       console.log(
         `ingest: same story (${match.via}) d=${match.distance.toFixed(4)} ` +
-          `from=${match.id}${DEDUPE_MODE === 'on' ? '' : ' (not recorded)'}\n` +
+          `story=${match.storyId}${DEDUPE_MODE === 'on' ? '' : ' (not joined)'}\n` +
           `  this:  "${matchTitle}"` +
           (match.title ? `\n  match: "${match.title}"` : '')
       )
     }
-    const duplicateOf = DEDUPE_MODE === 'on' && match ? match.id : null
+    // A fixed id for the story: the matched one, or a new one this article
+    // starts. Later sources join it rather than chaining article to article.
+    const joined = DEDUPE_MODE === 'on' && match !== null
+    const storyId = joined && match ? match.storyId : crypto.randomUUID()
 
     const { stored, imageUrl } = await readArticle(prepared)
-    const result = await writeItem(supabase, feed, prepared, stored, imageUrl, duplicateOf)
-    if (result.feedItemId) runCache.add(prepared, result.feedItemId)
+    const result = await writeItem(supabase, feed, prepared, stored, imageUrl, storyId, joined)
+    if (result.feedItemId) runCache.add(prepared, storyId)
     return result
   } catch (itemErr) {
     // A single malformed item or a one-off insert failure shouldn't sink
@@ -665,7 +678,7 @@ async function prepareItems(
         matchTitle,
         filteredOutFor,
         embedding: null as number[] | null,
-        exactMatchId: null as string | null,
+        exactMatchStoryId: null as string | null,
       },
     ]
   })
@@ -674,7 +687,7 @@ async function prepareItems(
   // question without the vector lookup in processItem.
   const exact = await findExactMatches(supabase, gated)
   gated.forEach((entry, index) => {
-    entry.exactMatchId = exact.get(index) ?? null
+    entry.exactMatchStoryId = exact.get(index) ?? null
   })
 
   let embedUsage = EMPTY_USAGE

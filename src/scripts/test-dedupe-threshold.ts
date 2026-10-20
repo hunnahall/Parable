@@ -1,7 +1,6 @@
 // Calibrates DEDUPE_MAX_DISTANCE (src/lib/feeds/ingest.ts) — the cosine
 // distance under which ingest treats two articles as the same story and
-// reuses one summary for both, skipping the other's fetch and
-// summarization call.
+// groups them. For real groups, see src/scripts/audit-stories.ts.
 //
 // Run with:
 //   npx tsx src/scripts/test-dedupe-threshold.ts
@@ -15,9 +14,8 @@
 // The pairs that must not merge are the point. "Central Bank Raises Rates"
 // and "Central Bank Holds Rates Steady" are lexically almost identical and
 // mean opposite things; a threshold loose enough to swallow that one would
-// staple the wrong summary onto a real article, and the body is discarded
-// at ingest so there is no recovering from it. Add pairs from your own
-// feeds here before moving the threshold.
+// hide one story inside another. Add pairs from your own feeds here before
+// moving the threshold.
 //
 // Also checks the plumbing this is useless without: that a number[]
 // embedding survives supabase-js -> PostgREST -> vector(512) intact.
