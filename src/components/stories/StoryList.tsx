@@ -62,6 +62,13 @@ function isStorySeen(story: Pick<Story, 'seenAt' | 'lastActivityAt'>): boolean {
 
 const ids = (stories: Story[]) => stories.flatMap((story) => story.sources.map((s) => s.id))
 
+// How long a removed row takes to collapse: tokens.css --dur-std.
+const COLLAPSE_MS = 200
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 // The Inbox and Archive: stories, newest activity first. A story is every
 // article about the same thing from the reader's feeds; archiving or saving
 // it applies to all of them.
@@ -83,6 +90,10 @@ export default function StoryList({
   const router = useRouter()
   const toast = useToast()
   const [removed, setRemoved] = useState<Set<string>>(new Set())
+  // Rows collapsing on their way out. A ref mirrors it so the timer that
+  // removes them skips any that Undo or an error brought back meanwhile.
+  const [leaving, setLeaving] = useState<Set<string>>(new Set())
+  const leavingRef = useRef<Set<string>>(new Set())
   const [folders, setFolders] = useState(initialFolders)
   const [queryDraft, setQueryDraft] = useState(query)
   const [bulkPending, setBulkPending] = useState(false)
@@ -94,11 +105,27 @@ export default function StoryList({
 
   const visible = stories.filter((story) => !removed.has(story.id))
 
+  function setLeavingIds(next: Set<string>) {
+    leavingRef.current = next
+    setLeaving(next)
+  }
+
+  // Collapses the rows, then takes them out of the list.
   function hide(storyIds: string[]) {
-    setRemoved((prev) => new Set([...prev, ...storyIds]))
+    setLeavingIds(new Set([...leavingRef.current, ...storyIds]))
+    setTimeout(
+      () => {
+        const done = storyIds.filter((id) => leavingRef.current.has(id))
+        if (done.length === 0) return
+        setLeavingIds(new Set([...leavingRef.current].filter((id) => !done.includes(id))))
+        setRemoved((prev) => new Set([...prev, ...done]))
+      },
+      prefersReducedMotion() ? 0 : COLLAPSE_MS
+    )
   }
 
   function unhide(storyIds: string[]) {
+    setLeavingIds(new Set([...leavingRef.current].filter((id) => !storyIds.includes(id))))
     setRemoved((prev) => new Set([...prev].filter((id) => !storyIds.includes(id))))
   }
 
@@ -137,7 +164,7 @@ export default function StoryList({
   // arrives afterwards isn't in this list, so it stays in the Inbox.
   async function archiveAll() {
     setBulkPending(true)
-    await archive(visible)
+    await archive(visible.filter((story) => !leavingRef.current.has(story.id)))
     setBulkPending(false)
   }
 
@@ -163,7 +190,7 @@ export default function StoryList({
     []
   )
 
-  function isDimmed(story: Story): boolean {
+  function isSeen(story: Story): boolean {
     if (view !== 'inbox') return false
     return isStorySeen(story) || seenLocally.get(story.id) === story.lastActivityAt
   }
@@ -191,7 +218,8 @@ export default function StoryList({
 
       {view === 'inbox' && visible.length > 0 && (
         <div className="flex items-center justify-end">
-          <Button size="sm" disabled={bulkPending} onClick={archiveAll}>
+          {/* The Inbox's one accent button. */}
+          <Button variant="accent" size="sm" disabled={bulkPending} onClick={archiveAll}>
             <Archive strokeWidth={1.5} aria-hidden="true" />
             {bulkPending ? 'Archiving' : 'Archive all'}
           </Button>
@@ -240,7 +268,8 @@ export default function StoryList({
                     hide([s.id])
                     toast('Story saved')
                   }}
-                  dimmed={isDimmed(story)}
+                  seen={isSeen(story)}
+                  leaving={leaving.has(story.id)}
                   onSeen={view === 'inbox' ? handleSeen : undefined}
                 />
               ))}

@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Archive, ArchiveRestore, BookOpen, ChevronDown, EyeOff, ExternalLink, FolderPlus, Sparkles } from 'lucide-react'
+import { Archive, ArchiveRestore, BookOpen, ChevronDown, Ellipsis, EyeOff, ExternalLink, FolderPlus, Sparkles } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
 import type { StoryViewMode } from './StoryList'
 import { markArticleRead } from '@/lib/articles/actions'
 import { addFolder, setArticleFolders } from '@/lib/folders/actions'
 import { formatAge } from '@/lib/formatting'
+import { languageLabel } from '@/lib/languages'
 import ArticleFolderPicker from '@/components/articles/ArticleFolderPicker'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
+import Tooltip from '@/components/ui/Tooltip'
 import HideWordDialog from './HideWordDialog'
 import ReaderView from './ReaderView'
 import StorySummary from './StorySummary'
@@ -24,18 +26,43 @@ export interface FolderOption {
 
 // On screen this long (and at least half visible) counts as seen.
 const SEEN_AFTER_MS = 1000
+// Reading speed for the meta line's read time.
+const WORDS_PER_MINUTE = 220
+// Tagged languages: two-letter codes other than English. 'und' (undetectable)
+// and three-letter codes (detection found no common language, e.g. 'sco'
+// for an English headline) get no tag.
+function taggedLanguage(code: string | null): string | null {
+  return code && code !== 'en' && /^[a-z]{2}$/.test(code) ? code : null
+}
+
+// Only https images and icons, so a page never loads mixed content.
+function httpsUrl(url: string | null): string | null {
+  return url?.startsWith('https://') ? url : null
+}
+
+function faviconFor(link: string | null): string | null {
+  if (!httpsUrl(link)) return null
+  try {
+    return `${new URL(link!).origin}/favicon.ico`
+  } catch {
+    return null
+  }
+}
 
 // One story: the newest source's title and feed, a count of the feeds
-// covering it, and its actions. Archiving and saving apply to every source
+// covering it, a thumbnail when a source has an image, and its actions.
+// Unseen titles are semibold; seen ones drop to regular weight in the
+// secondary text color. Archiving and saving apply to every source
 // the reader can see, so the story leaves or is kept as a whole.
 //
-// Desktop shows the actions on hover. On phone (under 640px) tapping the
+// Desktop shows the actions as icons on hover. On phone (under 640px) tapping the
 // story opens a panel with them instead, since there's no hover.
 export default function StoryRow({
   story,
   view,
   folders,
-  dimmed = false,
+  seen = false,
+  leaving = false,
   onSeen,
   onFolderCreated,
   onArchive,
@@ -45,7 +72,8 @@ export default function StoryRow({
   story: Story
   view: StoryViewMode
   folders: FolderOption[]
-  dimmed?: boolean
+  seen?: boolean
+  leaving?: boolean
   onSeen?: (story: Story) => void
   onFolderCreated: (folder: FolderOption) => void
   onArchive: (story: Story) => void
@@ -62,6 +90,10 @@ export default function StoryRow({
   const [addingFolder, setAddingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [pending, setPending] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [imageFailed, setImageFailed] = useState(false)
+  const [faviconFailed, setFaviconFailed] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
 
   const lead = story.sources[0]
@@ -70,13 +102,20 @@ export default function StoryRow({
   const feedCount = new Set(story.sources.map((s) => s.feedId)).size
   const extraCount = story.sources.length - 1
   const age = formatAge(lead.publishedAt ?? lead.createdAt)
-  const meta = [lead.feedTitle, age].filter(Boolean).join(' · ')
+  const readTime = lead.wordCount ? `${Math.max(1, Math.ceil(lead.wordCount / WORDS_PER_MINUTE))} min` : null
+  const meta = [lead.feedTitle, age, readTime].filter(Boolean).join(' · ')
+  const language = taggedLanguage(lead.language)
+  // Newest source with an image first.
+  const image = imageFailed ? null : (story.sources.map((s) => httpsUrl(s.imageUrl)).find(Boolean) ?? null)
+  const favicon = faviconFailed ? null : faviconFor(lead.link)
+  const titleWeight = seen ? 'font-normal text-foreground-muted' : 'font-semibold text-foreground'
+  const selected = readerOpen || panelOpen
 
   // Seen tracking. Restarts when the story gains a source, since that
-  // undims it.
+  // makes it unseen again.
   useEffect(() => {
     const el = rowRef.current
-    if (!onSeen || dimmed || !el) return
+    if (!onSeen || seen || !el) return
     let timer: ReturnType<typeof setTimeout> | null = null
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -94,7 +133,23 @@ export default function StoryRow({
       observer.disconnect()
       if (timer) clearTimeout(timer)
     }
-  }, [onSeen, dimmed, story])
+  }, [onSeen, seen, story])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    function onPointerDown(e: PointerEvent) {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [moreOpen])
 
   async function saveTo(folderIds: string[]) {
     if (folderIds.length === 0) return
@@ -137,134 +192,235 @@ export default function StoryRow({
     else onUnarchive(story)
   }
 
-  const archiveButton =
-    view === 'inbox' ? (
-      <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost cw-btn--sm">
-        <Archive strokeWidth={1.5} aria-hidden="true" />
-        Archive
-      </button>
-    ) : (
-      <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost cw-btn--sm">
-        <ArchiveRestore strokeWidth={1.5} aria-hidden="true" />
-        Move to Inbox
-      </button>
-    )
+  const archiveLabel = view === 'inbox' ? 'Archive' : 'Move to Inbox'
+  // Icon buttons grow to the 40px touch size where there's no hover.
+  const iconButton = 'cw-btn cw-btn--ghost cw-btn--sm cw-btn--icon [@media(hover:none)]:size-10'
 
   return (
     <li
       ref={rowRef}
-      className={`group px-4 py-3 transition-[background-color,opacity] duration-[var(--dur-std)] hover:bg-fill-hover ${dimmed ? 'opacity-55' : ''}`}
+      // Collapses to nothing before leaving the list (archive, save, restore).
+      className={`grid transition-[grid-template-rows] duration-[var(--dur-std)] ease-[var(--ease-out)] ${leaving ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}
     >
-      <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-        <span suppressHydrationWarning>{meta}</span>
-        {extraCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowSources((v) => !v)}
-            aria-expanded={showSources}
-            className="inline-flex items-center gap-1 hover:text-foreground"
-          >
-            {feedCount > 1 ? (
-              <Badge>{feedCount} feeds</Badge>
-            ) : (
-              <span>
-                {extraCount} more {extraCount === 1 ? 'article' : 'articles'}
-              </span>
-            )}
-            <ChevronDown
-              size={14}
-              strokeWidth={1.5}
-              aria-hidden="true"
-              className={`transition-transform ${showSources ? 'rotate-180' : ''}`}
-            />
-          </button>
-        )}
-      </div>
+      {/* Clipped only while collapsing, so menus can overflow the row. */}
+      <div className={`min-h-0 ${leaving ? 'overflow-hidden' : ''}`}>
+        <div
+          className={`group flex gap-3 px-4 py-3 transition-colors duration-[var(--dur-std)] hover:bg-fill-hover ${
+            selected ? 'bg-accent-soft shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent-soft' : ''
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+              {favicon && (
+                // A plain img: no Vercel image-optimization quota, no proxy.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={favicon}
+                  alt=""
+                  width={16}
+                  height={16}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  onError={() => setFaviconFailed(true)}
+                  className="size-4 shrink-0 grayscale transition-[filter] duration-[var(--dur-fast)] group-hover:grayscale-0"
+                />
+              )}
+              <span suppressHydrationWarning>{meta}</span>
+              {language && (
+                <Tooltip label={languageLabel(language)}>
+                  <span className="cw-tag" aria-label={languageLabel(language)}>
+                    {language.toUpperCase()}
+                  </span>
+                </Tooltip>
+              )}
+              {extraCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSources((v) => !v)}
+                  aria-expanded={showSources}
+                  className="inline-flex items-center gap-1 hover:text-foreground"
+                >
+                  {feedCount > 1 ? (
+                    <Badge>{feedCount} feeds</Badge>
+                  ) : (
+                    <span>
+                      {extraCount} more {extraCount === 1 ? 'article' : 'articles'}
+                    </span>
+                  )}
+                  <ChevronDown
+                    size={14}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                    className={`transition-transform ${showSources ? 'rotate-180' : ''}`}
+                  />
+                </button>
+              )}
+            </div>
 
-      {/* Phone: the title opens the action panel. */}
-      <button
-        type="button"
-        onClick={() => setPanelOpen(true)}
-        className="block w-full break-words text-left text-lg font-medium min-[640px]:hidden"
-      >
-        {lead.title}
-      </button>
-      {/* Desktop: the title goes to the publisher. */}
-      <div className="hidden min-[640px]:block">
-        {lead.link ? (
-          <a
-            href={lead.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => void markArticleRead(lead.id)}
-            className="block break-words text-lg font-medium underline-offset-4 hover:underline"
-          >
-            {lead.title}
-          </a>
-        ) : (
-          <span className="block break-words text-lg font-medium">{lead.title}</span>
-        )}
-      </div>
-
-      {showSources && (
-        <ul className="mt-2 space-y-1 border-l border-border pl-3">
-          {story.sources.slice(1).map((source) => (
-            <li key={source.id} className="text-sm">
-              <span className="text-xs text-muted">{source.feedTitle} · </span>
-              {source.link ? (
+            {/* Phone: the title opens the action panel. */}
+            <button
+              type="button"
+              onClick={() => setPanelOpen(true)}
+              className={`block w-full break-words text-left text-lg min-[640px]:hidden ${titleWeight}`}
+            >
+              {lead.title}
+            </button>
+            {/* Desktop: the title goes to the publisher. */}
+            <div className="hidden min-[640px]:block">
+              {lead.link ? (
                 <a
-                  href={source.link}
+                  href={lead.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => void markArticleRead(source.id)}
-                  className="underline-offset-4 hover:underline"
+                  onClick={() => void markArticleRead(lead.id)}
+                  className={`block break-words text-lg underline-offset-4 hover:underline ${titleWeight}`}
                 >
-                  {source.title}
+                  {lead.title}
                 </a>
               ) : (
-                source.title
+                <span className={`block break-words text-lg ${titleWeight}`}>{lead.title}</span>
               )}
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
 
-      {summaryOpen && <StorySummary story={story} />}
+            {showSources && (
+              <ul className="mt-2 space-y-1 border-l border-border pl-3">
+                {story.sources.slice(1).map((source) => (
+                  <li key={source.id} className="text-sm">
+                    <span className="text-xs text-muted">{source.feedTitle} · </span>
+                    {source.link ? (
+                      <a
+                        href={source.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => void markArticleRead(source.id)}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {source.title}
+                      </a>
+                    ) : (
+                      source.title
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
 
-      <div className="-ml-2 mt-1.5 hidden flex-wrap items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 group-focus-within:opacity-100 min-[640px]:flex [@media(hover:none)]:opacity-100">
-        <button
-          type="button"
-          onClick={() => setSummaryOpen((v) => !v)}
-          aria-expanded={summaryOpen}
-          className="cw-btn cw-btn--ghost cw-btn--sm"
-        >
-          <Sparkles strokeWidth={1.5} aria-hidden="true" />
-          Summary
-        </button>
-        <button type="button" onClick={() => setReaderOpen(true)} className="cw-btn cw-btn--ghost cw-btn--sm">
-          <BookOpen strokeWidth={1.5} aria-hidden="true" />
-          Reader view
-        </button>
-        <ArticleFolderPicker
-          selectedIds={[]}
-          folders={folders}
-          onChange={saveTo}
-          addingFolder={addingFolder}
-          setAddingFolder={setAddingFolder}
-          newFolderName={newFolderName}
-          setNewFolderName={setNewFolderName}
-          onCreateFolder={createFolderAndSave}
-          disabled={pending}
-        />
-        {archiveButton}
-        {view === 'inbox' && (
-          <button type="button" disabled={pending} onClick={() => setHideWordOpen(true)} className="cw-btn cw-btn--ghost cw-btn--sm">
-            <EyeOff strokeWidth={1.5} aria-hidden="true" />
-            Hide word
-          </button>
-        )}
+            {summaryOpen && <StorySummary story={story} />}
+
+            <div className="-ml-2 mt-1.5 hidden items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 group-focus-within:opacity-100 min-[640px]:flex [@media(hover:none)]:opacity-100">
+              <Tooltip label="Summary">
+                <button
+                  type="button"
+                  onClick={() => setSummaryOpen((v) => !v)}
+                  aria-expanded={summaryOpen}
+                  aria-label="Summary"
+                  className={`${iconButton} ${summaryOpen ? 'text-foreground' : ''}`}
+                >
+                  <Sparkles strokeWidth={1.5} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <Tooltip label="Reader view">
+                <button type="button" onClick={() => setReaderOpen(true)} aria-label="Reader view" className={iconButton}>
+                  <BookOpen strokeWidth={1.5} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <Tooltip label="Save">
+                <ArticleFolderPicker
+                  selectedIds={[]}
+                  folders={folders}
+                  onChange={saveTo}
+                  addingFolder={addingFolder}
+                  setAddingFolder={setAddingFolder}
+                  newFolderName={newFolderName}
+                  setNewFolderName={setNewFolderName}
+                  onCreateFolder={createFolderAndSave}
+                  disabled={pending}
+                  iconOnly
+                  buttonClassName="[@media(hover:none)]:size-10"
+                />
+              </Tooltip>
+              <Tooltip label={archiveLabel}>
+                <button type="button" disabled={pending} onClick={archiveOrRestore} aria-label={archiveLabel} className={iconButton}>
+                  {view === 'inbox' ? (
+                    <Archive strokeWidth={1.5} aria-hidden="true" />
+                  ) : (
+                    <ArchiveRestore strokeWidth={1.5} aria-hidden="true" />
+                  )}
+                </button>
+              </Tooltip>
+              {(view === 'inbox' || lead.link) && (
+                <div ref={moreRef} className="relative">
+                  <Tooltip label="More">
+                    <button
+                      type="button"
+                      onClick={() => setMoreOpen((v) => !v)}
+                      aria-expanded={moreOpen}
+                      aria-haspopup="menu"
+                      aria-label="More actions"
+                      className={iconButton}
+                    >
+                      <Ellipsis strokeWidth={1.5} aria-hidden="true" />
+                    </button>
+                  </Tooltip>
+                  {moreOpen && (
+                    <div role="menu" className="cw-menu absolute left-0 top-full z-30 mt-1">
+                      {view === 'inbox' && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={pending}
+                          onClick={() => {
+                            setMoreOpen(false)
+                            setHideWordOpen(true)
+                          }}
+                          className="cw-menu__item"
+                        >
+                          <EyeOff strokeWidth={1.5} aria-hidden="true" />
+                          Hide stories with a word
+                        </button>
+                      )}
+                      {lead.link && (
+                        <a
+                          href={lead.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          role="menuitem"
+                          onClick={() => {
+                            void markArticleRead(lead.id)
+                            setMoreOpen(false)
+                          }}
+                          className="cw-menu__item no-underline"
+                        >
+                          <ExternalLink strokeWidth={1.5} aria-hidden="true" />
+                          Open {lead.feedTitle ?? 'publisher'}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+          </div>
+
+          {image && (
+            // A plain img: no Vercel image-optimization quota, no proxy.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={image}
+              alt=""
+              width={96}
+              height={64}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+              className="h-14 w-20 shrink-0 border border-border bg-fill-active object-cover min-[640px]:h-16 min-[640px]:w-24"
+            />
+          )}
+        </div>
       </div>
-      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
 
       <Modal open={panelOpen} onClose={() => setPanelOpen(false)} title={lead.title} labelledBy={`story-panel-${story.id}`}>
         <div className="space-y-4">

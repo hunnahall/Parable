@@ -18,6 +18,8 @@ export default function ArticleFolderPicker({
   setNewFolderName,
   onCreateFolder,
   disabled = false,
+  iconOnly = false,
+  buttonClassName = '',
 }: {
   selectedIds: string[]
   folders: FolderOption[]
@@ -28,6 +30,9 @@ export default function ArticleFolderPicker({
   setNewFolderName: (v: string) => void
   onCreateFolder: () => void
   disabled?: boolean
+  // Inbox rows show the button as an icon; its label moves to aria-label.
+  iconOnly?: boolean
+  buttonClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -68,12 +73,16 @@ export default function ArticleFolderPicker({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
+        aria-label={iconOnly ? (selectedIds.length === 0 ? 'Save' : `Saved: ${label}`) : undefined}
         className={
-          'cw-btn cw-btn--ghost cw-btn--sm ' + (selectedIds.length > 0 ? 'text-foreground' : '')
+          'cw-btn cw-btn--ghost cw-btn--sm ' +
+          (iconOnly ? 'cw-btn--icon ' : '') +
+          (selectedIds.length > 0 ? 'text-foreground ' : '') +
+          buttonClassName
         }
       >
         <FolderPlus strokeWidth={1.5} aria-hidden="true" />
-        {label}
+        {!iconOnly && label}
       </button>
 
       {open && (

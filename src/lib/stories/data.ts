@@ -14,6 +14,10 @@ export interface StorySource {
   imageUrl: string | null
   summary: string | null
   archivedAt: string | null
+  // Words in the stored text, only when the full article was fetched.
+  wordCount: number | null
+  // ISO 639-1 code detected at ingest; 'und' when undetectable.
+  language: string | null
 }
 
 // A story: every article sharing a story_id that the reader can see in
@@ -42,6 +46,8 @@ type RawSource = {
   image_url: string | null
   summary: string | null
   archived_at: string | null
+  word_count?: number | null
+  language?: string | null
 }
 
 // The Inbox and Archive, grouped into stories by the story_feed function
@@ -77,6 +83,8 @@ export async function getStories(view: StoryView, query?: string): Promise<Story
         imageUrl: item.image_url,
         summary: item.summary,
         archivedAt: item.archived_at,
+        wordCount: item.word_count ?? null,
+        language: item.language ?? null,
       })),
     })
   )
