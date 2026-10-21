@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Story } from '@/lib/stories/data'
+import { markArticleRead } from '@/lib/articles/actions'
 import SourcePicker from './SourcePicker'
 import { useStreamedText } from './useStreamedText'
 
@@ -10,6 +11,11 @@ import { useStreamedText } from './useStreamedText'
 export default function StorySummary({ story }: { story: Story }) {
   const [sourceId, setSourceId] = useState(story.sources[0].id)
   const { text, kind, loading, error } = useStreamedText(`/api/articles/${sourceId}/summary`)
+
+  // Asking for a summary counts as opening the article (Feeds page numbers).
+  useEffect(() => {
+    void markArticleRead(sourceId)
+  }, [sourceId])
 
   return (
     <div className="mt-2 space-y-1.5 border-l-2 border-accent pl-3 text-sm">

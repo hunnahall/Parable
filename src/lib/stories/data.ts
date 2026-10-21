@@ -55,7 +55,8 @@ export async function getStories(view: StoryView, query?: string): Promise<Story
   const supabase = await createClient()
   const { data, error } = await supabase.rpc('story_feed', {
     p_view: view,
-    p_query: query?.trim() || null,
+    // Escaped so % and _ in a search match themselves, not any text.
+    p_query: query?.trim().replace(/[\\%_]/g, '\\$&') || null,
   })
   logQueryError(`stories/getStories (${view})`, error)
 

@@ -33,7 +33,7 @@ interface Section {
   stories: Story[]
 }
 
-// The Inbox lists stories under each category, in the user's order. A story
+// The Inbox and Archive list stories under each category, in the user's order. A story
 // whose feeds span categories appears in each of them; stories keep the
 // server's newest-activity-first order within a section. Without categories
 // it's one list. Stories from uncategorized feeds go last.
@@ -217,7 +217,8 @@ export default function StoryList({
         )
       ) : (
         <div className="space-y-6">
-          {sectionsFor(visible, view === 'inbox' ? categories : []).map((section) => (
+          {/* Search results are one flat list, so each story is one result. */}
+          {sectionsFor(visible, query ? [] : categories).map((section) => (
             <section key={section.key} className="space-y-2">
               {section.title && (
                 <h2 className="text-sm font-medium text-muted">

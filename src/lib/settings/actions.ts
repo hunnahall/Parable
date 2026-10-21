@@ -44,6 +44,9 @@ export async function performFullReset(): Promise<{ error: string | null }> {
   const { error: readError } = await supabase.from('read_items').delete().eq('user_id', user.id)
   if (readError) return { error: readError.message }
 
+  const { error: opensError } = await supabase.from('feed_opens').delete().eq('user_id', user.id)
+  if (opensError) return { error: opensError.message }
+
   const { error: prefsError } = await supabase
     .from('user_preferences')
     .delete()

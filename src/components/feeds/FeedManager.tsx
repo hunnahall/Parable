@@ -13,7 +13,7 @@ import { setFeedCategory } from '@/lib/categories/actions'
 import type { CategoryRow } from '@/lib/categories/data'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
-import type { EngagementRate } from '@/lib/feeds/engagement'
+import type { FeedNumbers } from '@/lib/feeds/numbers'
 import { formatFetchedAt } from '@/lib/formatting'
 import CategoryManager from './CategoryManager'
 import FolderManager from './FolderManager'
@@ -26,24 +26,39 @@ import Tooltip from '@/components/ui/Tooltip'
 
 const NO_CATEGORY = 'No category'
 
-function formatRate(rate: EngagementRate | undefined): string {
-  if (!rate || rate.rate === null) return 'none yet'
-  return `${Math.round(rate.rate * 100)}%`
+type SortKey = 'name' | 'perDay' | 'opened'
+
+const SORTS: { id: SortKey; label: string }[] = [
+  { id: 'name', label: 'Name' },
+  { id: 'perDay', label: 'Most articles' },
+  { id: 'opened', label: 'Least opened' },
+]
+
+// Under 10 a day gets one decimal, so a quiet feed doesn't read as 0.
+function formatPerDay(numbers: FeedNumbers | undefined): string {
+  const perDay = numbers?.perDay ?? 0
+  return perDay < 10 ? perDay.toFixed(1) : Math.round(perDay).toLocaleString()
+}
+
+function formatOpened(numbers: FeedNumbers | undefined): string {
+  if (!numbers || numbers.openedRate === null) return '–'
+  return `${Math.round(numbers.openedRate * 100)}%`
 }
 
 export default function FeedManager({
   feeds,
   categories,
   folderRows,
-  engagement,
+  numbers,
 }: {
   feeds: FeedRow[]
   categories: CategoryRow[]
   folderRows: FolderRow[]
-  engagement: Record<string, EngagementRate>
+  numbers: Record<string, FeedNumbers>
 }) {
   const router = useRouter()
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [sort, setSort] = useState<SortKey>('name')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -72,11 +87,18 @@ export default function FeedManager({
   const categoryName = (id: string | null) =>
     categories.find((c) => c.id === id)?.name ?? NO_CATEGORY
 
-  const visibleFeeds = localFeeds.filter((feed) => {
-    if (categoryFilter === 'all') return true
-    if (categoryFilter === 'uncategorized') return feed.categoryId === null
-    return feed.categoryId === categoryFilter
-  })
+  const visibleFeeds = localFeeds
+    .filter((feed) => {
+      if (categoryFilter === 'all') return true
+      if (categoryFilter === 'uncategorized') return feed.categoryId === null
+      return feed.categoryId === categoryFilter
+    })
+    .sort((a, b) => {
+      // Feeds with nothing to open yet sort after every opened rate.
+      if (sort === 'perDay') return (numbers[b.id]?.perDay ?? 0) - (numbers[a.id]?.perDay ?? 0)
+      if (sort === 'opened') return (numbers[a.id]?.openedRate ?? 2) - (numbers[b.id]?.openedRate ?? 2)
+      return a.title.localeCompare(b.title)
+    })
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -253,7 +275,8 @@ export default function FeedManager({
           </div>
         )}
 
-        <div className="overflow-x-auto border-b border-border px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="min-w-0 max-w-full overflow-x-auto">
           <div className="cw-seg" role="group" aria-label="Show feeds in">
             {[
               { id: 'all', label: 'All' },
@@ -272,6 +295,17 @@ export default function FeedManager({
               )
             )}
           </div>
+          </div>
+          <label className="flex items-center gap-2">
+            <span className="cw-eyebrow">Sort</span>
+            <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort feeds">
+              {SORTS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
         </div>
 
         {visibleFeeds.length === 0 ? (
@@ -311,8 +345,8 @@ export default function FeedManager({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 space-y-1">
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-medium">{feed.title}</span>
                         {feed.is_scraped && <Tag>BUILT</Tag>}
@@ -330,11 +364,25 @@ export default function FeedManager({
                         {feed.url}
                       </a>
                       <p className="text-xs text-muted">
-                        Last loaded {formatFetchedAt(feed.last_fetched_at)} · Opened{' '}
-                        {formatRate(engagement[feed.id])}
+                        Last loaded {formatFetchedAt(feed.last_fetched_at)}
+                        <span className="tabular-nums min-[640px]:hidden">
+                          {' '}
+                          · {formatPerDay(numbers[feed.id])} a day
+                          {numbers[feed.id]?.openedRate != null && ` · ${formatOpened(numbers[feed.id])} opened`}
+                        </span>
                       </p>
                       {feed.last_error && <p className="text-xs text-danger">{feed.last_error}</p>}
                     </div>
+                    <dl className="hidden shrink-0 grid-cols-2 gap-6 text-right min-[640px]:grid">
+                      <div className="space-y-1">
+                        <dt className="cw-eyebrow">A day</dt>
+                        <dd className="text-base tabular-nums">{formatPerDay(numbers[feed.id])}</dd>
+                      </div>
+                      <div className="space-y-1">
+                        <dt className="cw-eyebrow">Opened</dt>
+                        <dd className="text-base tabular-nums">{formatOpened(numbers[feed.id])}</dd>
+                      </div>
+                    </dl>
                     <div className="flex shrink-0 items-center gap-1">
                       <Tooltip label="Edit feed">
                         <Button variant="ghost" size="sm" icon aria-label="Edit feed" onClick={() => startEdit(feed)}>

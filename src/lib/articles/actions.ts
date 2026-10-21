@@ -157,10 +157,10 @@ export async function purgeArticles(feedItemIds: string[]): Promise<{ error: str
   return { error: null }
 }
 
-// Display-only read tracking, fired when a card's title is clicked
-// through to the publisher — must never touch article_states/archived_at,
+// Display-only read tracking, fired when an article is opened (publisher
+// link, reader view or summary) — must never touch article_states/archived_at,
 // since read state is explicitly independent of the retention timers.
-// Feeds' 7-day engagement rate is the only consumer.
+// A trigger counts each new row into feed_opens for the Feeds page numbers.
 export async function markArticleRead(feedItemId: string): Promise<{ error: string | null }> {
   const user = await getUser()
   if (!user) return { error: 'Not signed in' }

@@ -5,17 +5,18 @@
    Usage, on <html>:
      data-theme="light" | "dark"   optional; omit to follow the device
      data-accent="<color>"         the app's signature color; omit for suite pages
-   --chart-1..8                  categorical chart series; the app's own color is always --chart-1
+   --chart-1..12                 categorical chart series; the app's own color is always --chart-1
      ledger   -> data-accent="umber"  (Umber)
      parable  -> data-accent="slate-blue"  (Slate Blue)
 
-   Chart palette (October 2026): Umber, Pistachio, Rose, Indigo, Slate Blue,
-   Spruce, Apricot, Periwinkle, in that order. Each is the most unlike the
-   ones before it, so a chart with fewer series uses the most distinct ones
-   first; past eight, group the rest as Other. Sage, Mist and Plum stay as
-   signature colors but aren't chart colors (Mist read as Slate Blue and Plum
-   as Umber). An app whose signature isn't one of the eight puts it first and
-   drops the palette color closest to it.
+   Chart palette (October 2026, 12 colors): Umber, Cobalt, Glacier, Spruce,
+   Apricot, Periwinkle, Amethyst, Moss, Heather, Mulberry, Slate Blue, Khaki, in
+   that order. Each is the most unlike the ones before it, so a chart with fewer
+   series uses the most distinct ones first; past twelve, group the rest as
+   Other. Six of the twelve are signature colors (data-accent): slate-blue,
+   umber, apricot, spruce, periwinkle, moss. A signature leads its own chart and
+   the rest are reordered from it. Pistachio, Rose and Indigo left the palette;
+   Sage, Mist and Plum are no longer signatures.
 
    Fonts are loaded by each app (see the reference). Every family token has a
    system fallback, so swapping a face means changing one line here.
@@ -46,23 +47,28 @@
   --on-fg: #0E0F12;
   --hue-slate-blue: #92AFD7;
   --hue-umber: #A6816E;
-  --hue-sage: #BBC5AA;
   --hue-periwinkle: #CDC1FF;
-  --hue-mist: #95AFBA;
-  --hue-plum: #9F818D;
-  --hue-pistachio: #BADB94;
-  --hue-rose: #FFADC8;
-  --hue-indigo: #7678BB;
   --hue-spruce: #508C89;
   --hue-apricot: #FFC48A;
+  --hue-cobalt: #6784C9;
+  --hue-glacier: #81C4D1;
+  --hue-amethyst: #9670A1;
+  --hue-moss: #8B9E6A;
+  --hue-mulberry: #B47692;
+  --hue-khaki: #AFA57E;
+  --hue-heather: #BEB1CF;
   --chart-1: var(--hue-umber);
-  --chart-2: var(--hue-pistachio);
-  --chart-3: var(--hue-rose);
-  --chart-4: var(--hue-indigo);
-  --chart-5: var(--hue-slate-blue);
-  --chart-6: var(--hue-spruce);
-  --chart-7: var(--hue-apricot);
-  --chart-8: var(--hue-periwinkle);
+  --chart-2: var(--hue-cobalt);
+  --chart-3: var(--hue-glacier);
+  --chart-4: var(--hue-spruce);
+  --chart-5: var(--hue-apricot);
+  --chart-6: var(--hue-periwinkle);
+  --chart-7: var(--hue-amethyst);
+  --chart-8: var(--hue-moss);
+  --chart-9: var(--hue-heather);
+  --chart-10: var(--hue-mulberry);
+  --chart-11: var(--hue-slate-blue);
+  --chart-12: var(--hue-khaki);
   color-scheme: dark;
   /* Signature color. Suite pages with no data-accent use ink. */
   --accent: var(--fg);
@@ -163,15 +169,16 @@
     --on-fg: #F7F7F5;
     --hue-slate-blue: #4F719F;
     --hue-umber: #92664E;
-    --hue-sage: #697455;
     --hue-periwinkle: #7665AC;
-    --hue-mist: #557581;
-    --hue-plum: #7F636E;
-    --hue-pistachio: #709441;
-    --hue-rose: #C66D8C;
-    --hue-indigo: #47458E;
     --hue-spruce: #005C5A;
     --hue-apricot: #BD7C34;
+    --hue-cobalt: #3D5798;
+    --hue-glacier: #45828D;
+    --hue-amethyst: #704A7B;
+    --hue-moss: #5E713C;
+    --hue-mulberry: #90526E;
+    --hue-khaki: #7F744B;
+    --hue-heather: #817393;
     color-scheme: light;
   }
 }
@@ -199,15 +206,16 @@
   --on-fg: #F7F7F5;
   --hue-slate-blue: #4F719F;
   --hue-umber: #92664E;
-  --hue-sage: #697455;
   --hue-periwinkle: #7665AC;
-  --hue-mist: #557581;
-  --hue-plum: #7F636E;
-  --hue-pistachio: #709441;
-  --hue-rose: #C66D8C;
-  --hue-indigo: #47458E;
   --hue-spruce: #005C5A;
   --hue-apricot: #BD7C34;
+  --hue-cobalt: #3D5798;
+  --hue-glacier: #45828D;
+  --hue-amethyst: #704A7B;
+  --hue-moss: #5E713C;
+  --hue-mulberry: #90526E;
+  --hue-khaki: #7F744B;
+  --hue-heather: #817393;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -234,41 +242,42 @@
   --on-fg: #0E0F12;
   --hue-slate-blue: #92AFD7;
   --hue-umber: #A6816E;
-  --hue-sage: #BBC5AA;
   --hue-periwinkle: #CDC1FF;
-  --hue-mist: #95AFBA;
-  --hue-plum: #9F818D;
-  --hue-pistachio: #BADB94;
-  --hue-rose: #FFADC8;
-  --hue-indigo: #7678BB;
   --hue-spruce: #508C89;
   --hue-apricot: #FFC48A;
+  --hue-cobalt: #6784C9;
+  --hue-glacier: #81C4D1;
+  --hue-amethyst: #9670A1;
+  --hue-moss: #8B9E6A;
+  --hue-mulberry: #B47692;
+  --hue-khaki: #AFA57E;
+  --hue-heather: #BEB1CF;
   color-scheme: dark;
 }
 
 /* ---- Signature colors: dark ---- */
-  :root[data-accent="sage"] { --accent: #BBC5AA; --accent-soft: #BBC5AA24; --on-accent: #0E0F12; --chart-1: var(--hue-sage); --chart-2: var(--hue-pistachio); --chart-3: var(--hue-rose); --chart-4: var(--hue-indigo); --chart-5: var(--hue-slate-blue); --chart-6: var(--hue-spruce); --chart-7: var(--hue-apricot); --chart-8: var(--hue-periwinkle); }
-  :root[data-accent="mist"] { --accent: #95AFBA; --accent-soft: #95AFBA24; --on-accent: #0E0F12; --chart-1: var(--hue-mist); --chart-2: var(--hue-umber); --chart-3: var(--hue-pistachio); --chart-4: var(--hue-rose); --chart-5: var(--hue-indigo); --chart-6: var(--hue-spruce); --chart-7: var(--hue-apricot); --chart-8: var(--hue-periwinkle); }
-  :root[data-accent="slate-blue"] { --accent: #92AFD7; --accent-soft: #92AFD724; --on-accent: #0E0F12; --chart-1: var(--hue-slate-blue); --chart-2: var(--hue-umber); --chart-3: var(--hue-pistachio); --chart-4: var(--hue-rose); --chart-5: var(--hue-indigo); --chart-6: var(--hue-spruce); --chart-7: var(--hue-apricot); --chart-8: var(--hue-periwinkle); }
-  :root[data-accent="periwinkle"] { --accent: #CDC1FF; --accent-soft: #CDC1FF24; --on-accent: #0E0F12; --chart-1: var(--hue-periwinkle); --chart-2: var(--hue-umber); --chart-3: var(--hue-pistachio); --chart-4: var(--hue-rose); --chart-5: var(--hue-indigo); --chart-6: var(--hue-slate-blue); --chart-7: var(--hue-spruce); --chart-8: var(--hue-apricot); }
-  :root[data-accent="plum"] { --accent: #9F818D; --accent-soft: #9F818D24; --on-accent: #0E0F12; --chart-1: var(--hue-plum); --chart-2: var(--hue-pistachio); --chart-3: var(--hue-rose); --chart-4: var(--hue-indigo); --chart-5: var(--hue-slate-blue); --chart-6: var(--hue-spruce); --chart-7: var(--hue-apricot); --chart-8: var(--hue-periwinkle); }
-  :root[data-accent="umber"] { --accent: #A6816E; --accent-soft: #A6816E24; --on-accent: #0E0F12; --chart-1: var(--hue-umber); --chart-2: var(--hue-pistachio); --chart-3: var(--hue-rose); --chart-4: var(--hue-indigo); --chart-5: var(--hue-slate-blue); --chart-6: var(--hue-spruce); --chart-7: var(--hue-apricot); --chart-8: var(--hue-periwinkle); }
+  :root[data-accent="slate-blue"] { --accent: #92AFD7; --accent-soft: #92AFD724; --on-accent: #0E0F12; --chart-1: var(--hue-slate-blue); --chart-2: var(--hue-apricot); --chart-3: var(--hue-moss); --chart-4: var(--hue-mulberry); --chart-5: var(--hue-spruce); --chart-6: var(--hue-cobalt); --chart-7: var(--hue-umber); --chart-8: var(--hue-periwinkle); --chart-9: var(--hue-glacier); --chart-10: var(--hue-amethyst); --chart-11: var(--hue-heather); --chart-12: var(--hue-khaki); }
+  :root[data-accent="umber"] { --accent: #A6816E; --accent-soft: #A6816E24; --on-accent: #0E0F12; --chart-1: var(--hue-umber); --chart-2: var(--hue-cobalt); --chart-3: var(--hue-glacier); --chart-4: var(--hue-spruce); --chart-5: var(--hue-apricot); --chart-6: var(--hue-periwinkle); --chart-7: var(--hue-amethyst); --chart-8: var(--hue-moss); --chart-9: var(--hue-heather); --chart-10: var(--hue-mulberry); --chart-11: var(--hue-slate-blue); --chart-12: var(--hue-khaki); }
+  :root[data-accent="apricot"] { --accent: #FFC48A; --accent-soft: #FFC48A24; --on-accent: #0E0F12; --chart-1: var(--hue-apricot); --chart-2: var(--hue-cobalt); --chart-3: var(--hue-moss); --chart-4: var(--hue-heather); --chart-5: var(--hue-spruce); --chart-6: var(--hue-amethyst); --chart-7: var(--hue-umber); --chart-8: var(--hue-glacier); --chart-9: var(--hue-periwinkle); --chart-10: var(--hue-mulberry); --chart-11: var(--hue-slate-blue); --chart-12: var(--hue-khaki); }
+  :root[data-accent="spruce"] { --accent: #54908D; --accent-soft: #54908D24; --on-accent: #0E0F12; --chart-1: var(--hue-spruce); --chart-2: var(--hue-apricot); --chart-3: var(--hue-periwinkle); --chart-4: var(--hue-glacier); --chart-5: var(--hue-umber); --chart-6: var(--hue-cobalt); --chart-7: var(--hue-amethyst); --chart-8: var(--hue-moss); --chart-9: var(--hue-heather); --chart-10: var(--hue-mulberry); --chart-11: var(--hue-slate-blue); --chart-12: var(--hue-khaki); }
+  :root[data-accent="periwinkle"] { --accent: #CDC1FF; --accent-soft: #CDC1FF24; --on-accent: #0E0F12; --chart-1: var(--hue-periwinkle); --chart-2: var(--hue-moss); --chart-3: var(--hue-apricot); --chart-4: var(--hue-glacier); --chart-5: var(--hue-spruce); --chart-6: var(--hue-mulberry); --chart-7: var(--hue-cobalt); --chart-8: var(--hue-umber); --chart-9: var(--hue-heather); --chart-10: var(--hue-amethyst); --chart-11: var(--hue-slate-blue); --chart-12: var(--hue-khaki); }
+  :root[data-accent="moss"] { --accent: #8B9E6A; --accent-soft: #8B9E6A24; --on-accent: #0E0F12; --chart-1: var(--hue-moss); --chart-2: var(--hue-periwinkle); --chart-3: var(--hue-apricot); --chart-4: var(--hue-glacier); --chart-5: var(--hue-spruce); --chart-6: var(--hue-mulberry); --chart-7: var(--hue-cobalt); --chart-8: var(--hue-umber); --chart-9: var(--hue-heather); --chart-10: var(--hue-amethyst); --chart-11: var(--hue-slate-blue); --chart-12: var(--hue-khaki); }
 
 /* ---- Signature colors: light ---- */
 @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"])[data-accent="sage"] { --accent: #697455; --accent-soft: #6974551A; --on-accent: #FFFFFF; }
-    :root:not([data-theme="dark"])[data-accent="mist"] { --accent: #557581; --accent-soft: #5575811A; --on-accent: #FFFFFF; }
     :root:not([data-theme="dark"])[data-accent="slate-blue"] { --accent: #4F719F; --accent-soft: #4F719F1A; --on-accent: #FFFFFF; }
-    :root:not([data-theme="dark"])[data-accent="periwinkle"] { --accent: #7665AC; --accent-soft: #7665AC1A; --on-accent: #FFFFFF; }
-    :root:not([data-theme="dark"])[data-accent="plum"] { --accent: #7F636E; --accent-soft: #7F636E1A; --on-accent: #FFFFFF; }
     :root:not([data-theme="dark"])[data-accent="umber"] { --accent: #92664E; --accent-soft: #92664E1A; --on-accent: #FFFFFF; }
+    :root:not([data-theme="dark"])[data-accent="apricot"] { --accent: #9E6116; --accent-soft: #9E61161A; --on-accent: #FFFFFF; }
+    :root:not([data-theme="dark"])[data-accent="spruce"] { --accent: #005C5A; --accent-soft: #005C5A1A; --on-accent: #FFFFFF; }
+    :root:not([data-theme="dark"])[data-accent="periwinkle"] { --accent: #7665AC; --accent-soft: #7665AC1A; --on-accent: #FFFFFF; }
+    :root:not([data-theme="dark"])[data-accent="moss"] { --accent: #5E713C; --accent-soft: #5E713C1A; --on-accent: #FFFFFF; }
 }
-  :root[data-theme="light"][data-accent="sage"] { --accent: #697455; --accent-soft: #6974551A; --on-accent: #FFFFFF; }
-  :root[data-theme="light"][data-accent="mist"] { --accent: #557581; --accent-soft: #5575811A; --on-accent: #FFFFFF; }
   :root[data-theme="light"][data-accent="slate-blue"] { --accent: #4F719F; --accent-soft: #4F719F1A; --on-accent: #FFFFFF; }
-  :root[data-theme="light"][data-accent="periwinkle"] { --accent: #7665AC; --accent-soft: #7665AC1A; --on-accent: #FFFFFF; }
-  :root[data-theme="light"][data-accent="plum"] { --accent: #7F636E; --accent-soft: #7F636E1A; --on-accent: #FFFFFF; }
   :root[data-theme="light"][data-accent="umber"] { --accent: #92664E; --accent-soft: #92664E1A; --on-accent: #FFFFFF; }
+  :root[data-theme="light"][data-accent="apricot"] { --accent: #9E6116; --accent-soft: #9E61161A; --on-accent: #FFFFFF; }
+  :root[data-theme="light"][data-accent="spruce"] { --accent: #005C5A; --accent-soft: #005C5A1A; --on-accent: #FFFFFF; }
+  :root[data-theme="light"][data-accent="periwinkle"] { --accent: #7665AC; --accent-soft: #7665AC1A; --on-accent: #FFFFFF; }
+  :root[data-theme="light"][data-accent="moss"] { --accent: #5E713C; --accent-soft: #5E713C1A; --on-accent: #FFFFFF; }
 
 /* ---- Touch: larger controls where the pointer is a finger ---- */
 @media (pointer: coarse) {
