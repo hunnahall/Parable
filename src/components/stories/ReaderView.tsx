@@ -1,26 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
-import { markArticleRead } from '@/lib/articles/actions'
 import Button from '@/components/ui/Button'
 import SourcePicker from './SourcePicker'
-import { useStreamedText } from './useStreamedText'
+import ReaderContent from './ReaderContent'
 
-// The article's own text in English, in a wide panel over the page (full
-// screen on phone). Translated on request from the stored text and
-// streamed in; English articles show as stored. When only a teaser or
-// nothing could be fetched, it says so and points to the publisher.
+// The reader view as a wide panel over the page (full screen on phone), used
+// below 1280px and for the "Across your feeds" band. At 1280px and up the
+// Inbox shows the same content in its reading pane instead.
 export default function ReaderView({ story, onClose }: { story: Story; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [sourceId, setSourceId] = useState(story.sources[0].id)
   const source = story.sources.find((s) => s.id === sourceId) ?? story.sources[0]
-  const { text, kind, truncated, loading, error } = useStreamedText(`/api/articles/${sourceId}/reader`)
-
-  useEffect(() => {
-    void markArticleRead(sourceId)
-  }, [sourceId])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -30,14 +23,6 @@ export default function ReaderView({ story, onClose }: { story: Story; onClose: 
     panelRef.current?.focus()
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
-
-  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
-  const publisherLink = source.link && (
-    <a href={source.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline-offset-4 hover:underline">
-      Read it on {source.feedTitle ?? 'the publisher’s site'}
-      <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
-    </a>
-  )
 
   return (
     <div className="fixed inset-0 z-[60] flex items-stretch justify-center min-[640px]:items-center min-[640px]:p-4">
@@ -67,30 +52,8 @@ export default function ReaderView({ story, onClose }: { story: Story; onClose: 
           </Button>
         </div>
         <div className="cw-modal__body flex-1 overflow-y-auto border-t border-border pt-4 text-foreground">
-          <div className="mx-auto max-w-[var(--read-max)] space-y-4">
-            {error ? (
-              <p className="text-danger">{error}</p>
-            ) : kind === 'none' && !loading ? (
-              <p>Parable couldn&rsquo;t fetch this article&rsquo;s text (the publisher blocks it or it&rsquo;s behind a paywall). {publisherLink}</p>
-            ) : (
-              <>
-                {kind === 'teaser' && (
-                  <p className="text-sm text-muted">Only the feed&rsquo;s preview could be fetched: the publisher blocks full text or it&rsquo;s behind a paywall. {publisherLink}</p>
-                )}
-                {paragraphs.length === 0 && loading && <p className="text-muted">Loading</p>}
-                {paragraphs.map((p, i) => (
-                  <p key={i} className="font-read text-[length:var(--text-lg)] leading-[var(--leading-read)]">
-                    {p}
-                  </p>
-                ))}
-                {!loading && kind !== 'teaser' && (
-                  <p className="border-t border-border pt-3 text-sm text-muted">
-                    {truncated ? 'This is the first part of a long article. ' : ''}
-                    {publisherLink}
-                  </p>
-                )}
-              </>
-            )}
+          <div className="mx-auto max-w-[var(--read-max)]">
+            <ReaderContent key={source.id} source={source} />
           </div>
         </div>
       </div>

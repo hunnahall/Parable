@@ -33,9 +33,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title={category?.name ?? 'Inbox'}
+        wideFrom1280
         figure={{ value: shown.length.toLocaleString('en-US'), label: 'Stories, last 12 hours' }}
       />
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8">
+      <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8 min-[1280px]:max-w-none">
         <HealthBanners health={health} />
         <FilteredToday titles={filtered} />
         <StoryList

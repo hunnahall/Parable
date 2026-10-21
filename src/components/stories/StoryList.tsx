@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Archive } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
@@ -14,6 +14,8 @@ import CategoryTabs from './CategoryTabs'
 import InboxOverview from './InboxOverview'
 import AcrossFeedsBand from './AcrossFeedsBand'
 import ReaderView from './ReaderView'
+import ReadingPane from './ReadingPane'
+import { PANE_QUERY, useMediaQuery } from './useMediaQuery'
 import Button, { buttonClass } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import EmptyState from '@/components/ui/EmptyState'
@@ -107,6 +109,10 @@ export default function StoryList({
 }) {
   const router = useRouter()
   const toast = useToast()
+  const searchParams = useSearchParams()
+  // The reading pane: the Inbox at 1280px and up. ?story=<id> names the
+  // story open in it, so it deep-links and the back button works.
+  const paneActive = useMediaQuery(PANE_QUERY) && view === 'inbox'
   const [removed, setRemoved] = useState<Set<string>>(new Set())
   // Rows collapsing on their way out. A ref mirrors it so the timer that
   // removes them skips any that Undo or an error brought back meanwhile.
@@ -127,6 +133,17 @@ export default function StoryList({
   // What's on screen: one category's stories, or all of them.
   const shown = categoryId ? visible.filter((story) => inCategory(story, categoryId)) : visible
   const showTabs = view === 'inbox' && categories.length > 0
+  const paneStory = paneActive ? (shown.find((story) => story.id === searchParams.get('story')) ?? null) : null
+
+  // Changes ?story= without a server round trip; Next keeps useSearchParams
+  // in step with history.pushState and replaceState.
+  function setPaneStory(story: Story | null, mode: 'push' | 'replace' = 'push') {
+    const url = new URL(window.location.href)
+    if (story) url.searchParams.set('story', story.id)
+    else url.searchParams.delete('story')
+    if (mode === 'push') window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }
 
   function setLeavingIds(next: Set<string>) {
     leavingRef.current = next
@@ -233,6 +250,24 @@ export default function StoryList({
     return isStorySeen(story) || seenLocally.get(story.id) === story.lastActivityAt
   }
 
+  function selectStory(story: Story) {
+    handleSeen(story)
+    setPaneStory(story)
+  }
+
+  // Archiving from the pane moves on to the next story in the list, or the
+  // one before when it was the last.
+  function archiveFromPane(story: Story) {
+    const order = sectionsFor(shown, activeCategory ? [activeCategory] : categories)
+      .flatMap((section) => section.stories)
+      .filter((s, i, all) => all.findIndex((t) => t.id === s.id) === i && (s.id === story.id || !leavingRef.current.has(s.id)))
+    const at = order.findIndex((s) => s.id === story.id)
+    const next = order[at + 1] ?? order[at - 1] ?? null
+    setPaneStory(next, 'replace')
+    if (next) handleSeen(next)
+    void archive([story])
+  }
+
   // The section's stories on screen, minus any already on their way out.
   function archiveSection(sectionStories: Story[]) {
     const targets = sectionStories.filter((story) => !leavingRef.current.has(story.id))
@@ -281,6 +316,10 @@ export default function StoryList({
           stories={visible}
           isSeen={isSeen}
           onOpen={(story) => {
+            if (paneActive) {
+              selectStory(story)
+              return
+            }
             handleSeen(story)
             setReaderStory(story)
           }}
@@ -297,6 +336,7 @@ export default function StoryList({
         </div>
       )}
 
+      <div className={paneActive ? 'grid grid-cols-[420px_minmax(0,1fr)] items-start gap-6' : ''}>
       {shown.length === 0 ? (
         query ? (
           <EmptyState title="No matching stories">Try a different search.</EmptyState>
@@ -363,6 +403,8 @@ export default function StoryList({
                     }}
                     seen={isSeen(story)}
                     leaving={leaving.has(story.id)}
+                    selectedInPane={paneStory?.id === story.id}
+                    onSelect={paneActive ? selectStory : undefined}
                     onSeen={view === 'inbox' ? handleSeen : undefined}
                   />
                 ))}
@@ -371,6 +413,22 @@ export default function StoryList({
           ))}
         </div>
       )}
+      {paneActive && (
+        <ReadingPane
+          story={paneStory}
+          view={view}
+          folders={folders}
+          onFolderCreated={(folder) => setFolders((prev) => [...prev, folder])}
+          onArchive={archiveFromPane}
+          onUnarchive={unarchive}
+          onSaved={(story) => {
+            hide([story.id])
+            setPaneStory(null, 'replace')
+            toast('Story saved')
+          }}
+        />
+      )}
+      </div>
 
       {readerStory && <ReaderView story={readerStory} onClose={() => setReaderStory(null)} />}
     </div>

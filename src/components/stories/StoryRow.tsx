@@ -6,7 +6,7 @@ import { Archive, ArchiveRestore, BookOpen, ChevronDown, Ellipsis, EyeOff, Exter
 import type { Story } from '@/lib/stories/data'
 import type { StoryViewMode } from './StoryList'
 import { markArticleRead } from '@/lib/articles/actions'
-import { addFolder, setArticleFolders } from '@/lib/folders/actions'
+import { addFolder } from '@/lib/folders/actions'
 import { formatAge } from '@/lib/formatting'
 import { languageLabel } from '@/lib/languages'
 import ArticleFolderPicker from '@/components/articles/ArticleFolderPicker'
@@ -16,7 +16,7 @@ import Tooltip from '@/components/ui/Tooltip'
 import HideWordDialog from './HideWordDialog'
 import ReaderView from './ReaderView'
 import StorySummary from './StorySummary'
-import { ensureSummaries } from '@/lib/ondemand/actions'
+import { saveStory } from './saveStory'
 import { Input } from '@/components/ui/Input'
 
 export interface FolderOption {
@@ -63,6 +63,8 @@ export default function StoryRow({
   folders,
   seen = false,
   leaving = false,
+  selectedInPane = false,
+  onSelect,
   onSeen,
   onFolderCreated,
   onArchive,
@@ -74,6 +76,10 @@ export default function StoryRow({
   folders: FolderOption[]
   seen?: boolean
   leaving?: boolean
+  // At 1280px and up the Inbox has a reading pane: the title and Reader
+  // view open the story there instead of the publisher or the modal.
+  selectedInPane?: boolean
+  onSelect?: (story: Story) => void
   onSeen?: (story: Story) => void
   onFolderCreated: (folder: FolderOption) => void
   onArchive: (story: Story) => void
@@ -109,7 +115,12 @@ export default function StoryRow({
   const image = imageFailed ? null : (story.sources.map((s) => httpsUrl(s.imageUrl)).find(Boolean) ?? null)
   const favicon = faviconFailed ? null : faviconFor(lead.link)
   const titleWeight = seen ? 'font-normal text-foreground-muted' : 'font-semibold text-foreground'
-  const selected = readerOpen || panelOpen
+  const selected = readerOpen || panelOpen || selectedInPane
+
+  function openReader() {
+    if (onSelect) onSelect(story)
+    else setReaderOpen(true)
+  }
 
   // Seen tracking. Restarts when the story gains a source, since that
   // makes it unseen again.
@@ -155,19 +166,13 @@ export default function StoryRow({
     if (folderIds.length === 0) return
     setPending(true)
     setError(null)
-    for (const source of story.sources) {
-      const result = await setArticleFolders(source.id, folderIds)
-      if (result.error) {
-        setPending(false)
-        setError(result.error)
-        return
-      }
-    }
+    const saveError = await saveStory(story, folderIds)
     setPending(false)
+    if (saveError) {
+      setError(saveError)
+      return
+    }
     setPanelOpen(false)
-    // Every saved article keeps a summary; write the missing ones without
-    // holding up the save.
-    void ensureSummaries(story.sources.filter((source) => !source.summary).map((source) => source.id))
     onSaved(story)
     router.refresh()
   }
@@ -273,7 +278,17 @@ export default function StoryRow({
                   href={lead.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => void markArticleRead(lead.id)}
+                  onClick={(e) => {
+                    // With the pane, a plain click reads it there; a
+                    // modified click (new tab) still goes to the publisher.
+                    if (onSelect && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) {
+                      e.preventDefault()
+                      onSelect(story)
+                      return
+                    }
+                    void markArticleRead(lead.id)
+                  }}
+                  aria-current={selectedInPane ? 'true' : undefined}
                   className={`block break-words text-lg underline-offset-4 hover:underline ${titleWeight}`}
                 >
                   {lead.title}
@@ -321,7 +336,7 @@ export default function StoryRow({
                 </button>
               </Tooltip>
               <Tooltip label="Reader view">
-                <button type="button" onClick={() => setReaderOpen(true)} aria-label="Reader view" className={iconButton}>
+                <button type="button" onClick={openReader} aria-label="Reader view" className={iconButton}>
                   <BookOpen strokeWidth={1.5} aria-hidden="true" />
                 </button>
               </Tooltip>

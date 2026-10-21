@@ -13,6 +13,7 @@ export default function PageHeader({
   actions,
   description,
   wide = false,
+  wideFrom1280 = false,
 }: {
   title: string
   count?: number
@@ -22,6 +23,9 @@ export default function PageHeader({
   // Matches the page body's width so the title lines up with the content:
   // reading lists and forms are narrow, the card grid is wide.
   wide?: boolean
+  // The Inbox spreads to the full width at 1280px and up, for the
+  // reading pane.
+  wideFrom1280?: boolean
 }) {
   const hasRow = Boolean(actions || description || figure)
   return (
@@ -31,7 +35,7 @@ export default function PageHeader({
         (hasRow ? 'py-3 min-[1000px]:py-5' : 'max-[999px]:sr-only min-[1000px]:py-5')
       }
     >
-      <div className={`mx-auto flex flex-wrap items-center justify-between gap-3 px-4 min-[1000px]:px-8 ${wide ? 'max-w-[var(--content-max)]' : 'max-w-3xl'}`}>
+      <div className={`mx-auto flex flex-wrap items-center justify-between gap-3 px-4 min-[1000px]:px-8 ${wide ? 'max-w-[var(--content-max)]' : 'max-w-3xl'} ${wideFrom1280 ? 'min-[1280px]:max-w-none' : ''}`}>
         <div className="min-w-0">
           <h1 className="flex items-baseline gap-3 max-[999px]:sr-only">
             {title}
