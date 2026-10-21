@@ -202,6 +202,26 @@ input[type="radio"] {
   animation: skeleton-in 1ms linear 300ms backwards;
 }
 
+/* Tabs that are links (the Inbox's category tabs) mark the current one with
+   aria-current, which components.css doesn't cover: it styles ARIA tabs'
+   aria-selected. Same look. */
+a.cw-tab {
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cw-tab[aria-current="page"] {
+  color: var(--fg);
+}
+.cw-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
 /* The page-load bar (TopLoadingBar) waits the same 300ms. With reduced
    motion its sweep stops and it shows as a still partial bar. */
 .top-loading-bar {

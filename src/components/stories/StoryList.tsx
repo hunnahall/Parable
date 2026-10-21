@@ -7,8 +7,13 @@ import { Archive } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
 import { markStoriesSeen } from '@/lib/stories/actions'
 import type { CategoryRow } from '@/lib/categories/data'
+import type { FilteredTitle } from '@/lib/filters/data'
 import { archiveArticlesBulk, unarchiveArticles } from '@/lib/articles/actions'
 import StoryRow, { type FolderOption } from './StoryRow'
+import CategoryTabs from './CategoryTabs'
+import InboxOverview from './InboxOverview'
+import AcrossFeedsBand from './AcrossFeedsBand'
+import ReaderView from './ReaderView'
 import Button, { buttonClass } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import EmptyState from '@/components/ui/EmptyState'
@@ -63,6 +68,8 @@ function isStorySeen(story: Pick<Story, 'seenAt' | 'lastActivityAt'>): boolean {
 
 const ids = (stories: Story[]) => stories.flatMap((story) => story.sources.map((s) => s.id))
 
+const inCategory = (story: Story, categoryId: string) => story.sources.some((s) => s.categoryId === categoryId)
+
 // How long a removed row takes to collapse: tokens.css --dur-std.
 const COLLAPSE_MS = 200
 
@@ -73,11 +80,18 @@ function prefersReducedMotion(): boolean {
 // The Inbox and Archive: stories, newest activity first. A story is every
 // article about the same thing from the reader's feeds; archiving or saving
 // it applies to all of them.
+//
+// The Inbox also gets category tabs, an overview panel (stats, seen
+// progress, stories by category) and the "Across your feeds" band. It
+// receives every story and filters to `categoryId` here, so the tab counts
+// and stats follow archiving without a round trip.
 export default function StoryList({
   stories,
   view,
   folders: initialFolders,
   categories = [],
+  categoryId = null,
+  filteredTitles = [],
   query,
   basePath,
 }: {
@@ -85,6 +99,9 @@ export default function StoryList({
   view: StoryViewMode
   folders: FolderOption[]
   categories?: CategoryRow[]
+  // The Inbox's ?category=, already checked against `categories`.
+  categoryId?: string | null
+  filteredTitles?: FilteredTitle[]
   query: string
   basePath: string
 }) {
@@ -98,6 +115,8 @@ export default function StoryList({
   const [folders, setFolders] = useState(initialFolders)
   const [queryDraft, setQueryDraft] = useState(query)
   const [bulkPending, setBulkPending] = useState(false)
+  // A band card opens the reader here, since the band has no rows of its own.
+  const [readerStory, setReaderStory] = useState<Story | null>(null)
   // Stories seen this visit, keyed to the activity time they were seen at,
   // so a story that gains a source after being seen lights up again.
   const [seenLocally, setSeenLocally] = useState<Map<string, string>>(new Map())
@@ -105,6 +124,9 @@ export default function StoryList({
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const visible = stories.filter((story) => !removed.has(story.id))
+  // What's on screen: one category's stories, or all of them.
+  const shown = categoryId ? visible.filter((story) => inCategory(story, categoryId)) : visible
+  const showTabs = view === 'inbox' && categories.length > 0
 
   function setLeavingIds(next: Set<string>) {
     leavingRef.current = next
@@ -164,7 +186,7 @@ export default function StoryList({
   // Archives exactly the stories on screen when pressed. An article that
   // arrives afterwards isn't in this list, so it stays in the Inbox.
   async function archiveAll() {
-    const targets = visible.filter((story) => !leavingRef.current.has(story.id))
+    const targets = shown.filter((story) => !leavingRef.current.has(story.id))
     if (targets.length === 0) return
     setBulkPending(true)
     await archive(targets)
@@ -211,13 +233,23 @@ export default function StoryList({
     return isStorySeen(story) || seenLocally.get(story.id) === story.lastActivityAt
   }
 
+  // The section's stories on screen, minus any already on their way out.
+  function archiveSection(sectionStories: Story[]) {
+    const targets = sectionStories.filter((story) => !leavingRef.current.has(story.id))
+    if (targets.length > 0) void archive(targets)
+  }
+
+  const tabCounts = new Map(categories.map((c) => [c.id, visible.filter((story) => inCategory(story, c.id)).length]))
+  const activeCategory = categories.find((c) => c.id === categoryId)
+
   function commitSearch() {
     const q = queryDraft.trim()
     router.push(q ? `${basePath}?q=${encodeURIComponent(q)}` : basePath)
   }
 
   return (
-    <div className="space-y-4">
+    // --tabs-h: the phone tab row's height, so section heads stick below it.
+    <div className="space-y-4 [--tabs-h:40px]">
       {view === 'archive' && (
         <Input
           type="search"
@@ -232,7 +264,30 @@ export default function StoryList({
         />
       )}
 
-      {view === 'inbox' && visible.length > 0 && (
+      {showTabs && <CategoryTabs categories={categories} counts={tabCounts} total={visible.length} current={categoryId} />}
+
+      {view === 'inbox' && shown.length > 0 && (
+        <InboxOverview
+          stories={shown}
+          seenCount={shown.filter(isSeen).length}
+          filteredTitles={filteredTitles}
+          categories={categories}
+          showChart={!categoryId}
+        />
+      )}
+
+      {view === 'inbox' && !categoryId && (
+        <AcrossFeedsBand
+          stories={visible}
+          isSeen={isSeen}
+          onOpen={(story) => {
+            handleSeen(story)
+            setReaderStory(story)
+          }}
+        />
+      )}
+
+      {view === 'inbox' && shown.length > 0 && (
         <div className="flex items-center justify-end">
           {/* The Inbox's one accent button. */}
           <Button variant="accent" size="sm" disabled={bulkPending} onClick={archiveAll}>
@@ -242,9 +297,13 @@ export default function StoryList({
         </div>
       )}
 
-      {visible.length === 0 ? (
+      {shown.length === 0 ? (
         query ? (
           <EmptyState title="No matching stories">Try a different search.</EmptyState>
+        ) : activeCategory ? (
+          <EmptyState title={`Nothing new in ${activeCategory.name}`}>
+            Stories from this category&rsquo;s feeds show up here as they publish them.
+          </EmptyState>
         ) : (
           <EmptyState
             title={EMPTY_COPY[view].title}
@@ -262,38 +321,58 @@ export default function StoryList({
       ) : (
         <div className="space-y-6">
           {/* Search results are one flat list, so each story is one result. */}
-          {sectionsFor(visible, query ? [] : categories).map((section) => (
-            <section key={section.key} className="space-y-2">
+          {sectionsFor(shown, query ? [] : activeCategory ? [activeCategory] : categories).map((section) => (
+            // No overflow: hidden on the panel; it would stop the head
+            // from sticking.
+            <section key={section.key} aria-label={section.title ?? undefined} className="cw-panel">
               {section.title && (
-                <h2 className="text-sm font-medium text-muted">
-                  {section.title}{' '}
-                  <span className="font-mono text-xs tabular-nums">{section.stories.length}</span>
-                </h2>
+                <div
+                  className={`cw-panel__head sticky top-0 z-[5] bg-surface ${
+                    showTabs ? 'max-[999px]:top-[calc(3.5rem+var(--tabs-h))]' : 'max-[999px]:top-14'
+                  }`}
+                >
+                  <h2 className="text-sm font-medium">
+                    {section.title}{' '}
+                    <span className="font-mono text-xs font-normal tabular-nums text-muted">{section.stories.length}</span>
+                  </h2>
+                  {view === 'inbox' && (
+                    <button
+                      type="button"
+                      onClick={() => archiveSection(section.stories)}
+                      className="cw-btn cw-btn--ghost cw-btn--sm"
+                    >
+                      <Archive strokeWidth={1.5} aria-hidden="true" />
+                      Archive section
+                    </button>
+                  )}
+                </div>
               )}
-            <ul className="card-elevated divide-y divide-border">
-              {section.stories.map((story) => (
-                <StoryRow
-                  key={`${section.key}-${story.id}`}
-                  story={story}
-                  view={view}
-                  folders={folders}
-                  onFolderCreated={(folder) => setFolders((prev) => [...prev, folder])}
-                  onArchive={(s) => archive([s])}
-                  onUnarchive={unarchive}
-                  onSaved={(s) => {
-                    hide([s.id])
-                    toast('Story saved')
-                  }}
-                  seen={isSeen(story)}
-                  leaving={leaving.has(story.id)}
-                  onSeen={view === 'inbox' ? handleSeen : undefined}
-                />
-              ))}
-            </ul>
+              <ul className="divide-y divide-border">
+                {section.stories.map((story) => (
+                  <StoryRow
+                    key={`${section.key}-${story.id}`}
+                    story={story}
+                    view={view}
+                    folders={folders}
+                    onFolderCreated={(folder) => setFolders((prev) => [...prev, folder])}
+                    onArchive={(s) => archive([s])}
+                    onUnarchive={unarchive}
+                    onSaved={(s) => {
+                      hide([s.id])
+                      toast('Story saved')
+                    }}
+                    seen={isSeen(story)}
+                    leaving={leaving.has(story.id)}
+                    onSeen={view === 'inbox' ? handleSeen : undefined}
+                  />
+                ))}
+              </ul>
             </section>
           ))}
         </div>
       )}
+
+      {readerStory && <ReaderView story={readerStory} onClose={() => setReaderStory(null)} />}
     </div>
   )
 }

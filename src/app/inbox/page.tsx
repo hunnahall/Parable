@@ -39,13 +39,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         <HealthBanners health={health} />
         <FilteredToday titles={filtered} />
         <StoryList
-          // A fresh list per view, so local state (removed, seen) doesn't
-          // carry between categories.
-          key={category?.id ?? 'all'}
-          stories={shown}
+          stories={stories}
           view="inbox"
           folders={folders}
-          categories={category ? [category] : categories}
+          categories={categories}
+          categoryId={category?.id ?? null}
+          filteredTitles={filtered}
           query=""
           basePath="/inbox"
         />
