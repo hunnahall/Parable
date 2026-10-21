@@ -115,9 +115,7 @@ async function getArticleStatesMap(
   )
 }
 
-// A user's per-article folder filing — separate from feed_folders
-// (subscription organization), though both read from the same folders
-// table. Many rows per (user, article): an article can sit in several
+// A user's per-article folder filing. Many rows per (user, article): an article can sit in several
 // folders at once. See getArticleStatesMap above for why `user` is optional.
 async function getArticleFoldersMap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -282,32 +280,20 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     query = query.lte('published_at', filters.dateTo)
   }
 
-  // A folder can hold feeds (subscription organization) and/or saved
-  // articles filed directly into it — matching either satisfies the
-  // filter, since both mean "this article belongs to that folder" from
-  // the user's point of view. Multiple selected folders union together
-  // "for free": both lookups already collect ids into flat arrays before
-  // the final .or(), so switching .eq -> .in just widens each array to
-  // every feed/article belonging to ANY selected folder.
+  // Folders hold saved articles only. Multiple selected folders union
+  // together: any article filed in one of them matches.
   if (filters.folderIds && filters.folderIds.length > 0) {
-    const [{ data: feedFolderRows, error: feedFolderError }, { data: articleFolderRows, error: articleFolderError }] =
-      await Promise.all([
-        supabase.from('feed_folders').select('feed_id').in('folder_id', filters.folderIds),
-        supabase.from('article_folders').select('feed_item_id').in('folder_id', filters.folderIds),
-      ])
-    logQueryError('articles/getArticlesPage (folder feed lookup)', feedFolderError)
+    const { data: articleFolderRows, error: articleFolderError } = await supabase
+      .from('article_folders')
+      .select('feed_item_id')
+      .in('folder_id', filters.folderIds)
     logQueryError('articles/getArticlesPage (folder article lookup)', articleFolderError)
 
-    const folderFeedIds = (feedFolderRows ?? []).map((row) => row.feed_id)
     const folderArticleIds = (articleFolderRows ?? []).map((row) => row.feed_item_id)
-    if (folderFeedIds.length === 0 && folderArticleIds.length === 0) {
+    if (folderArticleIds.length === 0) {
       return { items: [], nextCursor: null }
     }
-
-    const orParts: string[] = []
-    if (folderFeedIds.length > 0) orParts.push(`feed_id.in.(${folderFeedIds.join(',')})`)
-    if (folderArticleIds.length > 0) orParts.push(`id.in.(${folderArticleIds.join(',')})`)
-    query = query.or(orParts.join(','))
+    query = query.in('id', folderArticleIds)
   }
 
   query = query

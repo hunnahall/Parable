@@ -4,21 +4,22 @@ import { useCallback, useState } from 'react'
 import { previewBuiltFeed, createBuiltFeed } from '@/lib/feeds/actions'
 import type { BuildFeedPreview } from '@/lib/feeds/buildFeed'
 import type { FeedRow } from '@/lib/feeds/data'
+import type { CategoryRow } from '@/lib/categories/data'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { Field, Input, Select } from '@/components/ui/Input'
 
-const NO_FOLDER = 'No folder'
+const NO_CATEGORY = 'No category'
 const PREVIEW_ITEM_LIMIT = 10
 
 type Step = 'url' | 'preview'
 
 export default function BuildFeedSection({
-  folders,
+  categories,
   onCreated,
 }: {
-  folders: { id: string; label: string }[]
-  onCreated: (feed: FeedRow, folderIds: string[]) => void
+  categories: CategoryRow[]
+  onCreated: (feed: FeedRow) => void
 }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>('url')
@@ -26,7 +27,7 @@ export default function BuildFeedSection({
   const [detecting, setDetecting] = useState(false)
   const [preview, setPreview] = useState<BuildFeedPreview | null>(null)
   const [title, setTitle] = useState('')
-  const [folderId, setFolderId] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +40,7 @@ export default function BuildFeedSection({
     setUrl('')
     setPreview(null)
     setTitle('')
-    setFolderId('')
+    setCategoryId('')
     setError(null)
   }, [busy])
 
@@ -65,13 +66,14 @@ export default function BuildFeedSection({
     const result = await createBuiltFeed({
       sourceUrl: preview.sourceUrl,
       title: title.trim(),
+      categoryId: categoryId || null,
     })
     setSaving(false)
     if (result.error !== null) {
       setError(result.error)
       return
     }
-    onCreated(result.feed, folderId ? [folderId] : [])
+    onCreated(result.feed)
     close()
   }
 
@@ -130,12 +132,12 @@ export default function BuildFeedSection({
               <Input id="build-feed-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
             </Field>
 
-            <Field label="Folder" htmlFor="build-feed-folder">
-              <Select id="build-feed-folder" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-                <option value="">{NO_FOLDER}</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.label}
+            <Field label="Category" htmlFor="build-feed-category">
+              <Select id="build-feed-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">{NO_CATEGORY}</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
                   </option>
                 ))}
               </Select>

@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Archive } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
+import { markStoriesSeen } from '@/lib/stories/actions'
+import type { CategoryRow } from '@/lib/categories/data'
 import { archiveArticlesBulk, unarchiveArticles } from '@/lib/articles/actions'
 import StoryRow, { type FolderOption } from './StoryRow'
 import Button, { buttonClass } from '@/components/ui/Button'
@@ -24,6 +27,39 @@ const EMPTY_COPY: Record<StoryViewMode, { title: string; text: string }> = {
   },
 }
 
+interface Section {
+  key: string
+  title: string | null
+  stories: Story[]
+}
+
+// The Inbox lists stories under each category, in the user's order. A story
+// whose feeds span categories appears in each of them; stories keep the
+// server's newest-activity-first order within a section. Without categories
+// it's one list. Stories from uncategorized feeds go last.
+function sectionsFor(stories: Story[], categories: CategoryRow[]): Section[] {
+  if (categories.length === 0) return [{ key: 'all', title: null, stories }]
+
+  const sections: Section[] = categories.map((category) => ({
+    key: category.id,
+    title: category.name,
+    stories: stories.filter((story) => story.sources.some((s) => s.categoryId === category.id)),
+  }))
+  const known = new Set(categories.map((c) => c.id))
+  sections.push({
+    key: 'none',
+    title: 'No category',
+    stories: stories.filter((story) => story.sources.some((s) => !s.categoryId || !known.has(s.categoryId))),
+  })
+  return sections.filter((section) => section.stories.length > 0)
+}
+
+// Seen means on screen long enough to read the title. Compared as times,
+// since the strings come from different places (Postgres, the browser).
+function isStorySeen(story: Pick<Story, 'seenAt' | 'lastActivityAt'>): boolean {
+  return story.seenAt !== null && new Date(story.seenAt) >= new Date(story.lastActivityAt)
+}
+
 const ids = (stories: Story[]) => stories.flatMap((story) => story.sources.map((s) => s.id))
 
 // The Inbox and Archive: stories, newest activity first. A story is every
@@ -33,12 +69,14 @@ export default function StoryList({
   stories,
   view,
   folders: initialFolders,
+  categories = [],
   query,
   basePath,
 }: {
   stories: Story[]
   view: StoryViewMode
   folders: FolderOption[]
+  categories?: CategoryRow[]
   query: string
   basePath: string
 }) {
@@ -46,15 +84,18 @@ export default function StoryList({
   const toast = useToast()
   const [removed, setRemoved] = useState<Set<string>>(new Set())
   const [folders, setFolders] = useState(initialFolders)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [queryDraft, setQueryDraft] = useState(query)
   const [bulkPending, setBulkPending] = useState(false)
+  // Stories seen this visit, keyed to the activity time they were seen at,
+  // so a story that gains a source after being seen lights up again.
+  const [seenLocally, setSeenLocally] = useState<Map<string, string>>(new Map())
+  const pendingSeen = useRef<Set<string>>(new Set())
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const visible = stories.filter((story) => !removed.has(story.id))
 
   function hide(storyIds: string[]) {
     setRemoved((prev) => new Set([...prev, ...storyIds]))
-    setSelected((prev) => new Set([...prev].filter((id) => !storyIds.includes(id))))
   }
 
   function unhide(storyIds: string[]) {
@@ -92,18 +133,45 @@ export default function StoryList({
     router.refresh()
   }
 
-  async function archiveSelected() {
+  // Archives exactly the stories on screen when pressed. An article that
+  // arrives afterwards isn't in this list, so it stays in the Inbox.
+  async function archiveAll() {
     setBulkPending(true)
-    await archive(visible.filter((story) => selected.has(story.id)))
+    await archive(visible)
     setBulkPending(false)
+  }
+
+  function flushSeen() {
+    flushTimer.current = null
+    const batch = [...pendingSeen.current]
+    pendingSeen.current.clear()
+    if (batch.length > 0) void markStoriesSeen(batch)
+  }
+
+  const handleSeen = useCallback((story: Story) => {
+    setSeenLocally((prev) => new Map(prev).set(story.id, story.lastActivityAt))
+    pendingSeen.current.add(story.id)
+    flushTimer.current ??= setTimeout(flushSeen, 1500)
+  }, [])
+
+  // Send what's queued when leaving the page.
+  useEffect(
+    () => () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current)
+      flushSeen()
+    },
+    []
+  )
+
+  function isDimmed(story: Story): boolean {
+    if (view !== 'inbox') return false
+    return isStorySeen(story) || seenLocally.get(story.id) === story.lastActivityAt
   }
 
   function commitSearch() {
     const q = queryDraft.trim()
     router.push(q ? `${basePath}?q=${encodeURIComponent(q)}` : basePath)
   }
-
-  const allSelected = visible.length > 0 && selected.size === visible.length
 
   return (
     <div className="space-y-4">
@@ -122,25 +190,11 @@ export default function StoryList({
       )}
 
       {view === 'inbox' && visible.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <label className="cw-check">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              ref={(el) => {
-                if (el) el.indeterminate = selected.size > 0 && !allSelected
-              }}
-              onChange={() => setSelected(allSelected ? new Set() : new Set(visible.map((s) => s.id)))}
-            />
-            <span className="text-muted tabular-nums">
-              {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
-            </span>
-          </label>
-          {selected.size > 0 && (
-            <Button size="sm" disabled={bulkPending} onClick={archiveSelected}>
-              {bulkPending ? 'Archiving' : 'Archive selected'}
-            </Button>
-          )}
+        <div className="flex items-center justify-end">
+          <Button size="sm" disabled={bulkPending} onClick={archiveAll}>
+            <Archive strokeWidth={1.5} aria-hidden="true" />
+            {bulkPending ? 'Archiving' : 'Archive all'}
+          </Button>
         </div>
       )}
 
@@ -162,35 +216,37 @@ export default function StoryList({
           </EmptyState>
         )
       ) : (
-        <ul className="card-elevated divide-y divide-border">
-          {visible.map((story) => (
-            <StoryRow
-              key={story.id}
-              story={story}
-              view={view}
-              folders={folders}
-              onFolderCreated={(folder) => setFolders((prev) => [...prev, folder])}
-              onArchive={(s) => archive([s])}
-              onUnarchive={unarchive}
-              onSaved={(s) => {
-                hide([s.id])
-                toast('Story saved')
-              }}
-              selected={view === 'inbox' ? selected.has(story.id) : undefined}
-              onToggleSelect={
-                view === 'inbox'
-                  ? (id) =>
-                      setSelected((prev) => {
-                        const next = new Set(prev)
-                        if (next.has(id)) next.delete(id)
-                        else next.add(id)
-                        return next
-                      })
-                  : undefined
-              }
-            />
+        <div className="space-y-6">
+          {sectionsFor(visible, view === 'inbox' ? categories : []).map((section) => (
+            <section key={section.key} className="space-y-2">
+              {section.title && (
+                <h2 className="text-sm font-medium text-muted">
+                  {section.title}{' '}
+                  <span className="font-mono text-xs tabular-nums">{section.stories.length}</span>
+                </h2>
+              )}
+            <ul className="card-elevated divide-y divide-border">
+              {section.stories.map((story) => (
+                <StoryRow
+                  key={`${section.key}-${story.id}`}
+                  story={story}
+                  view={view}
+                  folders={folders}
+                  onFolderCreated={(folder) => setFolders((prev) => [...prev, folder])}
+                  onArchive={(s) => archive([s])}
+                  onUnarchive={unarchive}
+                  onSaved={(s) => {
+                    hide([s.id])
+                    toast('Story saved')
+                  }}
+                  dimmed={isDimmed(story)}
+                  onSeen={view === 'inbox' ? handleSeen : undefined}
+                />
+              ))}
+            </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )

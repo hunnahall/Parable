@@ -1,7 +1,7 @@
 import { formatUsd, USAGE_WINDOW_DAYS, type UsageWindow } from '@/lib/usage/tokens'
 
-// Rolling spend for the shared ingest job, summed from ingest_runs. A
-// property of the project, not of one account, since every subscriber
+// Rolling AI spend: the shared ingest job (ingest_runs) plus every
+// on-demand summary and reader view (ai_usage). A property of the project, not of one account, since every subscriber
 // reads the same rows. An estimate from hard-coded per-1M prices, hence
 // "≈": it's here to catch an order-of-magnitude change, not to reconcile
 // an invoice. An empty window reads $0.00.

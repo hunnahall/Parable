@@ -9,13 +9,13 @@ export interface FeedRow {
   last_error: string | null
   is_scraped: boolean
   consecutive_failures: number
-  folderIds: string[]
+  categoryId: string | null
 }
 
 // The feeds table is a shared catalog — one row per URL, fetched once for
 // everyone who subscribes — so what a user sees is the intersection of it
 // with their own subscriptions: their title override (falling back to the
-// catalog's), their AI-summary choice, their folder filing.
+// catalog's), their category.
 export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const user = await getUser()
   if (!user) return []
@@ -23,7 +23,7 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
   const supabase = await createClient()
   const { data: subs, error: subsError } = await supabase
     .from('subscriptions')
-    .select('feed_id, title')
+    .select('feed_id, title, category_id')
     .eq('user_id', user.id)
   logQueryError('feeds/listFeedsDetailed (subscriptions)', subsError)
 
@@ -43,28 +43,12 @@ export async function listFeedsDetailed(): Promise<FeedRow[]> {
 
   const subByFeed = new Map(subscriptions.map((sub) => [sub.feed_id, sub]))
 
-  const { data: feedFolders, error: feedFoldersError } = await supabase
-    .from('feed_folders')
-    .select('feed_id, folder_id')
-    .in(
-      'feed_id',
-      feeds.map((f) => f.id)
-    )
-  logQueryError('feeds/listFeedsDetailed (folders)', feedFoldersError)
-
-  const foldersByFeed = new Map<string, string[]>()
-  for (const row of feedFolders ?? []) {
-    const list = foldersByFeed.get(row.feed_id) ?? []
-    list.push(row.folder_id)
-    foldersByFeed.set(row.feed_id, list)
-  }
-
   return feeds.map((feed) => {
     const sub = subByFeed.get(feed.id)
     return {
       ...feed,
       title: sub?.title ?? feed.title,
-      folderIds: foldersByFeed.get(feed.id) ?? [],
+      categoryId: sub?.category_id ?? null,
     }
   })
 }

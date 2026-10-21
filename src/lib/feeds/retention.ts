@@ -1,6 +1,6 @@
 import { adminClient, type AdminClient } from '@/lib/supabase/admin'
 
-// One sweep, three stages, run in order. Splitting them across separate
+// One sweep, six stages, run in order. Splitting them across separate
 // cron jobs the way the old 24h/7d/30d policy did buys nothing at these
 // windows — the stages are sub-second queries and the later ones want the
 // earlier ones' output, so ordering them explicitly here is both simpler
@@ -16,6 +16,10 @@ export interface RetentionSummary {
   // Ingest's "already seen this guid" memory, aged out past the window
   // where it could still prevent a re-summarization.
   purgedGuidCount: number
+  // Inbox "seen" marks older than 48h, past any story they could dim.
+  purgedStoryViewCount: number
+  // The filtered-titles log, older than 48h.
+  purgedFilteredTitleCount: number
 }
 
 async function callRetentionRpc(
@@ -35,6 +39,8 @@ async function callRetentionRpc(
 //   2. An article you archive is deleted 24h after you archive it.
 //   3. A shared feed_items row is reclaimed once nobody wants it.
 //   4. Ingest's record of which guids it has already seen ages out at 72h.
+//   5. A reader's "seen" mark on a story ages out at 48h.
+//   6. The log of titles a reader's filters removed ages out at 48h.
 //
 // Both windows are measured from when Parable first saw the article
 // (feed_items.created_at), not from its own publish date — a feed that
@@ -80,5 +86,27 @@ export async function runRetention(
     'deleted_count'
   )
 
-  return { dryRun, staleInboxCount, expiredArchivedCount, reclaimedCount, purgedGuidCount }
+  const purgedStoryViewCount = await callRetentionRpc(
+    supabase,
+    'purge_story_views',
+    dryRun,
+    'deleted_count'
+  )
+
+  const purgedFilteredTitleCount = await callRetentionRpc(
+    supabase,
+    'purge_filtered_titles',
+    dryRun,
+    'deleted_count'
+  )
+
+  return {
+    dryRun,
+    staleInboxCount,
+    expiredArchivedCount,
+    reclaimedCount,
+    purgedGuidCount,
+    purgedStoryViewCount,
+    purgedFilteredTitleCount,
+  }
 }

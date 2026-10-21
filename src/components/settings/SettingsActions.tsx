@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { addFeed, exportFeedsOpml } from '@/lib/feeds/actions'
-import { ensureFolderPath, assignFeedToFolders } from '@/lib/folders/actions'
+import { ensureCategory } from '@/lib/categories/actions'
 import CleanSlateDialog from './CleanSlateDialog'
 import RulebookDialog from './RulebookDialog'
 import Button from '@/components/ui/Button'
@@ -11,35 +11,31 @@ import Button from '@/components/ui/Button'
 interface ParsedFeed {
   url: string
   title: string
-  folderPath: string[]
+  category: string | null
 }
 
 // OPML nests feeds inside folder <outline> elements (no xmlUrl of their
-// own), which can themselves nest arbitrarily deep — most readers export
-// their folder structure this way, so this walk preserves the full
-// ancestor path (not just the immediate parent) to rebuild real nested
-// folders on import instead of flattening to one flat category as before.
+// own). Each top-level folder becomes a category; folders nested deeper fold
+// into their top-level ancestor, and feeds outside any folder have none.
 function parseOpml(xml: string): ParsedFeed[] {
   const doc = new DOMParser().parseFromString(xml, 'text/xml')
   const feeds: ParsedFeed[] = []
 
-  function walk(node: Element, path: string[]) {
+  function walk(node: Element, category: string | null) {
     for (const child of Array.from(node.children)) {
       if (child.tagName.toLowerCase() !== 'outline') continue
       const xmlUrl = child.getAttribute('xmlUrl')
-      const label = child.getAttribute('title') || child.getAttribute('text') || ''
+      const label = (child.getAttribute('title') || child.getAttribute('text') || '').trim()
       if (xmlUrl) {
-        feeds.push({ url: xmlUrl, title: label, folderPath: path })
-      } else if (label) {
-        walk(child, [...path, label])
+        feeds.push({ url: xmlUrl, title: label, category })
       } else {
-        walk(child, path)
+        walk(child, category ?? (label || null))
       }
     }
   }
 
   const body = doc.querySelector('body')
-  if (body) walk(body, [])
+  if (body) walk(body, null)
   return feeds
 }
 
@@ -82,28 +78,27 @@ export default function SettingsActions() {
     setImporting(true)
     setImportResult(null)
 
-    // Pre-create every unique folder path found in the OPML so each feed's
-    // add just looks up an already-existing leaf folder id.
-    const uniquePaths = [...new Set(feeds.map((f) => f.folderPath.join('\x00')))].filter(Boolean)
-    const leafIdByPath = new Map<string, string>()
-    for (const key of uniquePaths) {
-      const path = key.split('\x00')
-      leafIdByPath.set(key, await ensureFolderPath(path))
+    // Create each category found in the OPML once, in file order, so every
+    // feed's add just looks up an existing category id.
+    const categoryNames = [...new Set(feeds.map((f) => f.category).filter((c): c is string => !!c))]
+    const categoryIdByName = new Map<string, string>()
+    for (const name of categoryNames) {
+      categoryIdByName.set(name, await ensureCategory(name))
     }
 
     let added = 0
     const failed: { url: string; error: string }[] = []
     for (const feed of feeds) {
-      const outcome = await addFeed({ url: feed.url, title: feed.title })
+      const outcome = await addFeed({
+        url: feed.url,
+        title: feed.title,
+        categoryId: feed.category ? categoryIdByName.get(feed.category) ?? null : null,
+      })
       if (outcome.error !== null) {
         failed.push({ url: feed.url, error: outcome.error })
         continue
       }
       added++
-      const leafId = feed.folderPath.length > 0 ? leafIdByPath.get(feed.folderPath.join('\x00')) : undefined
-      if (leafId) {
-        await assignFeedToFolders(outcome.feed.id, [leafId])
-      }
     }
 
     setImporting(false)

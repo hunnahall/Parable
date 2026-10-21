@@ -6,6 +6,7 @@ export interface StorySource {
   id: string
   feedId: string
   feedTitle: string | null
+  categoryId: string | null
   title: string
   link: string | null
   publishedAt: string | null
@@ -21,6 +22,9 @@ export interface StorySource {
 export interface Story {
   id: string
   lastActivityAt: string
+  // When the reader last had it on screen, or null. Dimmed while this is at
+  // or after lastActivityAt.
+  seenAt: string | null
   sources: StorySource[]
 }
 
@@ -30,6 +34,7 @@ type RawSource = {
   id: string
   feed_id: string
   feed_title: string | null
+  category_id: string | null
   title: string
   link: string | null
   published_at: string | null
@@ -54,14 +59,16 @@ export async function getStories(view: StoryView, query?: string): Promise<Story
   })
   logQueryError(`stories/getStories (${view})`, error)
 
-  return ((data ?? []) as { story_id: string; last_activity_at: string; items: RawSource[] }[]).map(
+  return ((data ?? []) as { story_id: string; last_activity_at: string; seen_at: string | null; items: RawSource[] }[]).map(
     (row) => ({
       id: row.story_id,
       lastActivityAt: row.last_activity_at,
+      seenAt: row.seen_at,
       sources: row.items.map((item) => ({
         id: item.id,
         feedId: item.feed_id,
         feedTitle: item.feed_title,
+        categoryId: item.category_id,
         title: item.title,
         link: item.link,
         publishedAt: item.published_at,

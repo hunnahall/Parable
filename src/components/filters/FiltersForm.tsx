@@ -74,8 +74,8 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
       </div>
       <div className="cw-panel__body space-y-4">
         <p className="text-sm text-muted">
-          New articles whose English title contains one of these words or phrases are removed before
-          they reach your Inbox.
+          New articles whose English title has one of these words or phrases are removed before they
+          reach your Inbox. Whole words only: &ldquo;war&rdquo; doesn&rsquo;t catch &ldquo;award&rdquo;.
         </p>
         <div className="flex gap-2">
           <Input

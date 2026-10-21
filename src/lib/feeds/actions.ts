@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { adminClient, type AdminClient } from '@/lib/supabase/admin'
-import { logQueryError } from '@/lib/supabase/logError'
 import { runIngest, type IngestSummary } from './ingest'
 import { generateFeedsOpml } from './opmlExport'
 import { detectArticles, type BuildFeedPreview } from './buildFeed'
@@ -63,13 +62,14 @@ async function subscribeToFeed(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   feedId: string,
-  options: { title: string }
+  options: { title: string; categoryId: string | null }
 ): Promise<string | null> {
   const { error } = await supabase.from('subscriptions').upsert(
     {
       user_id: userId,
       feed_id: feedId,
       title: options.title,
+      category_id: options.categoryId,
     },
     { onConflict: 'user_id,feed_id' }
   )
@@ -79,6 +79,7 @@ async function subscribeToFeed(
 export async function addFeed(input: {
   url: string
   title: string
+  categoryId?: string | null
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -125,13 +126,15 @@ export async function addFeed(input: {
     feed = data
   }
 
+  const categoryId = input.categoryId ?? null
   const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
     title,
+    categoryId,
   })
   if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...feed, title, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, categoryId }, error: null }
 }
 
 // Step 1 of "Build a Feed" (see BuildFeedSection.tsx): fetches and
@@ -157,6 +160,7 @@ export async function previewBuiltFeed(
 export async function createBuiltFeed(input: {
   sourceUrl: string
   title: string
+  categoryId?: string | null
 }): Promise<{ feed: FeedRow; error: null } | { feed: null; error: string }> {
   const user = await getUser()
   if (!user) return { feed: null, error: 'Not signed in' }
@@ -183,13 +187,15 @@ export async function createBuiltFeed(input: {
     feed = data
   }
 
+  const categoryId = input.categoryId ?? null
   const subscribeError = await subscribeToFeed(supabase, user.id, feed.id, {
     title,
+    categoryId,
   })
   if (subscribeError) return { feed: null, error: subscribeError }
 
   revalidatePath('/feeds')
-  return { feed: { ...feed, title, folderIds: [] }, error: null }
+  return { feed: { ...feed, title, categoryId }, error: null }
 }
 
 // Manual trigger, unlike the cron-driven /api/ingest-feeds route. Same
@@ -261,14 +267,6 @@ export async function removeFeed(id: string): Promise<{ error: string | null }> 
     .eq('user_id', user.id)
     .eq('feed_id', id)
   if (unsubscribeError) return { error: unsubscribeError.message }
-
-  // Your folder filing for this feed goes with the subscription; other
-  // subscribers' filing lives in their own folders, which this can't see.
-  const { error: folderError } = await supabase
-    .from('feed_folders')
-    .delete()
-    .eq('feed_id', id)
-  logQueryError('feeds/removeFeed (folder cleanup)', folderError)
 
   // Counted with the service role: under the user's own RLS this only
   // sees their subscriptions, which read 0 right after unsubscribing and

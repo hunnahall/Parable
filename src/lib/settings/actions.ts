@@ -25,9 +25,15 @@ export async function performFullReset(): Promise<{ error: string | null }> {
     .eq('user_id', user.id)
   if (subscriptionsError) return { error: subscriptionsError.message }
 
-  // Cascades to feed_folders and article_folders via their FKs.
+  // Cascades to article_folders via its FK.
   const { error: foldersError } = await supabase.from('folders').delete().eq('user_id', user.id)
   if (foldersError) return { error: foldersError.message }
+
+  const { error: categoriesError } = await supabase
+    .from('categories')
+    .delete()
+    .eq('user_id', user.id)
+  if (categoriesError) return { error: categoriesError.message }
 
   const { error: statesError } = await supabase
     .from('article_states')
@@ -81,12 +87,17 @@ export async function runAutoDeleteRulesNow(): Promise<{
     supabase,
     'feed_items_excluding_states',
     { p_user_id: user.id, p_exclude_states: UNFILED_EXCLUDED_STATES }
-  ).select('id, title, title_en')
+  ).select('id, feed_id, title, title_en, link')
   if (itemsError) return { error: itemsError.message, deletedCount: 0 }
 
-  const matchedIds = ((items ?? []) as { id: string; title: string; title_en: string | null }[])
-    .filter((item) => matchedAutoDeleteKeyword(item.title_en ?? item.title, keywords))
-    .map((item) => item.id)
+  const matched = (
+    (items ?? []) as { id: string; feed_id: string; title: string; title_en: string | null; link: string | null }[]
+  ).flatMap((item) => {
+    const title = item.title_en ?? item.title
+    const keyword = matchedAutoDeleteKeyword(title, keywords)
+    return keyword === null ? [] : [{ item, title, keyword }]
+  })
+  const matchedIds = matched.map(({ item }) => item.id)
 
   if (matchedIds.length === 0) return { error: null, deletedCount: 0 }
 
@@ -106,6 +117,18 @@ export async function runAutoDeleteRulesNow(): Promise<{
     { onConflict: 'user_id,feed_item_id' }
   )
   if (deleteError) return { error: deleteError.message, deletedCount: 0 }
+
+  // For the Inbox's "N filtered today". Best-effort.
+  const { error: logError } = await supabase.from('filtered_titles').insert(
+    matched.map(({ item, title, keyword }) => ({
+      user_id: user.id,
+      feed_id: item.feed_id,
+      title,
+      link: item.link,
+      keyword,
+    }))
+  )
+  if (logError) console.error('settings/runAutoDeleteRulesNow: log filtered titles', logError.message)
 
   revalidatePath('/inbox')
   revalidatePath('/', 'layout')

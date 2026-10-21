@@ -9,11 +9,13 @@ import {
   removeFeed,
   runIngestNow,
 } from '@/lib/feeds/actions'
-import { assignFeedToFolders } from '@/lib/folders/actions'
+import { setFeedCategory } from '@/lib/categories/actions'
+import type { CategoryRow } from '@/lib/categories/data'
 import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import type { EngagementRate } from '@/lib/feeds/engagement'
 import { formatFetchedAt } from '@/lib/formatting'
+import CategoryManager from './CategoryManager'
 import FolderManager from './FolderManager'
 import type { FolderRow } from '@/lib/folders/data'
 import BuildFeedSection from './BuildFeedSection'
@@ -22,13 +24,7 @@ import Badge, { Tag } from '@/components/ui/Badge'
 import { Field, Input, Select } from '@/components/ui/Input'
 import Tooltip from '@/components/ui/Tooltip'
 
-const NO_FOLDER = 'No folder'
-
-function folderLabelsFor(folderIds: string[], folders: { id: string; label: string }[]): string {
-  if (folderIds.length === 0) return NO_FOLDER
-  const byId = new Map(folders.map((f) => [f.id, f.label]))
-  return folderIds.map((id) => byId.get(id) ?? id).join(', ')
-}
+const NO_CATEGORY = 'No category'
 
 function formatRate(rate: EngagementRate | undefined): string {
   if (!rate || rate.rate === null) return 'none yet'
@@ -37,17 +33,17 @@ function formatRate(rate: EngagementRate | undefined): string {
 
 export default function FeedManager({
   feeds,
-  folders,
+  categories,
   folderRows,
   engagement,
 }: {
   feeds: FeedRow[]
-  folders: { id: string; label: string }[]
+  categories: CategoryRow[]
   folderRows: FolderRow[]
   engagement: Record<string, EngagementRate>
 }) {
   const router = useRouter()
-  const [folderFilter, setFolderFilter] = useState<string>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -64,19 +60,22 @@ export default function FeedManager({
 
   const [newUrl, setNewUrl] = useState('')
   const [newTitle, setNewTitle] = useState('')
-  const [newFolderIds, setNewFolderIds] = useState<string[]>([])
+  const [newCategoryId, setNewCategoryId] = useState('')
 
   const [editTitle, setEditTitle] = useState('')
-  const [editFolderIds, setEditFolderIds] = useState<string[]>([])
+  const [editCategoryId, setEditCategoryId] = useState('')
 
   const [ingesting, setIngesting] = useState(false)
   const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null)
   const [ingestError, setIngestError] = useState<string | null>(null)
 
+  const categoryName = (id: string | null) =>
+    categories.find((c) => c.id === id)?.name ?? NO_CATEGORY
+
   const visibleFeeds = localFeeds.filter((feed) => {
-    if (folderFilter === 'all') return true
-    if (folderFilter === 'uncategorized') return feed.folderIds.length === 0
-    return feed.folderIds.includes(folderFilter)
+    if (categoryFilter === 'all') return true
+    if (categoryFilter === 'uncategorized') return feed.categoryId === null
+    return feed.categoryId === categoryFilter
   })
 
   async function handleAdd(e: React.FormEvent) {
@@ -86,35 +85,30 @@ export default function FeedManager({
     const result = await addFeed({
       url: newUrl,
       title: newTitle,
+      categoryId: newCategoryId || null,
     })
     if (result.error !== null) {
       setPending(false)
       setError(result.error)
       return
     }
-    if (newFolderIds.length > 0) {
-      await assignFeedToFolders(result.feed.id, newFolderIds)
-    }
     setPending(false)
-    setLocalFeeds((prev) => [...prev, { ...result.feed, folderIds: newFolderIds }])
+    setLocalFeeds((prev) => [...prev, result.feed])
     setNewUrl('')
     setNewTitle('')
-    setNewFolderIds([])
+    setNewCategoryId('')
     router.refresh()
   }
 
-  async function handleFeedBuilt(feed: FeedRow, folderIds: string[]) {
-    if (folderIds.length > 0) {
-      await assignFeedToFolders(feed.id, folderIds)
-    }
-    setLocalFeeds((prev) => [...prev, { ...feed, folderIds }])
+  function handleFeedBuilt(feed: FeedRow) {
+    setLocalFeeds((prev) => [...prev, feed])
     router.refresh()
   }
 
   function startEdit(feed: FeedRow) {
     setEditingId(feed.id)
     setEditTitle(feed.title)
-    setEditFolderIds(feed.folderIds)
+    setEditCategoryId(feed.categoryId ?? '')
     setError(null)
   }
 
@@ -123,20 +117,20 @@ export default function FeedManager({
     setError(null)
     const title = editTitle.trim()
     setLocalFeeds((prev) =>
-      prev.map((feed) => (feed.id === id ? { ...feed, title, folderIds: editFolderIds } : feed))
+      prev.map((feed) => (feed.id === id ? { ...feed, title, categoryId: editCategoryId || null } : feed))
     )
     setEditingId(null)
-    const [titleResult, folderResult] = await Promise.all([
+    const [titleResult, categoryResult] = await Promise.all([
       updateFeed(id, { title: editTitle }),
-      assignFeedToFolders(id, editFolderIds),
+      setFeedCategory(id, editCategoryId || null),
     ])
     setPending(false)
     if (titleResult.error) {
       setError(titleResult.error)
       return
     }
-    if (folderResult.error) {
-      setError(folderResult.error)
+    if (categoryResult.error) {
+      setError(categoryResult.error)
       return
     }
     router.refresh()
@@ -194,16 +188,16 @@ export default function FeedManager({
               onChange={(e) => setNewTitle(e.target.value)}
             />
           </Field>
-          <Field label="Folder" htmlFor="new-feed-folder">
+          <Field label="Category" htmlFor="new-feed-category">
             <Select
-              id="new-feed-folder"
-              value={newFolderIds[0] ?? ''}
-              onChange={(e) => setNewFolderIds(e.target.value ? [e.target.value] : [])}
+              id="new-feed-category"
+              value={newCategoryId}
+              onChange={(e) => setNewCategoryId(e.target.value)}
             >
-              <option value="">{NO_FOLDER}</option>
-              {folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.label}
+              <option value="">{NO_CATEGORY}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
                 </option>
               ))}
             </Select>
@@ -215,7 +209,9 @@ export default function FeedManager({
         {error && <p className="cw-error px-4 pb-4">{error}</p>}
       </section>
 
-      <BuildFeedSection folders={folders} onCreated={handleFeedBuilt} />
+      <BuildFeedSection categories={categories} onCreated={handleFeedBuilt} />
+
+      <CategoryManager categories={categories} />
 
       <FolderManager folders={folderRows} />
 
@@ -259,13 +255,17 @@ export default function FeedManager({
 
         <div className="overflow-x-auto border-b border-border px-4 py-3">
           <div className="cw-seg" role="group" aria-label="Show feeds in">
-            {[{ id: 'all', label: 'All' }, { id: 'uncategorized', label: NO_FOLDER }, ...folders].map(
+            {[
+              { id: 'all', label: 'All' },
+              ...categories.map((c) => ({ id: c.id, label: c.name })),
+              { id: 'uncategorized', label: NO_CATEGORY },
+            ].map(
               (option) => (
                 <button
                   key={option.id}
                   type="button"
-                  aria-pressed={folderFilter === option.id}
-                  onClick={() => setFolderFilter(option.id)}
+                  aria-pressed={categoryFilter === option.id}
+                  onClick={() => setCategoryFilter(option.id)}
                 >
                   {option.label}
                 </button>
@@ -289,16 +289,16 @@ export default function FeedManager({
                         onChange={(e) => setEditTitle(e.target.value)}
                       />
                     </Field>
-                    <Field label="Folder" htmlFor={`edit-folder-${feed.id}`}>
+                    <Field label="Category" htmlFor={`edit-category-${feed.id}`}>
                       <Select
-                        id={`edit-folder-${feed.id}`}
-                        value={editFolderIds[0] ?? ''}
-                        onChange={(e) => setEditFolderIds(e.target.value ? [e.target.value] : [])}
+                        id={`edit-category-${feed.id}`}
+                        value={editCategoryId}
+                        onChange={(e) => setEditCategoryId(e.target.value)}
                       >
-                        <option value="">{NO_FOLDER}</option>
-                        {folders.map((folder) => (
-                          <option key={folder.id} value={folder.id}>
-                            {folder.label}
+                        <option value="">{NO_CATEGORY}</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
                           </option>
                         ))}
                       </Select>
@@ -316,7 +316,7 @@ export default function FeedManager({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-medium">{feed.title}</span>
                         {feed.is_scraped && <Tag>BUILT</Tag>}
-                        <Tag>{folderLabelsFor(feed.folderIds, folders)}</Tag>
+                        <Tag>{categoryName(feed.categoryId)}</Tag>
                         {feed.consecutive_failures >= 3 && (
                           <Badge tone="danger">Failing {feed.consecutive_failures} runs</Badge>
                         )}

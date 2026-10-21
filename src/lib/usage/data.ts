@@ -14,7 +14,8 @@ import {
 // which imports nothing, so a component can use them without dragging the
 // database in.
 
-// Rolling seven days of ingest spend, summed from ingest_runs.
+// Rolling seven days of AI spend: ingest (ingest_runs) plus every
+// on-demand summary and reader view (ai_usage).
 //
 // Read with the caller's own RLS-scoped client: the table is readable by
 // any signed-in account and writable by none (ingest writes it as the
@@ -39,9 +40,15 @@ export async function getRecentUsage(): Promise<UsageWindow | null> {
     .select('translate_input_tokens, translate_output_tokens, summarize_input_tokens, summarize_output_tokens, embed_input_tokens')
     .gte('created_at', since)
   logQueryError('usage/getRecentUsage', error)
-  if (!data || data.length === 0) return { totalTokens: 0, estimatedUsd: 0 }
 
-  const rows = data as {
+  const { data: onDemandData, error: onDemandError } = await supabase
+    .from('ai_usage')
+    .select('input_tokens, output_tokens')
+    .gte('created_at', since)
+  logQueryError('usage/getRecentUsage (on demand)', onDemandError)
+  const onDemand = (onDemandData ?? []) as { input_tokens: number; output_tokens: number }[]
+
+  const rows = (data ?? []) as {
     translate_input_tokens: number
     translate_output_tokens: number
     summarize_input_tokens: number
@@ -59,10 +66,14 @@ export async function getRecentUsage(): Promise<UsageWindow | null> {
       outputTokens: sum(rows, (row) => row.translate_output_tokens),
       reasoningTokens: 0,
     },
+    // On-demand calls use the same model as summaries, so they're priced
+    // in the same bucket.
     summarize: {
       calls: 0,
-      inputTokens: sum(rows, (row) => row.summarize_input_tokens),
-      outputTokens: sum(rows, (row) => row.summarize_output_tokens),
+      inputTokens:
+        sum(rows, (row) => row.summarize_input_tokens) + sum(onDemand, (row) => row.input_tokens),
+      outputTokens:
+        sum(rows, (row) => row.summarize_output_tokens) + sum(onDemand, (row) => row.output_tokens),
       reasoningTokens: 0,
     },
     embed: {

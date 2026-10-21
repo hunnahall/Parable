@@ -614,6 +614,22 @@ type FeedResult =
   // this arm too.
   | { ok: false; failure: FeedFailure; usage: IngestUsage }
 
+// What the Inbox's "N filtered today" lists (see the filtered_titles
+// migration).
+type FilteredTitleRow = {
+  user_id: string
+  feed_id: string | null
+  title: string
+  link: string | null
+  keyword: string
+}
+
+async function logFilteredTitles(supabase: AdminClient, rows: FilteredTitleRow[]): Promise<void> {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('filtered_titles').insert(rows)
+  if (error) console.error('ingest: failed to log filtered titles', error.message)
+}
+
 // The free half of per-item work — HTML stripping and franc detection —
 // followed by the two calls that are worth batching across the whole feed:
 // title translation and title embedding.
@@ -659,6 +675,8 @@ async function prepareItems(
   const titleEnByIndex = new Map<number, string | null>()
   toTranslate.forEach((index, i) => titleEnByIndex.set(index, translated.titles[i]))
 
+  const filteredLog: FilteredTitleRow[] = []
+  const droppedGuids: string[] = []
   const gated = base.flatMap((entry, index) => {
     const titleEn = titleEnByIndex.get(index) ?? null
     const matchTitle = titleEn ?? entry.title
@@ -666,10 +684,23 @@ async function prepareItems(
     // The filter gate, on the translated title and before anything else
     // is paid for. A title every subscriber has filtered never becomes a
     // row at all: no embedding, no fetch.
-    const filteredOutFor = feed.subscribers
-      .filter((sub) => matchedAutoDeleteKeyword(matchTitle, sub.keywords) !== null)
-      .map((sub) => sub.userId)
-    if (filteredOutFor.length === feed.subscribers.length) return []
+    const filteredOutFor: string[] = []
+    for (const sub of feed.subscribers) {
+      const keyword = matchedAutoDeleteKeyword(matchTitle, sub.keywords)
+      if (keyword === null) continue
+      filteredOutFor.push(sub.userId)
+      filteredLog.push({
+        user_id: sub.userId,
+        feed_id: feed.id,
+        title: matchTitle,
+        link: entry.item.link ?? null,
+        keyword,
+      })
+    }
+    if (filteredOutFor.length === feed.subscribers.length) {
+      droppedGuids.push(entry.guid)
+      return []
+    }
 
     return [
       {
@@ -682,6 +713,21 @@ async function prepareItems(
       },
     ]
   })
+
+  // A dropped title never reaches processItem, which is where guids are
+  // normally recorded, so it's recorded here. Without this every run saw it
+  // as new and paid to translate it again. Both writes are best-effort.
+  if (droppedGuids.length > 0) {
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from('ingested_guids')
+      .upsert(
+        droppedGuids.map((guid) => ({ feed_id: feed.id, guid, last_seen_at: now })),
+        { onConflict: 'feed_id,guid' }
+      )
+    if (error) console.error(`ingest: failed to record filtered guids for ${feed.id}`, error.message)
+  }
+  await logFilteredTitles(supabase, filteredLog)
 
   // Free before paid: an identical link or title answers the duplicate
   // question without the vector lookup in processItem.
@@ -923,16 +969,21 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
     const { data: items, error: itemsError } = await rpc('feed_items_excluding_states', {
       p_user_id: prefs.user_id,
       p_exclude_states: UNFILED_EXCLUDED_STATES,
-    }).select('id, title, title_en')
+    }).select('id, feed_id, title, title_en, link')
     if (itemsError) {
       console.error(`ingest: auto-delete lookup failed for ${prefs.user_id}`, itemsError.message)
       continue
     }
 
-    const matchedIds = ((items ?? []) as { id: string; title: string; title_en: string | null }[])
-      .filter((item) => matchedAutoDeleteKeyword(item.title_en ?? item.title, keywords))
-      .map((item) => item.id)
-    if (matchedIds.length === 0) continue
+    const matched = (
+      (items ?? []) as { id: string; feed_id: string; title: string; title_en: string | null; link: string | null }[]
+    ).flatMap((item) => {
+      const title = item.title_en ?? item.title
+      const keyword = matchedAutoDeleteKeyword(title, keywords)
+      return keyword === null ? [] : [{ item, title, keyword }]
+    })
+    if (matched.length === 0) continue
+    const matchedIds = matched.map(({ item }) => item.id)
 
     const { error: writeError } = await supabase.from('article_states').upsert(
       matchedIds.map((feedItemId) => ({
@@ -947,6 +998,16 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
       console.error(`ingest: auto-delete write failed for ${prefs.user_id}`, writeError.message)
       continue
     }
+    await logFilteredTitles(
+      supabase,
+      matched.map(({ item, title, keyword }) => ({
+        user_id: prefs.user_id,
+        feed_id: item.feed_id,
+        title,
+        link: item.link,
+        keyword,
+      }))
+    )
     tombstoned += matchedIds.length
   }
 

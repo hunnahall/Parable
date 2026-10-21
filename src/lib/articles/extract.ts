@@ -92,18 +92,83 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
 // and list items are kept so structure survives as separate paragraphs.
 const BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figcaption'
 
-// Readability's cleaned HTML, as paragraphs of collapsed text. Only leaf
-// blocks are read (a block with a block inside it would repeat its child's
-// text), and loose text Readability left outside any block falls back to
-// the whole body.
+// Lines that point elsewhere instead of belonging to the article: "read
+// also" links in French, Arabic and English. Matched at the start of a
+// paragraph, so a sentence that merely contains "voir aussi" stays.
+const READ_ALSO =
+  /^\s*(?:[»>•▶►|-]\s*)?(?:(?:à |a )?lire (?:aussi|également|egalement)|(?:à |a )?voir aussi|(?:à |a )?(?:écouter|ecouter|regarder) aussi|sur le même sujet|read (?:also|more)|also read|see also|related(?: articles?| stories)?|more on this(?: story)?|(?:اقرأ|إقرأ|اقرا) (?:أيضا|أيضاً|ايضا|المزيد)|(?:طالع|شاهد) (?:أيضا|أيضاً|ايضا)|مواضيع ذات صلة)\s*[:：-]?/iu
+
+// Short lines that are ad or page furniture, not article text. Only whole
+// short paragraphs are dropped, never a sentence inside a real one.
+const FURNITURE =
+  /^(?:publicité|advertisement|advertising|sponsored(?: content)?|contenu sponsorisé|إعلان|partager(?: cet article)?|share(?: this article)?|abonnez-vous.*|subscribe.*newsletter.*|inscrivez-vous.*newsletter.*|newsletter.*|اشترك.*)$/iu
+const FURNITURE_MAX_LENGTH = 120
+
+// A block mostly made of link text is a list of other articles. Short
+// blocks only: a long paragraph that links a few phrases is still prose.
+// A sentence that ends like one ("..., which he has denied.") is kept
+// unless the link covers nearly all of it, since publishers such as the
+// Guardian link most of a sentence inside the article.
+const LINK_DENSITY_MAX = 0.6
+const LINK_DENSITY_SENTENCE_MAX = 0.95
+const SENTENCE_END = /[.!?…؟。]["'»”’)]*$/u
+const LINK_BLOCK_MAX_LENGTH = 300
+
+function collapse(text: string | null | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function linkDensity(el: Element, textLength: number): number {
+  if (textLength === 0) return 0
+  const linked = Array.from(el.querySelectorAll('a')).reduce((sum, a) => sum + collapse(a.textContent).length, 0)
+  return linked / textLength
+}
+
+// Lists whose items are mostly links (related-article lists, tag clouds)
+// go before paragraphs are read, so their items aren't kept one by one.
+function removeLinkLists(document: Document): void {
+  for (const list of Array.from(document.querySelectorAll('ul, ol'))) {
+    const items = Array.from(list.querySelectorAll(':scope > li'))
+    if (items.length === 0) continue
+    const linky = items.filter((li) => {
+      const length = collapse(li.textContent).length
+      return length > 0 && linkDensity(li, length) > LINK_DENSITY_MAX
+    })
+    if (linky.length / items.length >= 0.5) list.remove()
+  }
+}
+
+// Whether a block is the article's own text. Exported for the extraction
+// test script.
+export function isArticleText(el: Element): boolean {
+  const text = collapse(el.textContent)
+  if (!text) return false
+  if (READ_ALSO.test(text)) return false
+  if (text.length <= FURNITURE_MAX_LENGTH && FURNITURE.test(text)) return false
+  if (text.length <= LINK_BLOCK_MAX_LENGTH) {
+    const density = linkDensity(el, text.length)
+    const limit = SENTENCE_END.test(text) ? LINK_DENSITY_SENTENCE_MAX : LINK_DENSITY_MAX
+    if (density > limit) return false
+  }
+  return true
+}
+
+// Readability's cleaned HTML, as paragraphs of collapsed text, with "read
+// also" lines, link lists and ad furniture removed (roadmap step 10). Only
+// leaf blocks are read (a block with a block inside it would repeat its
+// child's text), and loose text Readability left outside any block falls
+// back to the whole body.
 export function paragraphsOf(html: string, url: string): string {
   const document = new JSDOM(html, { url }).window.document
+  removeLinkLists(document)
   const blocks = Array.from(document.querySelectorAll(BLOCK_SELECTOR)).filter(
     (el) => !el.querySelector(BLOCK_SELECTOR)
   )
-  const paragraphs = blocks
-    .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-  if (paragraphs.length > 0) return paragraphs.join('\n\n')
-  return (document.body.textContent ?? '').replace(/\s+/g, ' ').trim()
+  if (blocks.length > 0) {
+    return blocks
+      .filter(isArticleText)
+      .map((el) => collapse(el.textContent))
+      .join('\n\n')
+  }
+  return collapse(document.body.textContent)
 }

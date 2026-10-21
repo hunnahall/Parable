@@ -32,10 +32,27 @@ function openai(): OpenAI | null {
   return client
 }
 
-// The one summary Parable generates. It runs at ingest against the
-// article's extracted body (or, when extraction fails, the feed's own
-// description), and the result is the only thing about the article's
-// content that gets stored — the body is discarded immediately after.
+// Shared with the streamed on-demand summary (src/lib/ondemand/), so both
+// paths write the same kind of summary.
+export function summaryInstructions(targetName: string): string {
+  return (
+    `Summarize the news article in exactly two concise, neutral sentences ` +
+    `of at most 30 words each, written in ${targetName}. The source may be ` +
+    `in any language; always answer in ${targetName}. Output only the two ` +
+    `sentences — no preamble, labels, or headings. The body was extracted ` +
+    `from a web page and may still contain ads, newsletter prompts, ` +
+    `photo credits or links to other articles; ignore anything that isn't ` +
+    `part of this article.`
+  )
+}
+
+export function summaryInput(title: string, body: string): string {
+  return `Title: ${title}\n\nBody: ${body.trim().slice(0, BODY_INPUT_MAX_LENGTH)}`
+}
+
+// The non-streamed summary, written when a story is saved and one of its
+// articles has none yet (src/lib/ondemand/actions.ts). It reads the stored
+// article text, or the feed's teaser when that's all there is.
 //
 // Translation is folded into this same call rather than run as a second
 // pass over the output: asking for the summary directly in the target
@@ -72,13 +89,9 @@ export async function summarizeToTarget(
       input: [
         {
           role: 'developer',
-          content:
-            `Summarize the news article in exactly two concise, neutral sentences ` +
-            `of at most 30 words each, written in ${targetName}. The source may be ` +
-            `in any language; always answer in ${targetName}. Output only the two ` +
-            `sentences — no preamble, labels, or headings.`,
+          content: summaryInstructions(targetName),
         },
-        { role: 'user', content: `Title: ${title}\n\nBody: ${trimmed.slice(0, BODY_INPUT_MAX_LENGTH)}` },
+        { role: 'user', content: summaryInput(title, trimmed) },
       ],
     })
 
