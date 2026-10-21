@@ -12,6 +12,7 @@ import StoryRow, { type FolderOption } from './StoryRow'
 import Button, { buttonClass } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import EmptyState from '@/components/ui/EmptyState'
+import { ARCHIVE_ALL_EVENT } from '@/components/layout/CommandPalette'
 import { useToast } from '@/components/ui/Toast'
 
 export type StoryViewMode = 'inbox' | 'archive'
@@ -163,10 +164,25 @@ export default function StoryList({
   // Archives exactly the stories on screen when pressed. An article that
   // arrives afterwards isn't in this list, so it stays in the Inbox.
   async function archiveAll() {
+    const targets = visible.filter((story) => !leavingRef.current.has(story.id))
+    if (targets.length === 0) return
     setBulkPending(true)
-    await archive(visible.filter((story) => !leavingRef.current.has(story.id)))
+    await archive(targets)
     setBulkPending(false)
   }
+
+  // The command palette's Archive all. A ref keeps the listener on the
+  // latest list without re-subscribing on every render.
+  const archiveAllRef = useRef(archiveAll)
+  useEffect(() => {
+    archiveAllRef.current = archiveAll
+  })
+  useEffect(() => {
+    if (view !== 'inbox') return
+    const onArchiveAll = () => void archiveAllRef.current()
+    window.addEventListener(ARCHIVE_ALL_EVENT, onArchiveAll)
+    return () => window.removeEventListener(ARCHIVE_ALL_EVENT, onArchiveAll)
+  }, [view])
 
   function flushSeen() {
     flushTimer.current = null

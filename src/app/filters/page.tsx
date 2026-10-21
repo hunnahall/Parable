@@ -12,7 +12,10 @@ export default async function FiltersPage() {
 
   return (
     <>
-      <PageHeader title="Filters" />
+      <PageHeader
+        title="Filters"
+        figure={{ value: preferences.autoDeleteKeywords.length.toLocaleString('en-US'), label: 'Filter words' }}
+      />
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 min-[1000px]:px-8">
         <FiltersForm initialPreferences={preferences} />
       </div>

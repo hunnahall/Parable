@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getArticlesPage, listFeeds } from '@/lib/articles/list'
 import { listFolderOptions } from '@/lib/folders/data'
+import { countSavedArticles } from '@/lib/articles/count'
 import PageHeader from '@/components/layout/PageHeader'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
 
@@ -31,7 +32,7 @@ export default async function SavedPage({
     display: params.display === 'card' ? 'card' : 'list',
   }
 
-  const [page, folders, feedOptions] = await Promise.all([
+  const [page, folders, feedOptions, savedCount] = await Promise.all([
     getArticlesPage({
       query: filters.query || undefined,
       view: filters.view,
@@ -42,11 +43,16 @@ export default async function SavedPage({
     }),
     listFolderOptions(),
     listFeeds(),
+    countSavedArticles(),
   ])
 
   return (
     <>
-      <PageHeader title="Saved" wide={filters.display === 'card'} />
+      <PageHeader
+        title="Saved"
+        wide={filters.display === 'card'}
+        figure={{ value: savedCount.toLocaleString('en-US'), label: 'Saved articles' }}
+      />
       <div className={filters.display === 'card' ? 'mx-auto max-w-[var(--content-max)] px-4 py-6 min-[1000px]:px-8' : 'mx-auto max-w-3xl px-4 py-6 min-[1000px]:px-8'}>
         <ArticlesView
           basePath="/saved"

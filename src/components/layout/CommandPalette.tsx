@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Monitor, Moon, Search, Sun, type LucideIcon } from 'lucide-react'
-import { SIDEBAR_NAV } from './sidebarNav'
+import { usePathname, useRouter } from 'next/navigation'
+import { Archive, Hash, Monitor, Moon, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
+import { NAV_LINKS, categoryHref, type SidebarCategory } from './sidebarNav'
 import { updatePreferences } from '@/lib/preferences/actions'
 import { applyTheme } from '@/lib/preferences/applyTheme'
 import type { ThemeChoice } from '@/lib/preferences/data'
@@ -11,6 +11,8 @@ import type { ThemeChoice } from '@/lib/preferences/data'
 // Dispatched by the sidebar's Search button, so touch screens (no ⌘K)
 // reach the same palette.
 export const PALETTE_OPEN_EVENT = 'parable:open-palette'
+// Dispatched by the palette's Archive all; the Inbox's StoryList listens.
+export const ARCHIVE_ALL_EVENT = 'parable:archive-all'
 
 type Command = { id: string; label: string; group: string; icon: LucideIcon; run: () => void }
 
@@ -33,8 +35,9 @@ const THEMES: { value: ThemeChoice; label: string; icon: LucideIcon }[] = [
   { value: 'light', label: 'Use light theme', icon: Sun },
 ]
 
-export default function CommandPalette() {
+export default function CommandPalette({ categories }: { categories: SidebarCategory[] }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
@@ -69,14 +72,38 @@ export default function CommandPalette() {
   }, [open])
 
   // Built from SIDEBAR_NAV so the palette can never list a destination the
-  // sidebar has dropped, or miss one it has gained.
+  // sidebar has dropped, or miss one it has gained. Settings is listed here
+  // though the sidebar keeps it in the account menu.
   const commands = useMemo<Command[]>(
     () => [
-      ...SIDEBAR_NAV.flatMap((e) =>
-        e.type === 'link'
-          ? [{ id: e.href, label: e.label, group: 'Go to', icon: e.icon, run: () => router.push(e.href) }]
-          : []
-      ),
+      ...NAV_LINKS.map((e) => ({ id: e.href, label: e.label, group: 'Go to', icon: e.icon, run: () => router.push(e.href) })),
+      ...categories.map((c) => ({
+        id: `category-${c.id}`,
+        label: c.name,
+        group: 'Categories',
+        icon: Hash,
+        run: () => router.push(categoryHref(c.id)),
+      })),
+      // Archive all works on what the Inbox has on screen, so it's offered
+      // only there.
+      ...(pathname === '/inbox'
+        ? [
+            {
+              id: 'archive-all',
+              label: 'Archive all',
+              group: 'Actions',
+              icon: Archive,
+              run: () => window.dispatchEvent(new Event(ARCHIVE_ALL_EVENT)),
+            },
+          ]
+        : []),
+      {
+        id: 'add-feed',
+        label: 'Add a feed',
+        group: 'Actions',
+        icon: Plus,
+        run: () => router.push('/feeds#new-feed-url'),
+      },
       ...THEMES.map((t) => ({
         id: `theme-${t.value}`,
         label: t.label,
@@ -88,7 +115,7 @@ export default function CommandPalette() {
         },
       })),
     ],
-    [router]
+    [router, categories, pathname]
   )
 
   const results = useMemo(() => commands.filter((c) => matches(query, c.label)), [commands, query])
@@ -139,7 +166,7 @@ export default function CommandPalette() {
               setSelected(0)
             }}
             onKeyDown={onInputKeyDown}
-            placeholder="Go to a page or change the theme"
+            placeholder="Go to a page or category, or run an action"
             aria-label="Command"
           />
         </div>

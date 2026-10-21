@@ -2,28 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import ParableMark from '@/components/brand/ParableMark'
 import NavColumn from './NavColumn'
-import { SIDEBAR_NAV, isNavEntryActive } from './sidebarNav'
+import { NAV_LINKS, isNavEntryActive, type ShellData } from './sidebarNav'
 
 // Under 1000px the sidebar collapses to a top bar (logo, page title, menu
 // button); the menu opens the same navigation as a Level 2 sheet from the
 // left.
-export default function MobileSidebarDrawer({
-  userEmail,
-  inboxCount,
-}: {
-  userEmail: string
-  inboxCount: number
-}) {
+export default function MobileSidebarDrawer({ shell }: { shell: ShellData }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
-  const current = SIDEBAR_NAV.find(
-    (entry) => entry.type === 'link' && isNavEntryActive(entry.href, pathname)
-  )
-  const title = current && current.type === 'link' ? current.label : 'Parable'
+  const searchParams = useSearchParams()
+  // A category's Inbox view is titled with the category's name.
+  const category =
+    pathname === '/inbox' ? shell.categories.find((c) => c.id === searchParams.get('category')) : undefined
+  const title = category?.name ?? NAV_LINKS.find((entry) => isNavEntryActive(entry.href, pathname))?.label ?? 'Parable'
 
   useEffect(() => {
     if (!open) return
@@ -62,8 +57,7 @@ export default function MobileSidebarDrawer({
             className="card-modal absolute inset-y-0 left-0 z-[61] w-[min(var(--sidebar-w),85vw)] border-y-0 border-l-0"
           >
             <NavColumn
-              userEmail={userEmail}
-              inboxCount={inboxCount}
+              shell={shell}
               onNavigate={() => setOpen(false)}
               headerAction={
                 <button

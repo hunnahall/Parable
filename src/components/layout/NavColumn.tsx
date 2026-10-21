@@ -1,25 +1,25 @@
 'use client'
 
 import Link from 'next/link'
-import { LogOut, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import ParableLogo from '@/components/brand/ParableLogo'
 import CovenantWorksCredit from '@/components/brand/CovenantWorksCredit'
 import SidebarNavList from './SidebarNavList'
+import AccountMenu from './AccountMenu'
+import StatusLine from './StatusLine'
 import { PALETTE_OPEN_EVENT } from './CommandPalette'
-import { signOut } from '@/app/login/actions'
+import type { ShellData } from './sidebarNav'
 
 // The sidebar's contents, shared by the fixed desktop sidebar and the
 // phone/tablet sheet so the two can't drift: the app logo (the one place
-// it takes the signature color), search, navigation, account, and the
-// suite footer.
+// it takes the signature color), search, navigation, the ingest status
+// line, the account menu, and the suite footer.
 export default function NavColumn({
-  userEmail,
-  inboxCount,
+  shell,
   onNavigate,
   headerAction,
 }: {
-  userEmail: string
-  inboxCount: number
+  shell: ShellData
   onNavigate?: () => void
   headerAction?: React.ReactNode
 }) {
@@ -48,19 +48,12 @@ export default function NavColumn({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2">
-        <SidebarNavList inboxCount={inboxCount} onNavigate={onNavigate} />
+        <SidebarNavList inboxCount={shell.inboxCount} categories={shell.categories} onNavigate={onNavigate} />
       </div>
 
       <div className="border-t border-border px-2 py-2">
-        <div className="truncate px-2.5 pb-1 text-xs text-muted" title={userEmail}>
-          {userEmail}
-        </div>
-        <form action={signOut}>
-          <button type="submit" className="cw-nav-item w-full text-left">
-            <LogOut strokeWidth={1.5} aria-hidden="true" />
-            Sign out
-          </button>
-        </form>
+        <StatusLine lastSuccessAt={shell.lastSuccessAt} staleHours={shell.staleHours} />
+        <AccountMenu userEmail={shell.userEmail} theme={shell.theme} onNavigate={onNavigate} />
       </div>
 
       <CovenantWorksCredit className="border-t border-border px-4 py-3" />

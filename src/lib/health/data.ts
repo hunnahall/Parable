@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
 
@@ -14,11 +15,16 @@ export interface Health {
   // hoursSince is null when no successful run is recorded at all.
   ingestStale: { hoursSince: number | null } | null
   failingFeeds: { id: string; title: string; failures: number }[]
+  // When ingest last succeeded, for the sidebar's status line. Null when
+  // no successful run is recorded, or the query failed.
+  lastSuccessAt: string | null
 }
 
-export async function getHealth(): Promise<Health> {
+// Cached per request: the layout (sidebar status line) and the Inbox
+// (banners) both read it.
+export const getHealth = cache(async (): Promise<Health> => {
   const user = await getUser()
-  if (!user) return { ingestStale: null, failingFeeds: [] }
+  if (!user) return { ingestStale: null, failingFeeds: [], lastSuccessAt: null }
 
   const supabase = await createClient()
   const [{ data: run, error: runError }, { data: subs, error: subsError }] = await Promise.all([
@@ -60,5 +66,5 @@ export async function getHealth(): Promise<Health> {
     failures: sub.feeds.consecutive_failures,
   }))
 
-  return { ingestStale, failingFeeds }
-}
+  return { ingestStale, failingFeeds, lastSuccessAt: runError ? null : (run?.created_at ?? null) }
+})

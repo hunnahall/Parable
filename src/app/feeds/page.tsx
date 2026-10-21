@@ -7,6 +7,9 @@ import { listFolders } from '@/lib/folders/data'
 import PageHeader from '@/components/layout/PageHeader'
 import FeedManager from '@/components/feeds/FeedManager'
 
+// The feed budget from context.md. Shown, not enforced.
+const FEED_BUDGET = 50
+
 export default async function FeedsPage() {
   const user = await getUser()
   if (!user) redirect('/login')
@@ -20,7 +23,7 @@ export default async function FeedsPage() {
 
   return (
     <>
-      <PageHeader title="Feeds" count={feeds.length} />
+      <PageHeader title="Feeds" figure={{ value: `${feeds.length} / ${FEED_BUDGET}`, label: 'Feeds' }} />
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 min-[1000px]:px-8">
         <FeedManager
           feeds={feeds}

@@ -100,3 +100,17 @@ export async function getInboxStoryCount(): Promise<number> {
   logQueryError('stories/getInboxStoryCount', error)
   return Number(data ?? 0)
 }
+
+// The sidebar's category counts: Inbox stories per category id. A story
+// whose feeds span categories counts in each, as in the Inbox sections.
+export async function getInboxCategoryCounts(): Promise<Record<string, number>> {
+  const user = await getUser()
+  if (!user) return {}
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('inbox_category_counts')
+  logQueryError('stories/getInboxCategoryCounts', error)
+  return Object.fromEntries(
+    ((data ?? []) as { category_id: string; stories: number }[]).map((row) => [row.category_id, Number(row.stories)])
+  )
+}

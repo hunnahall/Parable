@@ -10,9 +10,11 @@ import PageHeader from '@/components/layout/PageHeader'
 import HealthBanners from '@/components/health/HealthBanners'
 import StoryList from '@/components/stories/StoryList'
 
-export default async function InboxPage() {
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ category?: string }> }) {
   const user = await getUser()
   if (!user) redirect('/login')
+
+  const params = await searchParams
 
   const [stories, folders, categories, health, filtered] = await Promise.all([
     getStories('inbox'),
@@ -22,13 +24,31 @@ export default async function InboxPage() {
     listRecentFilteredTitles(),
   ])
 
+  // ?category=<id> shows one category's section (the sidebar's category
+  // links). An id that isn't one of the user's categories shows everything.
+  const category = categories.find((c) => c.id === params.category)
+  const shown = category ? stories.filter((story) => story.sources.some((s) => s.categoryId === category.id)) : stories
+
   return (
     <>
-      <PageHeader title="Inbox" count={stories.length} />
+      <PageHeader
+        title={category?.name ?? 'Inbox'}
+        figure={{ value: shown.length.toLocaleString('en-US'), label: 'Stories, last 12 hours' }}
+      />
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8">
         <HealthBanners health={health} />
         <FilteredToday titles={filtered} />
-        <StoryList stories={stories} view="inbox" folders={folders} categories={categories} query="" basePath="/inbox" />
+        <StoryList
+          // A fresh list per view, so local state (removed, seen) doesn't
+          // carry between categories.
+          key={category?.id ?? 'all'}
+          stories={shown}
+          view="inbox"
+          folders={folders}
+          categories={category ? [category] : categories}
+          query=""
+          basePath="/inbox"
+        />
       </div>
     </>
   )

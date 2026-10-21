@@ -202,6 +202,17 @@ input[type="radio"] {
   animation: skeleton-in 1ms linear 300ms backwards;
 }
 
+/* The page-load bar (TopLoadingBar) waits the same 300ms. With reduced
+   motion its sweep stops and it shows as a still partial bar. */
+.top-loading-bar {
+  animation: skeleton-in 1ms linear 300ms backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .top-loading-bar .cw-progress > span {
+    animation: none;
+  }
+}
+
 @keyframes landing-reveal {
   from {
     opacity: 0;

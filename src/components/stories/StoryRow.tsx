@@ -194,7 +194,7 @@ export default function StoryRow({
 
   const archiveLabel = view === 'inbox' ? 'Archive' : 'Move to Inbox'
   // Icon buttons grow to the 40px touch size where there's no hover.
-  const iconButton = 'cw-btn cw-btn--ghost cw-btn--sm cw-btn--icon [@media(hover:none)]:size-10'
+  const iconButton = 'cw-btn cw-btn--ghost cw-btn--sm cw-btn--icon [@media(hover:none)]:size-10!'
 
   return (
     <li
@@ -337,7 +337,7 @@ export default function StoryRow({
                   onCreateFolder={createFolderAndSave}
                   disabled={pending}
                   iconOnly
-                  buttonClassName="[@media(hover:none)]:size-10"
+                  buttonClassName="[@media(hover:none)]:size-10!"
                 />
               </Tooltip>
               <Tooltip label={archiveLabel}>

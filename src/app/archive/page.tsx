@@ -23,7 +23,10 @@ export default async function ArchivePage({
 
   return (
     <>
-      <PageHeader title="Archive" count={stories.length} />
+      <PageHeader
+        title="Archive"
+        figure={{ value: stories.length.toLocaleString('en-US'), label: q ? 'Matching stories' : 'Stories, kept 24 hours' }}
+      />
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8">
         <StoryList stories={stories} view="archive" folders={folders} categories={categories} query={q} basePath="/archive" />
       </div>

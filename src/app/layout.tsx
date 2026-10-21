@@ -4,7 +4,10 @@ import { Hanken_Grotesk, IBM_Plex_Mono, Newsreader } from 'next/font/google'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getInboxStoryCount } from '@/lib/stories/data'
+import { getInboxCategoryCounts, getInboxStoryCount } from '@/lib/stories/data'
+import { listCategories } from '@/lib/categories/data'
+import { getHealth, INGEST_STALE_HOURS } from '@/lib/health/data'
+import type { ShellData } from '@/components/layout/sidebarNav'
 import ParableLogo from '@/components/brand/ParableLogo'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
@@ -43,10 +46,21 @@ export default async function RootLayout({
   const user = await getUser()
   // Independent of each other (both only need `user`, already resolved
   // above and memoized by React's cache() for the rest of this request).
-  const [prefs, inboxCount] = await Promise.all([
+  const [prefs, inboxCount, categories, categoryCounts, health] = await Promise.all([
     getUserPreferences(),
     user ? getInboxStoryCount() : Promise.resolve(0),
+    user ? listCategories() : Promise.resolve([]),
+    user ? getInboxCategoryCounts() : Promise.resolve({} as Record<string, number>),
+    user ? getHealth() : Promise.resolve(null),
   ])
+  const shell: ShellData = {
+    userEmail: user?.email ?? '',
+    inboxCount,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, count: categoryCounts[c.id] ?? 0 })),
+    theme: prefs.theme,
+    lastSuccessAt: health?.lastSuccessAt ?? null,
+    staleHours: INGEST_STALE_HOURS,
+  }
 
   return (
     <html
@@ -61,10 +75,10 @@ export default async function RootLayout({
         <ToastProvider>
           {user ? (
             <div className="flex min-h-dvh flex-col min-[1000px]:flex-row">
-              <Sidebar userEmail={user.email ?? ''} inboxCount={inboxCount} />
-              <MobileSidebarDrawer userEmail={user.email ?? ''} inboxCount={inboxCount} />
+              <Sidebar shell={shell} />
+              <MobileSidebarDrawer shell={shell} />
               <main className="min-w-0 flex-1">{children}</main>
-              <CommandPalette />
+              <CommandPalette categories={shell.categories} />
             </div>
           ) : (
             <>
