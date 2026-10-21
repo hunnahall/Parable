@@ -54,7 +54,10 @@ export default function ReaderView({ story, onClose }: { story: Story; onClose: 
         <div className="cw-modal__head flex items-start justify-between gap-3 pb-3">
           <div className="min-w-0 space-y-2">
             <p className="text-xs text-muted">{source.feedTitle}</p>
-            <h2 id={`reader-${story.id}`} className="cw-modal__title break-words">
+            <h2
+              id={`reader-${story.id}`}
+              className="break-words font-read text-[length:var(--text-2xl)] font-medium leading-[var(--leading-snug)] tracking-[var(--tracking-title)]"
+            >
               {source.title}
             </h2>
             <SourcePicker sources={story.sources} value={sourceId} onChange={setSourceId} id={`reader-source-${story.id}`} />
@@ -63,30 +66,32 @@ export default function ReaderView({ story, onClose }: { story: Story; onClose: 
             <X strokeWidth={1.5} aria-hidden="true" />
           </Button>
         </div>
-        <div className="cw-modal__body flex-1 space-y-4 overflow-y-auto border-t border-border pt-4 text-foreground">
-          {error ? (
-            <p className="text-danger">{error}</p>
-          ) : kind === 'none' && !loading ? (
-            <p>Parable couldn&rsquo;t fetch this article&rsquo;s text (the publisher blocks it or it&rsquo;s behind a paywall). {publisherLink}</p>
-          ) : (
-            <>
-              {kind === 'teaser' && (
-                <p className="text-sm text-muted">Only the feed&rsquo;s preview could be fetched: the publisher blocks full text or it&rsquo;s behind a paywall. {publisherLink}</p>
-              )}
-              {paragraphs.length === 0 && loading && <p className="text-muted">Loading</p>}
-              {paragraphs.map((p, i) => (
-                <p key={i} className="leading-relaxed">
-                  {p}
-                </p>
-              ))}
-              {!loading && kind !== 'teaser' && (
-                <p className="border-t border-border pt-3 text-sm text-muted">
-                  {truncated ? 'This is the first part of a long article. ' : ''}
-                  {publisherLink}
-                </p>
-              )}
-            </>
-          )}
+        <div className="cw-modal__body flex-1 overflow-y-auto border-t border-border pt-4 text-foreground">
+          <div className="mx-auto max-w-[var(--read-max)] space-y-4">
+            {error ? (
+              <p className="text-danger">{error}</p>
+            ) : kind === 'none' && !loading ? (
+              <p>Parable couldn&rsquo;t fetch this article&rsquo;s text (the publisher blocks it or it&rsquo;s behind a paywall). {publisherLink}</p>
+            ) : (
+              <>
+                {kind === 'teaser' && (
+                  <p className="text-sm text-muted">Only the feed&rsquo;s preview could be fetched: the publisher blocks full text or it&rsquo;s behind a paywall. {publisherLink}</p>
+                )}
+                {paragraphs.length === 0 && loading && <p className="text-muted">Loading</p>}
+                {paragraphs.map((p, i) => (
+                  <p key={i} className="font-read text-[length:var(--text-lg)] leading-[var(--leading-read)]">
+                    {p}
+                  </p>
+                ))}
+                {!loading && kind !== 'teaser' && (
+                  <p className="border-t border-border pt-3 text-sm text-muted">
+                    {truncated ? 'This is the first part of a long article. ' : ''}
+                    {publisherLink}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

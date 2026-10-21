@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Hanken_Grotesk, IBM_Plex_Mono } from 'next/font/google'
+import { Hanken_Grotesk, IBM_Plex_Mono, Newsreader } from 'next/font/google'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
@@ -12,7 +12,8 @@ import CommandPalette from '@/components/layout/CommandPalette'
 import { ToastProvider } from '@/components/ui/Toast'
 
 // Covenant Works Design System v2: one sans for display and interface, one
-// mono for labels, figures and keyboard hints.
+// mono for labels, figures and keyboard hints. Parable adds a serif for
+// long-form reading (the reader view and summaries), set as --font-read.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
@@ -22,6 +23,11 @@ const plexMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
   variable: '--font-plex-mono',
+})
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-newsreader',
 })
 
 export const metadata: Metadata = {
@@ -47,9 +53,9 @@ export default async function RootLayout({
       lang="en"
       // Parable's signature color. "system" leaves data-theme off so
       // tokens.css follows the device (dark unless it asks for light).
-      data-accent="slate-blue"
+      data-accent="periwinkle"
       data-theme={prefs.theme === 'system' ? undefined : prefs.theme}
-      className={`${hankenGrotesk.variable} ${plexMono.variable}`}
+      className={`${hankenGrotesk.variable} ${plexMono.variable} ${newsreader.variable}`}
     >
       <body className="min-h-dvh">
         <ToastProvider>

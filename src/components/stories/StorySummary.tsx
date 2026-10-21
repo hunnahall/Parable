@@ -23,7 +23,7 @@ export default function StorySummary({ story }: { story: Story }) {
       {error ? (
         <p className="text-danger">{error}</p>
       ) : text ? (
-        <p className="text-foreground">{text}</p>
+        <p className="font-read text-[length:var(--text-lg)] leading-[var(--leading-read)] text-foreground">{text}</p>
       ) : loading ? (
         <p className="text-muted">Summarizing</p>
       ) : (

@@ -5,8 +5,8 @@
 /* ---------------------------------------------------------------------------
    Covenant Works Design System v2 (see ~/Drive/Projects/covenant_works/).
    tokens.css and components.css are copies of that folder's files; edit them
-   there and re-copy. Parable's signature color is Slate Blue, set with
-   data-accent="slate-blue" on <html> (src/app/layout.tsx). This file maps
+   there and re-copy. Parable's signature color is Periwinkle, set with
+   data-accent="periwinkle" on <html> (src/app/layout.tsx). This file maps
    the tokens onto Tailwind's theme so utilities (bg-surface, text-muted,
    border-border, ...) resolve to the v2 palette in both themes, and wires
    the fonts next/font loads.
@@ -15,6 +15,8 @@
 :root {
   --font-sans: var(--font-hanken-grotesk), "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* tokens.css leaves --font-read to the app. Parable reads in a serif. */
+  --font-read: var(--font-newsreader), "Newsreader", Georgia, "Times New Roman", serif;
 }
 
 @theme inline {
@@ -97,6 +99,7 @@
   --font-sans: var(--font-sans);
   --font-heading: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-read: var(--font-read);
 }
 
 @layer base {

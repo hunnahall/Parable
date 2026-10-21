@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 160 160" fill="none">
   <style>
-    .tile{fill:#F7F7F5}.edge{stroke:rgba(19,20,24,.22)}.hatch{stroke:rgba(19,20,24,.05)}.mark{stroke:#4F719F}
-    @media (prefers-color-scheme:dark){.tile{fill:#0E0F12}.edge{stroke:rgba(255,255,255,.18)}.hatch{stroke:rgba(255,255,255,.06)}.mark{stroke:#92AFD7}}
+    .tile{fill:#F7F7F5}.edge{stroke:rgba(19,20,24,.22)}.hatch{stroke:rgba(19,20,24,.05)}.mark{stroke:#7665AC}
+    @media (prefers-color-scheme:dark){.tile{fill:#0E0F12}.edge{stroke:rgba(255,255,255,.18)}.hatch{stroke:rgba(255,255,255,.06)}.mark{stroke:#CDC1FF}}
   </style>
   <defs>
     <pattern id="h" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
