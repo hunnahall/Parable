@@ -3,7 +3,6 @@ import { getUser } from '@/lib/supabase/server'
 import { listFeedsDetailed } from '@/lib/feeds/data'
 import { getFeedNumbers } from '@/lib/feeds/numbers'
 import { listCategories } from '@/lib/categories/data'
-import { listFolders } from '@/lib/folders/data'
 import PageHeader from '@/components/layout/PageHeader'
 import FeedManager from '@/components/feeds/FeedManager'
 
@@ -41,12 +40,7 @@ export default async function FeedsPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  const [feeds, categories, folderRows, numbers] = await Promise.all([
-    listFeedsDetailed(),
-    listCategories(),
-    listFolders(),
-    getFeedNumbers(),
-  ])
+  const [feeds, categories, numbers] = await Promise.all([listFeedsDetailed(), listCategories(), getFeedNumbers()])
 
   return (
     <>
@@ -57,7 +51,6 @@ export default async function FeedsPage() {
         <FeedManager
           feeds={feeds}
           categories={categories}
-          folderRows={folderRows}
           numbers={Object.fromEntries(numbers)}
         />
       </div>

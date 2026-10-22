@@ -15,9 +15,7 @@ import type { FeedRow } from '@/lib/feeds/data'
 import type { IngestSummary } from '@/lib/feeds/ingest'
 import type { FeedNumbers } from '@/lib/feeds/numbers'
 import { formatFetchedAt } from '@/lib/formatting'
-import CategoryManager from './CategoryManager'
-import FolderManager from './FolderManager'
-import type { FolderRow } from '@/lib/folders/data'
+import CategoryBar, { UNCATEGORIZED } from './CategoryBar'
 import BuildFeedSection from './BuildFeedSection'
 import Button from '@/components/ui/Button'
 import Badge, { Tag } from '@/components/ui/Badge'
@@ -69,12 +67,10 @@ function formatOpened(numbers: FeedNumbers | undefined): string {
 export default function FeedManager({
   feeds,
   categories,
-  folderRows,
   numbers,
 }: {
   feeds: FeedRow[]
   categories: CategoryRow[]
-  folderRows: FolderRow[]
   numbers: Record<string, FeedNumbers>
 }) {
   const router = useRouter()
@@ -111,7 +107,7 @@ export default function FeedManager({
   const visibleFeeds = localFeeds
     .filter((feed) => {
       if (categoryFilter === 'all') return true
-      if (categoryFilter === 'uncategorized') return feed.categoryId === null
+      if (categoryFilter === UNCATEGORIZED) return feed.categoryId === null
       return feed.categoryId === categoryFilter
     })
     .sort((a, b) => {
@@ -254,10 +250,6 @@ export default function FeedManager({
 
       <BuildFeedSection categories={categories} onCreated={handleFeedBuilt} />
 
-      <CategoryManager categories={categories} />
-
-      <FolderManager folders={folderRows} />
-
       <section className="cw-panel">
         <div className="cw-panel__head flex-wrap">
           <h2 className="cw-panel__title">
@@ -297,26 +289,7 @@ export default function FeedManager({
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="min-w-0 max-w-full overflow-x-auto">
-          <div className="cw-seg" role="group" aria-label="Show feeds in">
-            {[
-              { id: 'all', label: 'All' },
-              ...categories.map((c) => ({ id: c.id, label: c.name })),
-              { id: 'uncategorized', label: NO_CATEGORY },
-            ].map(
-              (option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={categoryFilter === option.id}
-                  onClick={() => setCategoryFilter(option.id)}
-                >
-                  {option.label}
-                </button>
-              )
-            )}
-          </div>
-          </div>
+          <CategoryBar categories={categories} value={categoryFilter} onChange={setCategoryFilter} />
           <label className="flex items-center gap-2">
             <span className="cw-eyebrow">Sort</span>
             <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort feeds">
