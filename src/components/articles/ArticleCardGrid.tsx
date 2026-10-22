@@ -1,25 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import type { ArticleItem } from '@/lib/articles/list'
 import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
 import type { FolderOption } from './ArticleCard'
-
-// Best-effort favicon fallback when an article has no captured image —
-// derived client-side from the article's own link origin, no ingest-time
-// network fetch needed. Google's favicon service is used purely as a
-// public, keyless icon lookup, not for tracking/analytics.
-function faviconFor(link: string | null): string | null {
-  if (!link) return null
-  try {
-    const origin = new URL(link).origin
-    return `https://www.google.com/s2/favicons?sz=256&domain=${encodeURIComponent(origin)}`
-  } catch {
-    return null
-  }
-}
 
 // Image-forward tile for the Card display mode — sibling to ArticleCard
 // (the List mode), sharing the same archive/file action row
@@ -49,54 +36,58 @@ export default function ArticleCardGrid({
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showNote = item.state === 'saved' || item.state === 'archived'
-  // A real header image (captured at ingest — see extract.ts) fills the
-  // tile full-bleed; a favicon is just a small
-  // per-site icon, not a photo, so stretching it to fill the same box
-  // reads as blurry/broken — shown small and centered instead, on a
-  // neutral ground, until the article's actually been opened once.
-  const hasRealImage = !!item.imageUrl
-  const imageSrc = item.imageUrl ?? faviconFor(item.link)
+  // The article's image (R3 rules: https only, a plain img with no referrer
+  // and no proxy, removed if it fails). No image, no box: the card starts
+  // with its text. No third-party favicon service either, which would tell
+  // it which sites the reader follows.
+  const [imageFailed, setImageFailed] = useState(false)
+  const imageSrc = !imageFailed && item.imageUrl?.startsWith('https://') ? item.imageUrl : null
   const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter(
     (part): part is string => !!part
   )
 
   const image = imageSrc && (
-    hasRealImage ? (
-      // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
-      <img src={imageSrc} alt="" className="w-full h-full object-cover" />
-    ) : (
-      // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
-      <img src={imageSrc} alt="" className="w-10 h-10 object-contain opacity-70" />
-    )
+    // eslint-disable-next-line @next/next/no-img-element -- external, unpredictable source domains
+    <img
+      src={imageSrc}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setImageFailed(true)}
+      className="h-full w-full object-cover"
+    />
   )
 
   return (
     <div className="card-elevated group flex flex-col overflow-hidden">
-      <div className="relative aspect-[16/9] shrink-0">
-        {onToggleSelect && (
-          <input
-            type="checkbox"
-            checked={selected ?? false}
-            onChange={() => onToggleSelect(item.id)}
-            aria-label={`Select ${item.title}`}
-            className="absolute top-2 left-2 z-10"
-          />
-        )}
-        {item.link ? (
-          <a
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={actions.handleOpen}
-            aria-label={item.title}
-            className="flex h-full w-full items-center justify-center bg-fill-active"
-          >
-            {image}
-          </a>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-fill-active">{image}</div>
-        )}
-      </div>
+      {(image || onToggleSelect) && (
+        <div className={`relative shrink-0 ${image ? 'aspect-[16/9] border-b border-border' : 'h-8'}`}>
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={selected ?? false}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Select ${item.title}`}
+              className="absolute top-2 left-2 z-10"
+            />
+          )}
+          {item.link ? (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={actions.handleOpen}
+              aria-label={item.title}
+              className="flex h-full w-full items-center justify-center bg-fill-active"
+            >
+              {image}
+            </a>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-fill-active">{image}</div>
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col p-3">
         <div className="mb-0.5 truncate text-xs text-muted">{metaParts.join(' · ')}</div>
         {item.link ? (

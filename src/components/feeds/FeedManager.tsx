@@ -22,7 +22,7 @@ import BuildFeedSection from './BuildFeedSection'
 import Button from '@/components/ui/Button'
 import Badge, { Tag } from '@/components/ui/Badge'
 import { Field, Input, Select } from '@/components/ui/Input'
-import Tooltip from '@/components/ui/Tooltip'
+import EmptyState from '@/components/ui/EmptyState'
 
 const NO_CATEGORY = 'No category'
 
@@ -38,6 +38,27 @@ const SORTS: { id: SortKey; label: string }[] = [
 function formatPerDay(numbers: FeedNumbers | undefined): string {
   const perDay = numbers?.perDay ?? 0
   return perDay < 10 ? perDay.toFixed(1) : Math.round(perDay).toLocaleString()
+}
+
+// Health on the Feeds page. Failing uses the Inbox banner's rule (3 failed
+// runs in a row). Quiet is under half an article a day once at least 3 days
+// are counted; tune both on real feeds.
+const FAILING_RUNS = 3
+const QUIET_PER_DAY = 0.5
+const QUIET_MIN_DAYS = 3
+
+function FeedHealthBadge({ feed, numbers }: { feed: FeedRow; numbers: FeedNumbers | undefined }) {
+  if (feed.consecutive_failures >= FAILING_RUNS) {
+    return (
+      <span title={feed.last_error ?? undefined}>
+        <Badge tone="danger">Failing</Badge>
+      </span>
+    )
+  }
+  if (numbers && numbers.days >= QUIET_MIN_DAYS && numbers.perDay < QUIET_PER_DAY) {
+    return <Badge tone="warning">Quiet</Badge>
+  }
+  return <Badge tone="success">Healthy</Badge>
 }
 
 function formatOpened(numbers: FeedNumbers | undefined): string {
@@ -308,106 +329,130 @@ export default function FeedManager({
           </label>
         </div>
 
-        {visibleFeeds.length === 0 ? (
+        {localFeeds.length === 0 ? (
+          <div className="p-4">
+            <EmptyState art="feeds" title="No feeds yet">
+              Add a feed&rsquo;s address above, or build one for a site with no RSS. Its stories reach the Inbox on the
+              next update.
+            </EmptyState>
+          </div>
+        ) : visibleFeeds.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted">No feeds here yet.</p>
         ) : (
-          <ul className="divide-y divide-border">
-            {visibleFeeds.map((feed) => (
-              <li key={feed.id} className="group px-4 py-3 transition-colors hover:bg-fill-hover">
-                {editingId === feed.id ? (
-                  <div className="grid gap-3 min-[640px]:grid-cols-[2fr_1fr_auto_auto] min-[640px]:items-end">
-                    <Field label="Title" htmlFor={`edit-title-${feed.id}`}>
-                      <Input
-                        id={`edit-title-${feed.id}`}
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Category" htmlFor={`edit-category-${feed.id}`}>
-                      <Select
-                        id={`edit-category-${feed.id}`}
-                        value={editCategoryId}
-                        onChange={(e) => setEditCategoryId(e.target.value)}
-                      >
-                        <option value="">{NO_CATEGORY}</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Button variant="primary" disabled={pending} onClick={() => handleSaveEdit(feed.id)}>
-                      Save feed
-                    </Button>
-                    <Button variant="ghost" onClick={() => setEditingId(null)}>
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-4">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-medium">{feed.title}</span>
-                        {feed.is_scraped && <Tag>BUILT</Tag>}
-                        <Tag>{categoryName(feed.categoryId)}</Tag>
-                        {feed.consecutive_failures >= 3 && (
-                          <Badge tone="danger">Failing {feed.consecutive_failures} runs</Badge>
-                        )}
-                      </div>
-                      <a
-                        href={feed.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block truncate text-xs text-muted hover:underline"
-                      >
-                        {feed.url}
-                      </a>
-                      <p className="text-xs text-muted">
-                        Last loaded {formatFetchedAt(feed.last_fetched_at)}
-                        <span className="tabular-nums min-[640px]:hidden">
-                          {' '}
-                          · {formatPerDay(numbers[feed.id])} a day
-                          {numbers[feed.id]?.openedRate != null && ` · ${formatOpened(numbers[feed.id])} opened`}
+          // Scrolls sideways inside the panel on narrow screens.
+          <div className="cw-table-wrap">
+            <table className="cw-table">
+              <thead>
+                <tr>
+                  <th scope="col">Feed</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Health</th>
+                  <th scope="col">Last loaded</th>
+                  <th scope="col" className="is-num">
+                    A day
+                  </th>
+                  <th scope="col" className="is-num">
+                    Opened
+                  </th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleFeeds.map((feed) =>
+                  editingId === feed.id ? (
+                    <tr key={feed.id}>
+                      <td colSpan={7} className="py-3 whitespace-normal">
+                        <div className="grid gap-3 min-[640px]:grid-cols-[2fr_1fr_auto_auto] min-[640px]:items-end">
+                          <Field label="Title" htmlFor={`edit-title-${feed.id}`}>
+                            <Input
+                              id={`edit-title-${feed.id}`}
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                            />
+                          </Field>
+                          <Field label="Category" htmlFor={`edit-category-${feed.id}`}>
+                            <Select
+                              id={`edit-category-${feed.id}`}
+                              value={editCategoryId}
+                              onChange={(e) => setEditCategoryId(e.target.value)}
+                            >
+                              <option value="">{NO_CATEGORY}</option>
+                              {categories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Button variant="primary" disabled={pending} onClick={() => handleSaveEdit(feed.id)}>
+                            Save feed
+                          </Button>
+                          <Button variant="ghost" onClick={() => setEditingId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={feed.id}>
+                      <td>
+                        {/* Long feed names truncate; the full name and URL are in the link's title. */}
+                        <span className="flex max-w-[14rem] items-center gap-2">
+                          <a
+                            href={feed.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`${feed.title}\n${feed.url}`}
+                            className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+                          >
+                            {feed.title}
+                          </a>
+                          {feed.is_scraped && <Tag>BUILT</Tag>}
                         </span>
-                      </p>
-                      {feed.last_error && <p className="text-xs text-danger">{feed.last_error}</p>}
-                    </div>
-                    <dl className="hidden shrink-0 grid-cols-2 gap-6 text-right min-[640px]:grid">
-                      <div className="space-y-1">
-                        <dt className="cw-eyebrow">A day</dt>
-                        <dd className="text-base tabular-nums">{formatPerDay(numbers[feed.id])}</dd>
-                      </div>
-                      <div className="space-y-1">
-                        <dt className="cw-eyebrow">Opened</dt>
-                        <dd className="text-base tabular-nums">{formatOpened(numbers[feed.id])}</dd>
-                      </div>
-                    </dl>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Tooltip label="Edit feed">
-                        <Button variant="ghost" size="sm" icon aria-label="Edit feed" onClick={() => startEdit(feed)}>
-                          <Pencil strokeWidth={1.5} aria-hidden="true" />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip label="Remove feed">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon
-                          aria-label="Remove feed"
-                          disabled={pending}
-                          onClick={() => handleRemove(feed.id)}
-                          className="hover:text-danger"
-                        >
-                          <X strokeWidth={1.5} aria-hidden="true" />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  </div>
+                      </td>
+                      <td className="is-muted">{categoryName(feed.categoryId)}</td>
+                      <td>
+                        <FeedHealthBadge feed={feed} numbers={numbers[feed.id]} />
+                      </td>
+                      <td className="is-muted">{formatFetchedAt(feed.last_fetched_at)}</td>
+                      <td className="is-num">{formatPerDay(numbers[feed.id])}</td>
+                      <td className="is-num">{formatOpened(numbers[feed.id])}</td>
+                      <td>
+                        {/* Native titles rather than Tooltip: a tooltip at the table's right edge
+                            would widen the scroll area. */}
+                        <span className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon
+                            aria-label="Edit feed"
+                            title="Edit feed"
+                            onClick={() => startEdit(feed)}
+                          >
+                            <Pencil strokeWidth={1.5} aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon
+                            aria-label="Remove feed"
+                            title="Remove feed"
+                            disabled={pending}
+                            onClick={() => handleRemove(feed.id)}
+                            className="hover:text-danger"
+                          >
+                            <X strokeWidth={1.5} aria-hidden="true" />
+                          </Button>
+                        </span>
+                      </td>
+                    </tr>
+                  )
                 )}
-              </li>
-            ))}
-          </ul>
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

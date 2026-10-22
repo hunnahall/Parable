@@ -5,6 +5,8 @@ import { logQueryError } from '@/lib/supabase/logError'
 // Two missed runs at the every-2-hours schedule. Cron has failed silently
 // twice before, and an empty Inbox looks the same as a quiet news day.
 export const INGEST_STALE_HOURS = 5
+// The ingest cron's schedule (supabase/cron.sql), for "next update due".
+export const INGEST_INTERVAL_HOURS = 2
 // A feed that failed this many runs in a row is broken, not flaky. A feed
 // that loads with nothing new doesn't count: ingest only increments
 // consecutive_failures when fetching or parsing throws.

@@ -3,7 +3,7 @@ import { getUser } from '@/lib/supabase/server'
 import { getStories } from '@/lib/stories/data'
 import { listCategories } from '@/lib/categories/data'
 import { listFolderOptions } from '@/lib/folders/data'
-import { getHealth } from '@/lib/health/data'
+import { getHealth, INGEST_INTERVAL_HOURS } from '@/lib/health/data'
 import { listRecentFilteredTitles } from '@/lib/filters/data'
 import FilteredToday from '@/components/filters/FilteredToday'
 import PageHeader from '@/components/layout/PageHeader'
@@ -23,6 +23,18 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
     getHealth(),
     listRecentFilteredTitles(),
   ])
+
+  // An empty Inbox says whether it was cleared (and when more is due) or
+  // simply has nothing yet. Only read when it's empty.
+  const inboxClear =
+    stories.length === 0
+      ? {
+          archivedCount: (await getStories('archive')).length,
+          nextUpdateAt: health.lastSuccessAt
+            ? new Date(new Date(health.lastSuccessAt).getTime() + INGEST_INTERVAL_HOURS * 3_600_000).toISOString()
+            : null,
+        }
+      : null
 
   // ?category=<id> shows one category's section (the sidebar's category
   // links). An id that isn't one of the user's categories shows everything.
@@ -46,6 +58,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
           categories={categories}
           categoryId={category?.id ?? null}
           filteredTitles={filtered}
+          inboxClear={inboxClear}
           query=""
           basePath="/inbox"
         />

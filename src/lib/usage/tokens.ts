@@ -137,3 +137,25 @@ export function formatUsd(usd: number): string {
   if (usd > 0 && usd < 0.01) return '<$0.01'
   return `$${usd.toFixed(2)}`
 }
+
+// The monthly API spend Parable aims to stay under (Hunter, 2026-10-22: a
+// code constant rather than a settings table). Settings compares the month
+// so far against it and draws each day's share as a reference line.
+export const MONTHLY_TARGET_USD = 5
+
+// One priced AI call or ingest run, for the Settings spend chart. Bucketed
+// into days in the browser, which knows the reader's time zone.
+export interface SpendEntry {
+  at: string
+  usd: number
+}
+
+// On-demand summaries and reader views use gpt-5-nano, priced like
+// summaries.
+export function onDemandCostUsd(inputTokens: number, outputTokens: number): number {
+  return estimateCostUsd({
+    translate: EMPTY_USAGE,
+    summarize: { calls: 1, inputTokens, outputTokens, reasoningTokens: 0 },
+    embed: EMPTY_USAGE,
+  })
+}

@@ -1,9 +1,12 @@
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
 import {
+  EMPTY_USAGE,
   estimateCostUsd,
+  onDemandCostUsd,
   USAGE_WINDOW_DAYS,
   type IngestUsage,
+  type SpendEntry,
   type UsageWindow,
 } from '@/lib/usage/tokens'
 
@@ -92,6 +95,38 @@ export async function getRecentUsage(): Promise<UsageWindow | null> {
     usage.embed.inputTokens
 
   return { totalTokens, estimatedUsd: estimateCostUsd(usage) }
+}
+
+// Every priced ingest run and on-demand call from the last 32 days, enough
+// for the 7-day chart and the month so far in any time zone.
+export async function getSpendHistory(): Promise<SpendEntry[]> {
+  const user = await getUser()
+  if (!user) return []
+
+  const supabase = await createClient()
+  const since = new Date(Date.now() - 32 * 24 * 60 * 60 * 1000).toISOString()
+  const [{ data: runs, error: runsError }, { data: calls, error: callsError }] = await Promise.all([
+    supabase
+      .from('ingest_runs')
+      .select('created_at, translate_input_tokens, translate_output_tokens, summarize_input_tokens, summarize_output_tokens, embed_input_tokens')
+      .gte('created_at', since),
+    supabase.from('ai_usage').select('created_at, input_tokens, output_tokens').gte('created_at', since),
+  ])
+  logQueryError('usage/getSpendHistory (runs)', runsError)
+  logQueryError('usage/getSpendHistory (on demand)', callsError)
+
+  const entries: SpendEntry[] = (runs ?? []).map((row) => ({
+    at: row.created_at,
+    usd: estimateCostUsd({
+      translate: { ...EMPTY_USAGE, inputTokens: row.translate_input_tokens ?? 0, outputTokens: row.translate_output_tokens ?? 0 },
+      summarize: { ...EMPTY_USAGE, inputTokens: row.summarize_input_tokens ?? 0, outputTokens: row.summarize_output_tokens ?? 0 },
+      embed: { ...EMPTY_USAGE, inputTokens: row.embed_input_tokens ?? 0 },
+    }),
+  }))
+  for (const row of calls ?? []) {
+    entries.push({ at: row.created_at, usd: onDemandCostUsd(row.input_tokens, row.output_tokens) })
+  }
+  return entries
 }
 
 function sum<T>(rows: T[], pick: (row: T) => number | null): number {

@@ -40,3 +40,25 @@ export async function listRecentFilteredTitles(): Promise<FilteredTitle[]> {
     }
   })
 }
+
+// How many titles each filter word removed for the reader, keyed by the word
+// in lower case. filtered_titles is purged at 48 hours, so that's the window.
+export async function countFilterHits(): Promise<Record<string, number>> {
+  const user = await getUser()
+  if (!user) return {}
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('filtered_titles')
+    .select('keyword')
+    .eq('user_id', user.id)
+    .limit(5000)
+  logQueryError('filters/countFilterHits', error)
+
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    const key = row.keyword.toLowerCase()
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+  return counts
+}

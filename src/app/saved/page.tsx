@@ -29,7 +29,9 @@ export default async function SavedPage({
     sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
     dateFrom: params.from ?? null,
     dateTo: params.to ?? null,
-    display: params.display === 'card' ? 'card' : 'list',
+    // Cards by default since 2026-10-22 (roadmap R29); ?display=list keeps
+    // the list.
+    display: params.display === 'list' ? 'list' : 'card',
   }
 
   const [page, folders, feedOptions, savedCount] = await Promise.all([

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { ThemeChoice, UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
 import { applyTheme } from '@/lib/preferences/applyTheme'
-import type { UsageWindow } from '@/lib/usage/tokens'
+import type { SpendEntry, UsageWindow } from '@/lib/usage/tokens'
 import Segmented from '@/components/ui/Segmented'
 import { useToast } from '@/components/ui/Toast'
 import SettingsActions from './SettingsActions'
@@ -21,9 +21,11 @@ export default function SettingsForm({
   // Resolved on the server: it reads ingest_runs, and there is no browser
   // Supabase client in this app.
   usage,
+  spend,
 }: {
   initialPreferences: UserPreferences
   usage: UsageWindow | null
+  spend: SpendEntry[]
 }) {
   const toast = useToast()
   const [theme, setTheme] = useState(initialPreferences.theme)
@@ -56,7 +58,7 @@ export default function SettingsForm({
           </div>
         </section>
 
-        <UsageBox usage={usage} />
+        <UsageBox usage={usage} spend={spend} />
       </div>
 
       <SettingsActions />

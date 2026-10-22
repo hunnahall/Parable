@@ -6,6 +6,9 @@ export interface FeedNumbers {
   perDay: number
   // Share of those articles the reader opened, or null with none to open.
   openedRate: number | null
+  // Days the numbers cover (up to 7), so a brand-new feed isn't called
+  // quiet before there's enough to judge.
+  days: number
 }
 
 // Per-feed numbers for the Feeds page, from running daily counts that
@@ -27,6 +30,7 @@ export async function getFeedNumbers(): Promise<Map<string, FeedNumbers>> {
     result.set(row.feed_id, {
       perDay: articles / Number(row.days),
       openedRate: articles > 0 ? Math.min(opens / articles, 1) : null,
+      days: Number(row.days),
     })
   }
   return result

@@ -7,10 +7,19 @@ import type { UserPreferences } from '@/lib/preferences/data'
 import { updatePreferences } from '@/lib/preferences/actions'
 import { runAutoDeleteRulesNow } from '@/lib/settings/actions'
 import { useToast } from '@/components/ui/Toast'
+import EmptyState from '@/components/ui/EmptyState'
 import Button from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
-export default function FiltersForm({ initialPreferences }: { initialPreferences: UserPreferences }) {
+export default function FiltersForm({
+  initialPreferences,
+  hits = {},
+}: {
+  initialPreferences: UserPreferences
+  // Titles each word removed in the last 48 hours, keyed by the word in
+  // lower case.
+  hits?: Record<string, number>
+}) {
   const router = useRouter()
   const toast = useToast()
   const [prefs, setPrefs] = useState(initialPreferences)
@@ -97,22 +106,31 @@ export default function FiltersForm({ initialPreferences }: { initialPreferences
           </Button>
         </div>
         {prefs.autoDeleteKeywords.length > 0 && (
-          <ul className="flex flex-wrap gap-2">
-            {prefs.autoDeleteKeywords.map((word) => (
-              <li key={word} className="cw-badge cw-badge--plain h-7 gap-1 pr-1 text-sm">
-                {word}
-                <button
-                  type="button"
-                  onClick={() => removeFilter(word)}
-                  aria-label={`Remove ${word}`}
-                  title={`Remove ${word}`}
-                  className="cw-btn cw-btn--ghost cw-btn--icon cw-btn--sm h-5 w-5"
-                >
-                  <X strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="flex flex-wrap gap-2">
+              {prefs.autoDeleteKeywords.map((word) => (
+                <li key={word} className="cw-badge cw-badge--plain h-7 gap-1 pr-1 text-sm">
+                  {word}
+                  <span className="font-mono text-2xs tabular-nums text-muted">{hits[word.toLowerCase()] ?? 0} removed</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFilter(word)}
+                    aria-label={`Remove ${word}`}
+                    title={`Remove ${word}`}
+                    className="cw-btn cw-btn--ghost cw-btn--icon cw-btn--sm h-5 w-5"
+                  >
+                    <X strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted">Removed counts cover the last 48 hours.</p>
+          </>
+        )}
+        {prefs.autoDeleteKeywords.length === 0 && (
+          <EmptyState art="filters" title="No filter words">
+            A word added here removes matching titles before they reach the Inbox.
+          </EmptyState>
         )}
         <div className="space-y-1 border-t border-border pt-4">
           <Button onClick={handleRunRulesNow} disabled={runningRules || prefs.autoDeleteKeywords.length === 0}>

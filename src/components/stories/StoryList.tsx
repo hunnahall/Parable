@@ -70,6 +70,12 @@ function isStorySeen(story: Pick<Story, 'seenAt' | 'lastActivityAt'>): boolean {
 
 const ids = (stories: Story[]) => stories.flatMap((story) => story.sources.map((s) => s.id))
 
+// "around 5:00 PM" in the reader's time, or "soon" once that's past.
+function nextUpdateText(at: string | null): string {
+  if (!at || new Date(at).getTime() <= Date.now()) return 'soon'
+  return `around ${new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+}
+
 const inCategory = (story: Story, categoryId: string) => story.sources.some((s) => s.categoryId === categoryId)
 
 // How long a removed row takes to collapse: tokens.css --dur-std.
@@ -94,6 +100,7 @@ export default function StoryList({
   categories = [],
   categoryId = null,
   filteredTitles = [],
+  inboxClear = null,
   query,
   basePath,
 }: {
@@ -104,6 +111,9 @@ export default function StoryList({
   // The Inbox's ?category=, already checked against `categories`.
   categoryId?: string | null
   filteredTitles?: FilteredTitle[]
+  // For the empty Inbox: stories archived in the last 24 hours, and when
+  // the next ingest is due.
+  inboxClear?: { archivedCount: number; nextUpdateAt: string | null } | null
   query: string
   basePath: string
 }) {
@@ -341,11 +351,19 @@ export default function StoryList({
         query ? (
           <EmptyState title="No matching stories">Try a different search.</EmptyState>
         ) : activeCategory ? (
-          <EmptyState title={`Nothing new in ${activeCategory.name}`}>
+          <EmptyState art="inbox" title={`Nothing new in ${activeCategory.name}`}>
             Stories from this category&rsquo;s feeds show up here as they publish them.
+          </EmptyState>
+        ) : view === 'inbox' && inboxClear && inboxClear.archivedCount > 0 ? (
+          <EmptyState art="inbox" title="Inbox clear">
+            <span suppressHydrationWarning>
+              You archived {inboxClear.archivedCount} {inboxClear.archivedCount === 1 ? 'story' : 'stories'} in the last 24
+              hours. The next update is due {nextUpdateText(inboxClear.nextUpdateAt)}.
+            </span>
           </EmptyState>
         ) : (
           <EmptyState
+            art={view === 'inbox' ? 'inbox' : 'archive'}
             title={EMPTY_COPY[view].title}
             action={
               view === 'inbox' ? (

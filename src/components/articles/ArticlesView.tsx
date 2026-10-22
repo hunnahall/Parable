@@ -49,7 +49,9 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
   if (filters.dateFrom) params.set('from', filters.dateFrom)
   if (filters.dateTo) params.set('to', filters.dateTo)
-  if (filters.display !== 'list') params.set('display', filters.display)
+  // Cards are the default (Saved is browse-and-keep), so only List is
+  // written to the URL.
+  if (filters.display !== 'card') params.set('display', filters.display)
   const qs = params.toString()
   return qs ? `${basePath}?${qs}` : basePath
 }
@@ -410,6 +412,7 @@ export default function ArticlesView({
           <EmptyState title="No matching articles">Try a different search or clear the filters.</EmptyState>
         ) : (
           <EmptyState
+            art={filters.view === 'saved' ? 'saved' : 'pages'}
             title={EMPTY_COPY[filters.view].title}
             action={
               filters.view === 'unfiled' ? (
