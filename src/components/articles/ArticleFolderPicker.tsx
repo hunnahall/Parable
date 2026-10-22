@@ -132,7 +132,7 @@ export default function ArticleFolderPicker({
               <button
                 type="button"
                 onClick={() => setAddingFolder(true)}
-                className="cw-menu__item text-muted"
+                className="cw-menu__item text-muted!"
               >
                 + New folder
               </button>

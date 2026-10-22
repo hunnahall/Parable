@@ -37,10 +37,6 @@ export function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   }
 }
 
-export function sumUsage(items: TokenUsage[]): TokenUsage {
-  return items.reduce(addUsage, EMPTY_USAGE)
-}
-
 // Structural rather than importing OpenAI's response type: the Responses
 // and Embeddings endpoints report usage under different field names, and
 // a failed call has none at all. Every field is optional so a shape change

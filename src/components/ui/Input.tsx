@@ -2,17 +2,12 @@ import type {
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
-  TextareaHTMLAttributes,
 } from 'react'
 
 // Covenant Works fields (components.css .cw-input and friends): 32px,
 // surface ground, strong hairline, signature-color focus ring.
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`cw-input ${className}`} {...props} />
-}
-
-export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={`cw-textarea ${className}`} {...props} />
 }
 
 export function Select({
@@ -51,19 +46,6 @@ export function Field({
       {children}
       {error ? <p className="cw-error">{error}</p> : help ? <p className="cw-help">{help}</p> : null}
     </div>
-  )
-}
-
-export function Checkbox({
-  label,
-  className = '',
-  ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & { label?: ReactNode }) {
-  return (
-    <label className={`cw-check ${className}`}>
-      <input type="checkbox" {...props} />
-      {label}
-    </label>
   )
 }
 

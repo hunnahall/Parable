@@ -38,10 +38,17 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Revalidates the auth token with the Supabase Auth server and rewrites
-  // the refreshed cookies onto the response. Server Components can only
-  // read cookies, not write them, so this is the one place a refreshed
-  // token actually gets persisted back to the browser.
+  // Verifies the auth token and rewrites refreshed cookies onto the
+  // response. Server Components can only read cookies, not write them, so
+  // this is the one place a refreshed token actually gets persisted back to
+  // the browser.
+  //
+  // getClaims checks the token's signature locally against the project's
+  // ES256 signing keys (fetched once and cached), instead of getUser's
+  // round trip to the Auth server on every request (about 70ms before the
+  // server does any work; 2026-10-22). It still refreshes an expired
+  // session. The trade-off: a session revoked elsewhere stays valid until
+  // its token expires (an hour at most).
   //
   // Fail open: a slow/unreachable Auth server shouldn't hang or break every
   // request on this matcher (effectively the whole app). Between the
@@ -49,19 +56,18 @@ export async function proxy(request: NextRequest) {
   // end the same way — skip the refresh for this request and pass the
   // existing cookies through unmodified rather than blocking the response.
   try {
-    await supabase.auth.getUser()
+    await supabase.auth.getClaims()
   } catch (err) {
-    console.error('proxy: auth.getUser failed', err)
+    console.error('proxy: auth.getClaims failed', err)
   }
 
   return supabaseResponse
 }
 
-// src/lib/supabase/server.ts's getUser() trusts this matcher to cover
-// every route it's called from — it skips its own network verification
-// specifically because this middleware already did one for the request.
-// Narrowing this matcher to exclude a route that calls getUser() would
-// leave that route trusting an unverified cookie.
+// Covers every route but static assets, so an expired session is refreshed
+// before any page renders. Pages verify the token themselves
+// (src/lib/supabase/server.ts getUser), so narrowing this only means a route
+// may see a just-expired session as signed out until the next request.
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',

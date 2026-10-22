@@ -43,7 +43,7 @@ export default function NavColumn({
         >
           <Search strokeWidth={1.5} aria-hidden="true" />
           <span className="flex-1">Search</span>
-          <kbd className="cw-kbd [@media(hover:none)]:hidden">⌘K</kbd>
+          <kbd className="cw-kbd [@media(hover:none)]:hidden!">⌘K</kbd>
         </button>
       </div>
 
@@ -53,7 +53,8 @@ export default function NavColumn({
 
       <div className="border-t border-border px-2 py-2">
         <StatusLine lastSuccessAt={shell.lastSuccessAt} staleHours={shell.staleHours} />
-        <AccountMenu userEmail={shell.userEmail} theme={shell.theme} onNavigate={onNavigate} />
+        {/* Keyed on the theme so a change made elsewhere (Settings, the palette) moves its check mark. */}
+        <AccountMenu key={shell.theme} userEmail={shell.userEmail} theme={shell.theme} onNavigate={onNavigate} />
       </div>
 
       <CovenantWorksCredit className="border-t border-border px-4 py-3" />

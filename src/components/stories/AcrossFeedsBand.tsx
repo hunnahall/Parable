@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Story } from '@/lib/stories/data'
-import { formatAge } from '@/lib/formatting'
+import { feedCount, sourceMeta, storyImage } from './storyMeta'
 
 // A story qualifies when this many distinct feeds cover it. Tune on real
 // data: with 13 feeds on 2026-10-22, one story had 2 feeds and none had 3.
@@ -11,7 +11,6 @@ const BAND_MIN_FEEDS = 3
 const BAND_MAX = 5
 const BAND_MIN_STORIES = 2
 
-const feedCount = (story: Story) => new Set(story.sources.map((s) => s.feedId)).size
 const feedLabel = (story: Story) => (feedCount(story) === 1 ? '1 feed' : `${feedCount(story)} feeds`)
 
 function bandStories(stories: Story[]): Story[] {
@@ -22,11 +21,6 @@ function bandStories(stories: Story[]): Story[] {
         feedCount(b) - feedCount(a) || new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
     )
     .slice(0, BAND_MAX)
-}
-
-// The newest https image among the story's sources.
-function imageOf(story: Story): string | null {
-  return story.sources.map((s) => s.imageUrl).find((url) => url?.startsWith('https://')) ?? null
 }
 
 function Thumbnail({ src, className }: { src: string | null; className: string }) {
@@ -63,8 +57,7 @@ export default function AcrossFeedsBand({
   if (band.length < BAND_MIN_STORIES) return null
 
   const titleClass = (story: Story) => (isSeen(story) ? 'font-normal text-foreground-muted' : 'font-semibold text-foreground')
-  const meta = (story: Story) =>
-    [story.sources[0].feedTitle, formatAge(story.sources[0].publishedAt ?? story.sources[0].createdAt)].filter(Boolean).join(' · ')
+  const meta = (story: Story) => sourceMeta(story.sources[0])
 
   return (
     <section aria-labelledby="across-feeds" className="space-y-2">
@@ -84,7 +77,7 @@ export default function AcrossFeedsBand({
               className="cw-panel cw-panel--link w-full text-left"
             >
               <span className="flex h-full flex-col">
-                <Thumbnail src={imageOf(story)} className="h-[140px] w-full border-x-0 border-t-0" />
+                <Thumbnail src={storyImage(story)} className="h-[140px] w-full border-x-0 border-t-0" />
                 <span className="flex flex-1 flex-col gap-1.5 p-3">
                   <span className="cw-eyebrow">{feedLabel(story)}</span>
                   <span className={`font-read text-[length:var(--text-lg)] leading-snug ${titleClass(story)}`}>
@@ -112,7 +105,7 @@ export default function AcrossFeedsBand({
                   {meta(story)}
                 </span>
               </span>
-              <Thumbnail src={imageOf(story)} className="h-14 w-20 shrink-0" />
+              <Thumbnail src={storyImage(story)} className="h-14 w-20 shrink-0" />
             </button>
           </li>
         ))}

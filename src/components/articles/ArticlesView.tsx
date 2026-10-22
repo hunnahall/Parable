@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { LayoutList, LayoutGrid } from 'lucide-react'
 import type { ArticleItem, ArticlesPageFilters } from '@/lib/articles/list'
 import { fetchArticlesPage, archiveArticlesBulk, purgeArticles } from '@/lib/articles/actions'
@@ -10,36 +9,17 @@ import { useOptimisticArticleList } from './useOptimisticArticleList'
 import ArticleCard, { type FolderOption } from './ArticleCard'
 import ArticleCardGrid from './ArticleCardGrid'
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
-import Button, { buttonClass } from '@/components/ui/Button'
+import Button from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import EmptyState from '@/components/ui/EmptyState'
 
-export type ArticlesViewMode = 'unfiled' | 'saved' | 'archived'
 export type ArticlesDisplayMode = 'list' | 'card'
 
 export interface ArticlesFilters {
   query: string
-  view: ArticlesViewMode
   folderIds: string[]
   sourceFeedIds: string[]
-  dateFrom: string | null
-  dateTo: string | null
   display: ArticlesDisplayMode
-}
-
-const EMPTY_COPY: Record<ArticlesViewMode, { title: string; text: string }> = {
-  unfiled: {
-    title: 'Nothing new',
-    text: 'Stories from the last 12 hours show up here as your feeds publish them.',
-  },
-  saved: {
-    title: 'Nothing saved yet',
-    text: 'Articles you save stay here until you delete them.',
-  },
-  archived: {
-    title: 'Nothing archived',
-    text: 'Archived articles wait here for 24 hours, then go.',
-  },
 }
 
 function buildUrl(basePath: string, filters: ArticlesFilters): string {
@@ -47,8 +27,6 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   if (filters.query) params.set('q', filters.query)
   if (filters.folderIds.length > 0) params.set('folder', filters.folderIds.join(','))
   if (filters.sourceFeedIds.length > 0) params.set('source', filters.sourceFeedIds.join(','))
-  if (filters.dateFrom) params.set('from', filters.dateFrom)
-  if (filters.dateTo) params.set('to', filters.dateTo)
   // Cards are the default (Saved is browse-and-keep), so only List is
   // written to the URL.
   if (filters.display !== 'card') params.set('display', filters.display)
@@ -56,13 +34,12 @@ function buildUrl(basePath: string, filters: ArticlesFilters): string {
   return qs ? `${basePath}?${qs}` : basePath
 }
 
-// Powers the Inbox, Save, and Archive pages — each passes its own `view`
-// (which server-side query getArticlesPage runs) and `basePath` (so filter
-// navigation stays on that page). Every card is the same shared
-// ArticleCard; Inbox and Save additionally show the folder picker, which
-// is what files an article and therefore what saves it. A card's title
-// always links out to the publisher — Parable stores no article bodies, so
-// there is nowhere else for it to go.
+// The Saved page: saved articles, paginated, with search, folder and source
+// filters, cards or a list, and a multi-select toolbar (Archive selected;
+// Delete selected, which removes them from this account for good, see
+// purgeArticles). The folder picker on each article is what files it, and
+// so what keeps it saved. Before stories (2026-10-20) this also powered the
+// Inbox and Archive; those modes are gone.
 export default function ArticlesView({
   basePath,
   items,
@@ -70,11 +47,6 @@ export default function ArticlesView({
   folders,
   feedOptions,
   filters,
-  showFolderPicker = false,
-  showDelete = false,
-  showDateFilters = true,
-  enableBulkActions = false,
-  collapsibleSummaries = false,
 }: {
   basePath: string
   items: ArticleItem[]
@@ -82,23 +54,6 @@ export default function ArticlesView({
   folders: FolderOption[]
   feedOptions: { id: string; title: string | null }[]
   filters: ArticlesFilters
-  showFolderPicker?: boolean
-  showDelete?: boolean
-  // Archive keeps the From/To date pickers in its toolbar; Inbox and Save
-  // drop them so the search bar, folder/source dropdowns, and list/card
-  // toggle all fit on one aligned line.
-  showDateFilters?: boolean
-  // Multi-select toolbar (select all, plus whichever bulk action fits the
-  // current view) — every list page opts in. "Archive selected" shows on
-  // every view except Archive itself (nothing to do there); "Delete
-  // selected" removes a selection from this account for good (see
-  // purgeArticles) and shows on Save and Archive — the two places
-  // discarding in bulk makes sense.
-  enableBulkActions?: boolean
-  // Inbox only: list rows show just the title, with a "+" button that
-  // reveals the summary and Save/Archive row — card view is unaffected,
-  // it already reads as a tile rather than a dense list.
-  collapsibleSummaries?: boolean
 }) {
   const router = useRouter()
   const [queryDraft, setQueryDraft] = useState(filters.query)
@@ -129,9 +84,9 @@ export default function ArticlesView({
     setLocalFolders((prev) => [...prev, folder].sort((a, b) => a.label.localeCompare(b.label)))
   }
 
+  // Archiving or unfiling an article takes it off Saved.
   function belongs(item: ArticleItem): boolean {
-    if (filters.view === 'unfiled') return item.state === null
-    return item.state === filters.view
+    return item.state === 'saved'
   }
 
   const { localItems, updateItem, removeItem, appendItems } = useOptimisticArticleList(items, belongs)
@@ -145,6 +100,15 @@ export default function ArticlesView({
     setSelectedIds(new Set())
     setSelectedAll(false)
     setConfirmingDelete(false)
+  }
+
+  // The server query for the current filters, for Load more and Select all.
+  function pageFilters(): ArticlesPageFilters {
+    return {
+      query: filters.query || undefined,
+      folderIds: filters.folderIds,
+      sourceFeedIds: filters.sourceFeedIds,
+    }
   }
 
   function navigate(patch: Partial<ArticlesFilters>) {
@@ -189,15 +153,7 @@ export default function ArticlesView({
     const allIds = [...startingIds]
     let pageCursor = cursor
     while (pageCursor) {
-      const result = await fetchArticlesPage({
-        query: filters.query || undefined,
-        view: filters.view,
-        folderIds: filters.folderIds,
-        sourceFeedIds: filters.sourceFeedIds,
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-        cursor: pageCursor,
-      })
+      const result = await fetchArticlesPage({ ...pageFilters(), cursor: pageCursor })
       allIds.push(...result.items.map((item) => item.id))
       setArchivingAllCount(allIds.length)
       pageCursor = result.nextCursor
@@ -261,16 +217,7 @@ export default function ArticlesView({
   async function handleLoadMore() {
     if (!cursor) return
     setLoadingMore(true)
-    const filterArg: ArticlesPageFilters = {
-      query: filters.query || undefined,
-      view: filters.view,
-      folderIds: filters.folderIds,
-      sourceFeedIds: filters.sourceFeedIds,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      cursor,
-    }
-    const result = await fetchArticlesPage(filterArg)
+    const result = await fetchArticlesPage({ ...pageFilters(), cursor })
     setLoadingMore(false)
     appendItems(result.items)
     setCursor(result.nextCursor)
@@ -279,9 +226,7 @@ export default function ArticlesView({
   const activeFilterCount =
     (filters.query ? 1 : 0) +
     (filters.folderIds.length > 0 ? 1 : 0) +
-    (filters.sourceFeedIds.length > 0 ? 1 : 0) +
-    (filters.dateFrom ? 1 : 0) +
-    (filters.dateTo ? 1 : 0)
+    (filters.sourceFeedIds.length > 0 ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -312,28 +257,6 @@ export default function ArticlesView({
             onChange={(sourceFeedIds) => navigate({ sourceFeedIds })}
             className="w-36"
           />
-          {showDateFilters && (
-            <>
-              <label className="flex items-center gap-1.5 text-base text-muted">
-                From
-                <Input
-                  type="date"
-                  value={filters.dateFrom ?? ''}
-                  onChange={(e) => navigate({ dateFrom: e.target.value || null })}
-                  className="text-foreground"
-                />
-              </label>
-              <label className="flex items-center gap-1.5 text-base text-muted">
-                To
-                <Input
-                  type="date"
-                  value={filters.dateTo ?? ''}
-                  onChange={(e) => navigate({ dateTo: e.target.value || null })}
-                  className="text-foreground"
-                />
-              </label>
-            </>
-          )}
           <div className="cw-seg ml-auto" role="group" aria-label="Display">
             <button
               type="button"
@@ -357,7 +280,7 @@ export default function ArticlesView({
         </div>
       </div>
 
-      {enableBulkActions && localItems.length > 0 && (
+      {localItems.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <label className="cw-check">
             <input
@@ -374,28 +297,17 @@ export default function ArticlesView({
           </label>
           {selectedIds.size > 0 && (
             <>
-              {filters.view !== 'archived' && (
-                <Button size="sm" variant="secondary" disabled={bulkPending} onClick={handleBulkArchive}>
-                  {archivingAllCount !== null
-                    ? `Archiving ${archivingAllCount}`
-                    : 'Archive selected'}
-                </Button>
-              )}
-              {/* Deleting in bulk is offered wherever an article has been
-                  kept on purpose — Save and Archive. It never appears on
-                  Inbox, where Archive is the discard action. */}
-              {(filters.view === 'archived' || filters.view === 'saved') && (
-                <Button
-                  size="sm"
-                  variant={confirmingDelete ? 'danger-solid' : 'danger'}
-                  disabled={bulkPending}
-                  onClick={handleBulkDelete}
-                >
-                  {confirmingDelete
-                    ? `Delete ${selectedIds.size} articles`
-                    : 'Delete selected'}
-                </Button>
-              )}
+              <Button size="sm" variant="secondary" disabled={bulkPending} onClick={handleBulkArchive}>
+                {archivingAllCount !== null ? `Archiving ${archivingAllCount}` : 'Archive selected'}
+              </Button>
+              <Button
+                size="sm"
+                variant={confirmingDelete ? 'danger-solid' : 'danger'}
+                disabled={bulkPending}
+                onClick={handleBulkDelete}
+              >
+                {confirmingDelete ? `Delete ${selectedIds.size} articles` : 'Delete selected'}
+              </Button>
               {confirmingDelete && (
                 <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)}>
                   Cancel
@@ -411,18 +323,8 @@ export default function ArticlesView({
         activeFilterCount > 0 ? (
           <EmptyState title="No matching articles">Try a different search or clear the filters.</EmptyState>
         ) : (
-          <EmptyState
-            art={filters.view === 'saved' ? 'saved' : 'pages'}
-            title={EMPTY_COPY[filters.view].title}
-            action={
-              filters.view === 'unfiled' ? (
-                <Link href="/feeds" className={buttonClass({ variant: 'primary' })}>
-                  Add a feed
-                </Link>
-              ) : undefined
-            }
-          >
-            {EMPTY_COPY[filters.view].text}
+          <EmptyState art="saved" title="Nothing saved yet">
+            Articles you save stay here until you delete them.
           </EmptyState>
         )
       ) : filters.display === 'card' ? (
@@ -435,10 +337,10 @@ export default function ArticlesView({
               onRemove={removeItem}
               folders={localFolders}
               onFolderCreated={handleFolderCreated}
-              showFolderPicker={showFolderPicker}
-              showDelete={showDelete}
-              selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
-              onToggleSelect={enableBulkActions ? toggleSelect : undefined}
+              showFolderPicker
+              showDelete
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </div>
@@ -452,11 +354,10 @@ export default function ArticlesView({
               onRemove={removeItem}
               folders={localFolders}
               onFolderCreated={handleFolderCreated}
-              showFolderPicker={showFolderPicker}
-              showDelete={showDelete}
-              selected={enableBulkActions ? selectedIds.has(item.id) : undefined}
-              onToggleSelect={enableBulkActions ? toggleSelect : undefined}
-              collapsible={collapsibleSummaries}
+              showFolderPicker
+              showDelete
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </ul>

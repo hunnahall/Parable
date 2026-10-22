@@ -25,30 +25,6 @@ function extractHeaderImage(document: Document): string | null {
   return og || twitter || null
 }
 
-// Cheap header-image-only fetch — used to populate feed_items.image_url
-// for an item whose body extraction already failed (or was skipped), so
-// it still gets a real cover image instead of the favicon fallback.
-export async function fetchHeaderImage(url: string): Promise<string | null> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ParableBot/1.0)' },
-    })
-    if (!response.ok) return null
-
-    const html = await response.text()
-    const dom = new JSDOM(html, { url })
-    return extractHeaderImage(dom.window.document)
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 // Fetches the article's HTML and extracts the readable body with
 // Readability (the jsdom-backed approach Firefox's Reader View uses).
 // Returns plain text with paragraphs separated by a blank line, which is

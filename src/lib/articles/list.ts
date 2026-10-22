@@ -205,11 +205,8 @@ function toArticleItem(
 
 export interface ArticlesPageFilters {
   query?: string
-  view?: 'unfiled' | 'saved' | 'archived'
   folderIds?: string[]
   sourceFeedIds?: string[]
-  dateFrom?: string | null
-  dateTo?: string | null
   cursor?: { publishedAt: string; id: string } | null
   limit?: number
 }
@@ -229,9 +226,8 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 // it's immune to that. (published_at, id) as the cursor tuple because
 // published_at alone isn't unique; id is the tiebreaker for a total order.
 //
-// Powers all three lifecycle pages (Inbox/Save/Archive) via `view`:
-// 'unfiled' = no article_states row yet (default, the Articles page),
-// 'saved'/'archived' = state matches exactly (the Save/Archive pages).
+// The Saved page's articles. Until stories replaced them (2026-10-20) this
+// also listed the Inbox and Archive.
 export async function getArticlesPage(filters: ArticlesPageFilters): Promise<ArticlesPageResult> {
   const user = await getUser()
   if (!user) return { items: [], nextCursor: null }
@@ -242,25 +238,15 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
     getArticleFoldersMap(supabase, user),
   ])
   const limit = filters.limit ?? ARTICLES_PAGE_LIMIT
-  const view = filters.view ?? 'unfiled'
 
-  // Both branches route through feed_items_excluding_states/with_state,
-  // which do the state membership test as a real SQL join instead of
-  // interpolating every matching id into the request URL — that's what
-  // broke once article_states grew past a few hundred rows (see the
-  // migration that added those functions).
-  let query
-  if (view === 'unfiled') {
-    query = feedItemsRpc(supabase, 'feed_items_excluding_states', {
-      p_user_id: user.id,
-      p_exclude_states: UNFILED_EXCLUDED_STATES,
-    }).select(ARTICLE_SELECT)
-  } else {
-    query = feedItemsRpc(supabase, 'feed_items_with_state', {
-      p_user_id: user.id,
-      p_state: view,
-    }).select(ARTICLE_SELECT)
-  }
+  // feed_items_with_state does the state test as a real SQL join instead of
+  // interpolating every matching id into the request URL, which broke once
+  // article_states grew past a few hundred rows (see the migration that
+  // added it).
+  let query = feedItemsRpc(supabase, 'feed_items_with_state', {
+    p_user_id: user.id,
+    p_state: 'saved',
+  }).select(ARTICLE_SELECT)
 
   if (filters.query) {
     query = query.textSearch('search_vector', filters.query, {
@@ -271,13 +257,6 @@ export async function getArticlesPage(filters: ArticlesPageFilters): Promise<Art
 
   if (filters.sourceFeedIds && filters.sourceFeedIds.length > 0) {
     query = query.in('feed_id', filters.sourceFeedIds)
-  }
-
-  if (filters.dateFrom) {
-    query = query.gte('published_at', filters.dateFrom)
-  }
-  if (filters.dateTo) {
-    query = query.lte('published_at', filters.dateTo)
   }
 
   // Folders hold saved articles only. Multiple selected folders union

@@ -441,7 +441,7 @@ export default function FeedManager({
                             title="Remove feed"
                             disabled={pending}
                             onClick={() => handleRemove(feed.id)}
-                            className="hover:text-danger"
+                            className="hover:text-danger!"
                           >
                             <X strokeWidth={1.5} aria-hidden="true" />
                           </Button>

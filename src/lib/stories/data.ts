@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
 
@@ -50,11 +51,17 @@ type RawSource = {
   language?: string | null
 }
 
+// The most stories one view returns. The windows bound it (12h Inbox, 24h
+// after archiving); at 50 feeds a 12-hour Inbox can pass 600, so the
+// function's default would silently cut the list.
+const STORY_LIMIT = 2000
+
 // The Inbox and Archive, grouped into stories by the story_feed function
 // (see the story_grouping migration), newest activity first. Bounded by
 // the retention windows (12h Inbox, 24h after archiving), so it's read in
-// one go rather than paginated.
-export async function getStories(view: StoryView, query?: string): Promise<Story[]> {
+// one go rather than paginated. Cached per request: the root layout reads
+// the Inbox for the sidebar's counts, and the Inbox page reuses it.
+export const getStories = cache(async (view: StoryView, query?: string): Promise<Story[]> => {
   const user = await getUser()
   if (!user) return []
 
@@ -63,6 +70,7 @@ export async function getStories(view: StoryView, query?: string): Promise<Story
     p_view: view,
     // Escaped so % and _ in a search match themselves, not any text.
     p_query: query?.trim().replace(/[\\%_]/g, '\\$&') || null,
+    p_limit: STORY_LIMIT,
   })
   logQueryError(`stories/getStories (${view})`, error)
 
@@ -88,29 +96,19 @@ export async function getStories(view: StoryView, query?: string): Promise<Story
       })),
     })
   )
-}
+})
 
-// The sidebar's Inbox count: stories, not articles.
-export async function getInboxStoryCount(): Promise<number> {
-  const user = await getUser()
-  if (!user) return 0
-
-  const supabase = await createClient()
-  const { data, error } = await supabase.rpc('inbox_story_count')
-  logQueryError('stories/getInboxStoryCount', error)
-  return Number(data ?? 0)
-}
-
-// The sidebar's category counts: Inbox stories per category id. A story
-// whose feeds span categories counts in each, as in the Inbox sections.
-export async function getInboxCategoryCounts(): Promise<Record<string, number>> {
-  const user = await getUser()
-  if (!user) return {}
-
-  const supabase = await createClient()
-  const { data, error } = await supabase.rpc('inbox_category_counts')
-  logQueryError('stories/getInboxCategoryCounts', error)
-  return Object.fromEntries(
-    ((data ?? []) as { category_id: string; stories: number }[]).map((row) => [row.category_id, Number(row.stories)])
-  )
+// The sidebar's counts, from the Inbox's stories: the total, and stories per
+// category id, a story whose feeds span categories counting in each (the
+// Inbox sections' rule). Worked out here rather than with the
+// inbox_story_count and inbox_category_counts functions, which each ran
+// story_feed again.
+export function inboxCounts(stories: Story[]): { total: number; byCategory: Record<string, number> } {
+  const byCategory: Record<string, number> = {}
+  for (const story of stories) {
+    for (const id of new Set(story.sources.map((s) => s.categoryId))) {
+      if (id) byCategory[id] = (byCategory[id] ?? 0) + 1
+    }
+  }
+  return { total: stories.length, byCategory }
 }

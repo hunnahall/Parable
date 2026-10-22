@@ -198,7 +198,7 @@ export default function CommandPalette({ categories }: { categories: SidebarCate
           </ul>
         )}
 
-        <div className="cw-command__foot [@media(hover:none)]:hidden">
+        <div className="cw-command__foot [@media(hover:none)]:hidden!">
           <span>
             <kbd className="cw-kbd">↵</kbd>Open
           </span>

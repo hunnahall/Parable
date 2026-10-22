@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { logQueryError } from '@/lib/supabase/logError'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
@@ -35,7 +36,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
 // No row is created for a user until they first change a setting — every
 // column has a DB default anyway, so a missing row is equivalent to one
 // full of defaults.
-export async function getUserPreferences(): Promise<UserPreferences> {
+// Cached per request: the root layout (theme) and pages read it.
+export const getUserPreferences = cache(async (): Promise<UserPreferences> => {
   const user = await getUser()
   if (!user) return DEFAULT_PREFERENCES
 
@@ -55,4 +57,4 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     autoDeleteKeywords: data.auto_delete_keywords ?? [],
     inboxView: data.inbox_view === 'front' ? 'front' : 'list',
   }
-}
+})

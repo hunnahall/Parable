@@ -1,11 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Archive, ArchiveRestore, ExternalLink, Sparkles } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
-import { addFolder } from '@/lib/folders/actions'
-import { formatAge } from '@/lib/formatting'
 import { languageLabel } from '@/lib/languages'
 import ArticleFolderPicker from '@/components/articles/ArticleFolderPicker'
 import EmptyState from '@/components/ui/EmptyState'
@@ -15,12 +12,8 @@ import type { StoryViewMode } from './StoryList'
 import ReaderContent from './ReaderContent'
 import SourcePicker from './SourcePicker'
 import StorySummary from './StorySummary'
-import { saveStory } from './saveStory'
-
-const WORDS_PER_MINUTE = 220
-
-// https only, so the pane never loads mixed content.
-const httpsUrl = (url: string | null) => (url?.startsWith('https://') ? url : null)
+import { useSaveStory } from './useSaveStory'
+import { faviconFor, httpsUrl, sourceMeta, taggedLanguage } from './storyMeta'
 
 // The Inbox's reading pane at 1280px and up: the selected story's reader
 // view beside the list. Header with the source's feed, age, read time and
@@ -107,58 +100,19 @@ function PaneStory({
   onUnarchive: (story: Story) => void
   onSaved: (story: Story) => void
 }) {
-  const router = useRouter()
   const [sourceId, setSourceId] = useState(story.sources[0].id)
   const [summaryOpen, setSummaryOpen] = useState(false)
-  const [addingFolder, setAddingFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const save = useSaveStory({ story, onSaved, onFolderCreated })
+  const { pending, error } = save
   const [imageFailed, setImageFailed] = useState(false)
   const [faviconFailed, setFaviconFailed] = useState(false)
 
   const source = story.sources.find((s) => s.id === sourceId) ?? story.sources[0]
   const image = imageFailed ? null : httpsUrl(source.imageUrl)
-  let favicon: string | null = null
-  if (!faviconFailed && httpsUrl(source.link)) {
-    try {
-      favicon = `${new URL(source.link!).origin}/favicon.ico`
-    } catch {
-      favicon = null
-    }
-  }
-  const readTime = source.wordCount ? `${Math.max(1, Math.ceil(source.wordCount / WORDS_PER_MINUTE))} min` : null
-  const meta = [source.feedTitle, formatAge(source.publishedAt ?? source.createdAt), readTime].filter(Boolean).join(' · ')
-  const language = source.language && source.language !== 'en' && /^[a-z]{2}$/.test(source.language) ? source.language : null
+  const favicon = faviconFailed ? null : faviconFor(source.link)
+  const meta = sourceMeta(source)
+  const language = taggedLanguage(source.language)
   const iconButton = 'cw-btn cw-btn--ghost cw-btn--sm cw-btn--icon'
-
-  async function saveTo(folderIds: string[]) {
-    if (folderIds.length === 0) return
-    setPending(true)
-    setError(null)
-    const saveError = await saveStory(story, folderIds)
-    setPending(false)
-    if (saveError) {
-      setError(saveError)
-      return
-    }
-    onSaved(story)
-    router.refresh()
-  }
-
-  async function createFolderAndSave() {
-    const name = newFolderName.trim()
-    setNewFolderName('')
-    setAddingFolder(false)
-    if (!name) return
-    const result = await addFolder({ name, parentId: null })
-    if (result.error || !result.id) {
-      setError(result.error ?? 'Folder not created')
-      return
-    }
-    onFolderCreated({ id: result.id, label: name })
-    await saveTo([result.id])
-  }
 
   return (
     <article className="mx-auto max-w-[calc(var(--read-max)+4rem)] space-y-5 px-8 py-6">
@@ -205,13 +159,7 @@ function PaneStory({
             <ArticleFolderPicker
               selectedIds={[]}
               folders={folders}
-              onChange={saveTo}
-              addingFolder={addingFolder}
-              setAddingFolder={setAddingFolder}
-              newFolderName={newFolderName}
-              setNewFolderName={setNewFolderName}
-              onCreateFolder={createFolderAndSave}
-              disabled={pending}
+              {...save.pickerProps}
               iconOnly
             />
           </Tooltip>
@@ -238,7 +186,7 @@ function PaneStory({
           )}
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}
-        {summaryOpen && <StorySummary key={source.id} story={story} />}
+        {summaryOpen && <StorySummary story={story} sourceId={source.id} />}
       </header>
 
       {image && (

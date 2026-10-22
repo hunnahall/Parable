@@ -4,7 +4,7 @@ import { Hanken_Grotesk, IBM_Plex_Mono, Newsreader } from 'next/font/google'
 import './globals.css'
 import { getUser } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/preferences/data'
-import { getInboxCategoryCounts, getInboxStoryCount } from '@/lib/stories/data'
+import { getStories, inboxCounts } from '@/lib/stories/data'
 import { listCategories } from '@/lib/categories/data'
 import { getHealth, INGEST_STALE_HOURS } from '@/lib/health/data'
 import type { ShellData } from '@/components/layout/sidebarNav'
@@ -46,13 +46,15 @@ export default async function RootLayout({
   const user = await getUser()
   // Independent of each other (both only need `user`, already resolved
   // above and memoized by React's cache() for the rest of this request).
-  const [prefs, inboxCount, categories, categoryCounts, health] = await Promise.all([
+  // The Inbox read here is cached for the request, so the Inbox page reuses
+  // it instead of running story_feed again.
+  const [prefs, inbox, categories, health] = await Promise.all([
     getUserPreferences(),
-    user ? getInboxStoryCount() : Promise.resolve(0),
+    user ? getStories('inbox') : Promise.resolve([]),
     user ? listCategories() : Promise.resolve([]),
-    user ? getInboxCategoryCounts() : Promise.resolve({} as Record<string, number>),
     user ? getHealth() : Promise.resolve(null),
   ])
+  const { total: inboxCount, byCategory: categoryCounts } = inboxCounts(inbox)
   const shell: ShellData = {
     userEmail: user?.email ?? '',
     inboxCount,

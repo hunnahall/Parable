@@ -54,7 +54,7 @@ export default function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="cw-btn cw-btn--secondary w-full justify-between"
+        className="cw-btn cw-btn--secondary w-full justify-between!"
       >
         <span className="flex-1 truncate">{buttonLabel}</span>
         <ChevronDown strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
@@ -82,7 +82,7 @@ export default function MultiSelectDropdown({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="cw-menu__item mt-1 border-t border-border text-muted"
+              className="cw-menu__item mt-1 border-t! border-border! text-muted!"
             >
               Clear
             </button>

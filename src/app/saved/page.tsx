@@ -13,8 +13,6 @@ export default async function SavedPage({
     q?: string
     folder?: string
     source?: string
-    from?: string
-    to?: string
     display?: string
   }>
 }) {
@@ -24,11 +22,8 @@ export default async function SavedPage({
   const params = await searchParams
   const filters: ArticlesFilters = {
     query: params.q ?? '',
-    view: 'saved',
     folderIds: params.folder ? params.folder.split(',').filter(Boolean) : [],
     sourceFeedIds: params.source ? params.source.split(',').filter(Boolean) : [],
-    dateFrom: params.from ?? null,
-    dateTo: params.to ?? null,
     // Cards by default since 2026-10-22 (roadmap R29); ?display=list keeps
     // the list.
     display: params.display === 'list' ? 'list' : 'card',
@@ -37,11 +32,8 @@ export default async function SavedPage({
   const [page, folders, feedOptions, savedCount] = await Promise.all([
     getArticlesPage({
       query: filters.query || undefined,
-      view: filters.view,
       folderIds: filters.folderIds,
       sourceFeedIds: filters.sourceFeedIds,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
     }),
     listFolderOptions(),
     listFeeds(),
@@ -63,10 +55,6 @@ export default async function SavedPage({
           folders={folders}
           feedOptions={feedOptions}
           filters={filters}
-          showFolderPicker
-          showDelete
-          showDateFilters={false}
-          enableBulkActions
         />
       </div>
     </>

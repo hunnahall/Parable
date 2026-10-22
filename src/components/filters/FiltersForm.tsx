@@ -109,7 +109,7 @@ export default function FiltersForm({
           <>
             <ul className="flex flex-wrap gap-2">
               {prefs.autoDeleteKeywords.map((word) => (
-                <li key={word} className="cw-badge cw-badge--plain h-7 gap-1 pr-1 text-sm">
+                <li key={word} className="cw-badge cw-badge--plain h-7! gap-1! pr-1! text-sm!">
                   {word}
                   <span className="font-mono text-2xs tabular-nums text-muted">{hits[word.toLowerCase()] ?? 0} removed</span>
                   <button
@@ -117,7 +117,7 @@ export default function FiltersForm({
                     onClick={() => removeFilter(word)}
                     aria-label={`Remove ${word}`}
                     title={`Remove ${word}`}
-                    className="cw-btn cw-btn--ghost cw-btn--icon cw-btn--sm h-5 w-5"
+                    className="cw-btn cw-btn--ghost cw-btn--icon cw-btn--sm h-5! w-5!"
                   >
                     <X strokeWidth={1.5} aria-hidden="true" />
                   </button>

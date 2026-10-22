@@ -15,6 +15,7 @@ import InboxOverview from './InboxOverview'
 import AcrossFeedsBand from './AcrossFeedsBand'
 import ReaderView from './ReaderView'
 import ReadingPane from './ReadingPane'
+import { feedCount } from './storyMeta'
 import { FRONT_QUERY, PANE_QUERY, useMediaQuery } from './useMediaQuery'
 import type { InboxView } from '@/lib/preferences/data'
 import Button, { buttonClass } from '@/components/ui/Button'
@@ -80,13 +81,11 @@ function nextUpdateText(at: string | null): string {
 // The front page shows this many stories per category until expanded.
 const FRONT_TOP = 5
 
-const feedCountOf = (story: Story) => new Set(story.sources.map((s) => s.feedId)).size
-
 // Front page order: most feeds first, then latest activity.
 function rankForFront(stories: Story[]): Story[] {
   return [...stories].sort(
     (a, b) =>
-      feedCountOf(b) - feedCountOf(a) || new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
+      feedCount(b) - feedCount(a) || new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
   )
 }
 

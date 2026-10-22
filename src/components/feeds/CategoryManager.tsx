@@ -165,7 +165,7 @@ export default function CategoryManager({ categories }: { categories: CategoryRo
                     disabled={pending}
                     aria-label={`Delete category ${category.name}`}
                     title="Delete category. Its feeds stay, uncategorized."
-                    className="hover:text-danger"
+                    className="hover:text-danger!"
                     onClick={() => handleRemove(category.id)}
                   >
                     <X strokeWidth={1.5} aria-hidden="true" />

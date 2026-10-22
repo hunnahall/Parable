@@ -1,13 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Archive, ArchiveRestore, BookOpen, ChevronDown, Ellipsis, EyeOff, ExternalLink, FolderPlus, Sparkles } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
 import type { StoryViewMode } from './StoryList'
 import { markArticleRead } from '@/lib/articles/actions'
-import { addFolder } from '@/lib/folders/actions'
-import { formatAge } from '@/lib/formatting'
 import { languageLabel } from '@/lib/languages'
 import ArticleFolderPicker from '@/components/articles/ArticleFolderPicker'
 import Badge from '@/components/ui/Badge'
@@ -16,7 +13,8 @@ import Tooltip from '@/components/ui/Tooltip'
 import HideWordDialog from './HideWordDialog'
 import ReaderView from './ReaderView'
 import StorySummary from './StorySummary'
-import { saveStory } from './saveStory'
+import { useSaveStory } from './useSaveStory'
+import { faviconFor, feedCount as countFeeds, sourceMeta, storyImage, taggedLanguage } from './storyMeta'
 import { Input } from '@/components/ui/Input'
 
 export interface FolderOption {
@@ -26,29 +24,6 @@ export interface FolderOption {
 
 // On screen this long (and at least half visible) counts as seen.
 const SEEN_AFTER_MS = 1000
-// Reading speed for the meta line's read time.
-const WORDS_PER_MINUTE = 220
-// Tagged languages: two-letter codes other than English. 'und' (undetectable)
-// and three-letter codes (detection found no common language, e.g. 'sco'
-// for an English headline) get no tag.
-function taggedLanguage(code: string | null): string | null {
-  return code && code !== 'en' && /^[a-z]{2}$/.test(code) ? code : null
-}
-
-// Only https images and icons, so a page never loads mixed content.
-function httpsUrl(url: string | null): string | null {
-  return url?.startsWith('https://') ? url : null
-}
-
-function faviconFor(link: string | null): string | null {
-  if (!httpsUrl(link)) return null
-  try {
-    return `${new URL(link!).origin}/favicon.ico`
-  } catch {
-    return null
-  }
-}
-
 // One story: the newest source's title and feed, a count of the feeds
 // covering it, a thumbnail when a source has an image, and its actions.
 // Unseen titles are semibold; seen ones drop to regular weight in the
@@ -89,33 +64,25 @@ export default function StoryRow({
   onUnarchive: (story: Story) => void
   onSaved: (story: Story) => void
 }) {
-  const router = useRouter()
   const rowRef = useRef<HTMLLIElement>(null)
   const [showSources, setShowSources] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [hideWordOpen, setHideWordOpen] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [readerOpen, setReaderOpen] = useState(false)
-  const [addingFolder, setAddingFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [pending, setPending] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const [faviconFailed, setFaviconFailed] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
+  const save = useSaveStory({ story, onSaved, onFolderCreated })
+  const { pending, error } = save
 
   const lead = story.sources[0]
-  // The badge counts feeds, per context.md: two feeds from one outlet are
-  // two, and one feed posting an update to its own story is one.
-  const feedCount = new Set(story.sources.map((s) => s.feedId)).size
+  const feedCount = countFeeds(story)
   const extraCount = story.sources.length - 1
-  const age = formatAge(lead.publishedAt ?? lead.createdAt)
-  const readTime = lead.wordCount ? `${Math.max(1, Math.ceil(lead.wordCount / WORDS_PER_MINUTE))} min` : null
-  const meta = [lead.feedTitle, age, readTime].filter(Boolean).join(' · ')
+  const meta = sourceMeta(lead)
   const language = taggedLanguage(lead.language)
-  // Newest source with an image first.
-  const image = imageFailed ? null : (story.sources.map((s) => httpsUrl(s.imageUrl)).find(Boolean) ?? null)
+  const image = imageFailed ? null : storyImage(story)
   const favicon = faviconFailed ? null : faviconFor(lead.link)
   const titleWeight = seen ? 'font-normal text-foreground-muted' : 'font-semibold text-foreground'
   const selected = readerOpen || panelOpen || selectedInPane
@@ -165,33 +132,9 @@ export default function StoryRow({
     }
   }, [moreOpen])
 
-  async function saveTo(folderIds: string[]) {
-    if (folderIds.length === 0) return
-    setPending(true)
-    setError(null)
-    const saveError = await saveStory(story, folderIds)
-    setPending(false)
-    if (saveError) {
-      setError(saveError)
-      return
-    }
-    setPanelOpen(false)
-    onSaved(story)
-    router.refresh()
-  }
-
-  async function createFolderAndSave() {
-    const name = newFolderName.trim()
-    setNewFolderName('')
-    setAddingFolder(false)
-    if (!name) return
-    const result = await addFolder({ name, parentId: null })
-    if (result.error || !result.id) {
-      setError(result.error ?? 'Folder not created')
-      return
-    }
-    onFolderCreated({ id: result.id, label: name })
-    await saveTo([result.id])
+  // Saving from the phone panel closes it.
+  async function saveAndClose(folderIds: string[]) {
+    if (await save.saveTo(folderIds)) setPanelOpen(false)
   }
 
   function archiveOrRestore() {
@@ -347,13 +290,7 @@ export default function StoryRow({
                 <ArticleFolderPicker
                   selectedIds={[]}
                   folders={folders}
-                  onChange={saveTo}
-                  addingFolder={addingFolder}
-                  setAddingFolder={setAddingFolder}
-                  newFolderName={newFolderName}
-                  setNewFolderName={setNewFolderName}
-                  onCreateFolder={createFolderAndSave}
-                  disabled={pending}
+                  {...save.pickerProps}
                   iconOnly
                   buttonClassName="[@media(hover:none)]:size-10!"
                 />
@@ -456,7 +393,7 @@ export default function StoryRow({
                   void markArticleRead(lead.id)
                   setPanelOpen(false)
                 }}
-                className="cw-btn cw-btn--ghost justify-start"
+                className="cw-btn cw-btn--ghost justify-start!"
               >
                 <ExternalLink strokeWidth={1.5} aria-hidden="true" />
                 Open {lead.feedTitle ?? 'publisher'}
@@ -468,7 +405,7 @@ export default function StoryRow({
                 setPanelOpen(false)
                 setReaderOpen(true)
               }}
-              className="cw-btn cw-btn--ghost justify-start"
+              className="cw-btn cw-btn--ghost justify-start!"
             >
               <BookOpen strokeWidth={1.5} aria-hidden="true" />
               Reader view
@@ -479,18 +416,18 @@ export default function StoryRow({
                 setPanelOpen(false)
                 setSummaryOpen(true)
               }}
-              className="cw-btn cw-btn--ghost justify-start"
+              className="cw-btn cw-btn--ghost justify-start!"
             >
               <Sparkles strokeWidth={1.5} aria-hidden="true" />
               Summary
             </button>
             {view === 'inbox' ? (
-              <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost justify-start">
+              <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost justify-start!">
                 <Archive strokeWidth={1.5} aria-hidden="true" />
                 Archive
               </button>
             ) : (
-              <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost justify-start">
+              <button type="button" disabled={pending} onClick={archiveOrRestore} className="cw-btn cw-btn--ghost justify-start!">
                 <ArchiveRestore strokeWidth={1.5} aria-hidden="true" />
                 Move to Inbox
               </button>
@@ -503,7 +440,7 @@ export default function StoryRow({
                   setPanelOpen(false)
                   setHideWordOpen(true)
                 }}
-                className="cw-btn cw-btn--ghost justify-start"
+                className="cw-btn cw-btn--ghost justify-start!"
               >
                 <EyeOff strokeWidth={1.5} aria-hidden="true" />
                 Hide stories with a word
@@ -518,8 +455,8 @@ export default function StoryRow({
                 key={folder.id}
                 type="button"
                 disabled={pending}
-                onClick={() => saveTo([folder.id])}
-                className="cw-btn cw-btn--ghost w-full justify-start"
+                onClick={() => void saveAndClose([folder.id])}
+                className="cw-btn cw-btn--ghost w-full justify-start!"
               >
                 <FolderPlus strokeWidth={1.5} aria-hidden="true" />
                 {folder.label}
@@ -528,10 +465,10 @@ export default function StoryRow({
             <Input
               placeholder="New folder"
               aria-label="New folder name"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
+              value={save.newFolderName}
+              onChange={(e) => save.setNewFolderName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void createFolderAndSave()
+                if (e.key === 'Enter') void save.createFolderAndSave().then((saved) => saved && setPanelOpen(false))
               }}
             />
           </div>

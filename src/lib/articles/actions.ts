@@ -10,7 +10,7 @@ import { setArticleFolders } from '@/lib/folders/actions'
 // without touching the shared feed_items row other subscribers read.
 export type ArticleCuration = 'saved' | 'archived' | 'deleted'
 
-// Thin server-action wrapper around getArticlesPage — the Inbox page's
+// Thin server-action wrapper around getArticlesPage — the Saved page's
 // client component (for "Load more") can't call data.ts functions
 // directly, since createClient() there needs a Server Component/Route
 // Handler/Server Action context.
@@ -48,10 +48,6 @@ async function setState(
 
   revalidatePath('/')
   return { error: null }
-}
-
-export async function saveArticle(feedItemId: string) {
-  return setState(feedItemId, 'saved')
 }
 
 // Manual archive from the Inbox. An archived article is kept for a

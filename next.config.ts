@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   // entirely — the standard fix for this class of error with jsdom on
   // serverless platforms.
   serverExternalPackages: ['jsdom'],
+  // Memoizes components automatically (2026-10-22). The Inbox re-renders its
+  // whole list each time a story is marked seen, which is hundreds of rows;
+  // with the compiler, rows whose props didn't change are skipped.
+  reactCompiler: true,
 };
 
 export default nextConfig;

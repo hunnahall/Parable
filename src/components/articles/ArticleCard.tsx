@@ -1,21 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, Minus } from 'lucide-react'
 import type { ArticleItem } from '@/lib/articles/list'
 import { formatArticleDate } from '@/lib/formatting'
 import { useArticleCardActions } from './useArticleCardActions'
 import ArticleCardActionsRow from './ArticleCardActionsRow'
 import ArticleNoteEditor from './ArticleNoteEditor'
-import Button from '@/components/ui/Button'
 
 export interface FolderOption {
   id: string
   label: string
 }
 
-// Shared list row used by the Inbox/Save/Archive pages — one place for the
-// archive/file button row instead of duplicating it per surface.
+// Saved's list row (the card grid is ArticleCardGrid). Shares the action
+// row and its handlers with the grid so the two can't drift.
 // Archive/Unsave always patch via onUpdate; the caller's list (see
 // useOptimisticArticleList) decides whether the patched item still belongs
 // in its current view and drops it if not, so this component doesn't need
@@ -28,10 +25,8 @@ export default function ArticleCard({
   onFolderCreated,
   showFolderPicker = false,
   showDelete = false,
-  compact = false,
   selected,
   onToggleSelect,
-  collapsible = false,
 }: {
   item: ArticleItem
   onUpdate: (id: string, patch: Partial<ArticleItem>) => void
@@ -40,31 +35,19 @@ export default function ArticleCard({
   onFolderCreated?: (folder: FolderOption) => void
   showFolderPicker?: boolean
   showDelete?: boolean
-  compact?: boolean
   // Only the bulk toolbar passes these — undefined elsewhere, which just
   // skips rendering the checkbox column.
   selected?: boolean
   onToggleSelect?: (id: string) => void
-  // Inbox opts in: the title shows alone, and a "+" button reveals the
-  // summary and the Save/Archive row instead of them always taking up
-  // vertical space. Save/Archive keep the old always-expanded layout.
-  collapsible?: boolean
 }) {
   const actions = useArticleCardActions({ item, onUpdate, onRemove, onFolderCreated })
   const showNote = item.state === 'saved' || item.state === 'archived'
   const metaParts = [item.feed_title, formatArticleDate(item.published_at)].filter(
     (part): part is string => !!part
   )
-  const [expanded, setExpanded] = useState(false)
-  const showBody = !collapsible || expanded
 
   return (
-    <li
-      className={
-        'group transition-colors hover:bg-fill-hover ' +
-        (compact ? 'border-b border-border pb-3 last:border-0 last:pb-0' : 'px-4 py-3')
-      }
-    >
+    <li className="group px-4 py-3 transition-colors hover:bg-fill-hover">
       <div className="flex items-start gap-2.5">
         {onToggleSelect && (
           <label className="cw-check mt-0.5 shrink-0">
@@ -97,45 +80,18 @@ export default function ArticleCard({
             ) : (
               <span className="min-w-0 flex-1 text-lg font-medium break-words">{item.title}</span>
             )}
-            {collapsible && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setExpanded((v) => !v)}
-                aria-expanded={expanded}
-                aria-label={expanded ? 'Hide details' : 'Show details'}
-                icon
-                className="shrink-0"
-              >
-                {expanded ? (
-                  <Minus strokeWidth={1.5} aria-hidden="true" />
-                ) : (
-                  <Plus strokeWidth={1.5} aria-hidden="true" />
-                )}
-              </Button>
-            )}
           </div>
-          {showBody && (
-            <>
-              {/* Summaries are written on request (and when an article is
-                  saved), so most Inbox rows have none. */}
-              {item.summary && <p className="mt-1 text-base text-foreground-muted">{item.summary}</p>}
-              <ArticleCardActionsRow
-                item={item}
-                actions={actions}
-                folders={folders}
-                showFolderPicker={showFolderPicker}
-                showDelete={showDelete}
-                alwaysVisible={collapsible}
-              />
-              {showNote && (
-                <ArticleNoteEditor
-                  itemId={item.id}
-                  note={item.note}
-                  onChange={(note) => onUpdate(item.id, { note })}
-                />
-              )}
-            </>
+          {/* Saving writes any missing summary, so saved articles have one. */}
+          {item.summary && <p className="mt-1 text-base text-foreground-muted">{item.summary}</p>}
+          <ArticleCardActionsRow
+            item={item}
+            actions={actions}
+            folders={folders}
+            showFolderPicker={showFolderPicker}
+            showDelete={showDelete}
+          />
+          {showNote && (
+            <ArticleNoteEditor itemId={item.id} note={item.note} onChange={(note) => onUpdate(item.id, { note })} />
           )}
           {actions.error && <p className="mt-1 text-sm text-danger">{actions.error}</p>}
         </div>

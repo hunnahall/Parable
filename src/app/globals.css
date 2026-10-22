@@ -202,6 +202,18 @@ input[type="radio"] {
   animation: skeleton-in 1ms linear 300ms backwards;
 }
 
+/* One text size for every button (Hunter, 2026-10-22): the spec drops
+   small buttons and segmented controls to 12px and large ones to 14px,
+   which left buttons on the same screen at different sizes. Here the size
+   variants change only height and padding. An app-level departure from the
+   Covenant Works spec, noted in design.md. */
+.cw-btn,
+.cw-btn--sm,
+.cw-btn--lg,
+.cw-seg button {
+  font-size: var(--text-sm);
+}
+
 /* Tabs that are links (the Inbox's category tabs) mark the current one with
    aria-current, which components.css doesn't cover: it styles ARIA tabs'
    aria-selected. Same look. */

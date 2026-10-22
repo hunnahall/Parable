@@ -190,7 +190,7 @@ export default function FolderManager({ folders }: { folders: FolderRow[] }) {
                     onClick={() => handleRemove(folder.id)}
                     aria-label={`Delete folder ${folder.name}`}
                     title="Delete folder"
-                    className="hover:text-danger"
+                    className="hover:text-danger!"
                   >
                     <X strokeWidth={1.5} aria-hidden="true" />
                   </Button>

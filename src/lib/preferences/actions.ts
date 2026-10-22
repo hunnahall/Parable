@@ -37,6 +37,3 @@ export async function updatePreferences(
   return { error: null }
 }
 
-export async function setSidebarCollapsed(collapsed: boolean): Promise<{ error: string | null }> {
-  return updatePreferences({ sidebarCollapsed: collapsed })
-}

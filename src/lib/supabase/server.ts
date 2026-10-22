@@ -28,24 +28,22 @@ export async function createClient() {
   )
 }
 
-// Wrapped in React.cache so layout.tsx and page.tsx can each call getUser()
-// without paying for two round trips to the Supabase Auth server per request.
+// The signed-in user, from the auth token's verified claims. Wrapped in
+// React.cache so the layout and the page share one check per request.
 //
-// Deliberately getSession() (reads the JWT from cookies locally), not the
-// network-verifying auth.getUser() Supabase's own docs recommend for
-// server-side code — that recommendation exists because a page normally
-// can't assume its incoming cookies were checked by anything. Here they
-// were: src/proxy.ts's middleware matcher covers every route this app
-// serves (all but static assets — see its `config.matcher`) and already
-// ran the real auth.getUser() network verification, rewriting refreshed
-// cookies, before this render ever starts. Re-verifying again here was a
-// second ~400ms round trip on every navigation for no additional safety.
-// If the middleware matcher is ever narrowed to exclude a route that
-// calls this, that route would need its own real auth.getUser() check.
-export const getUser = cache(async () => {
+// getClaims verifies the token's signature locally against the project's
+// ES256 signing keys (fetched once and cached), so this costs no network
+// round trip and, unlike getSession(), doesn't trust an unverified cookie.
+// The middleware (src/proxy.ts) has already refreshed an expired session
+// for this request. Only the id and email are used anywhere.
+export interface AppUser {
+  id: string
+  email: string | null
+}
+
+export const getUser = cache(async (): Promise<AppUser | null> => {
   const supabase = await createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  return session?.user ?? null
+  const { data, error } = await supabase.auth.getClaims()
+  if (error || !data?.claims?.sub) return null
+  return { id: data.claims.sub, email: (data.claims.email as string | undefined) ?? null }
 })
