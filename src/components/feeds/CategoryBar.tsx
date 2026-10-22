@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Plus, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Pencil, Plus, X } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { addCategory, removeCategory, renameCategory } from '@/lib/categories/actions'
+import { addCategory, removeCategory, renameCategory, reorderCategories } from '@/lib/categories/actions'
 import type { CategoryRow } from '@/lib/categories/data'
 
 // The filter value for feeds with no category.
@@ -16,10 +16,11 @@ type Mode = { kind: 'idle' } | { kind: 'adding' } | { kind: 'renaming'; id: stri
 
 // The "Your feeds" category filter, which is also where categories are
 // managed (2026-10-22, replacing the Categories panel): New category adds
-// one, and with a category selected, Rename and Delete act on it. Deleting
-// keeps its feeds, which become uncategorized.
+// one, and with a category selected, the arrows move it earlier or later
+// (the order sets the Inbox's order), and Rename and Delete act on it.
+// Deleting keeps its feeds, which become uncategorized.
 export default function CategoryBar({
-  categories,
+  categories: serverCategories,
   value,
   onChange,
 }: {
@@ -28,12 +29,39 @@ export default function CategoryBar({
   onChange: (value: string) => void
 }) {
   const router = useRouter()
+  // Optimistic order, so a move shows at once rather than after the
+  // page's data reloads.
+  const [categories, setCategories] = useState(serverCategories)
+  const [syncedFrom, setSyncedFrom] = useState(serverCategories)
+  if (serverCategories !== syncedFrom) {
+    setSyncedFrom(serverCategories)
+    setCategories(serverCategories)
+  }
   const [mode, setMode] = useState<Mode>({ kind: 'idle' })
   const [name, setName] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const selected = categories.find((c) => c.id === value)
+  const selectedIndex = categories.findIndex((c) => c.id === value)
+  const selected = selectedIndex >= 0 ? categories[selectedIndex] : undefined
+
+  async function move(direction: -1 | 1) {
+    const target = selectedIndex + direction
+    if (selectedIndex < 0 || target < 0 || target >= categories.length) return
+    const next = [...categories]
+    ;[next[selectedIndex], next[target]] = [next[target], next[selectedIndex]]
+    setCategories(next)
+    setPending(true)
+    setError(null)
+    const result = await reorderCategories(next.map((c) => c.id))
+    setPending(false)
+    if (result.error) {
+      setCategories(serverCategories)
+      setError(result.error)
+      return
+    }
+    router.refresh()
+  }
 
   function start(next: Mode, initialName = '') {
     setMode(next)
@@ -149,6 +177,28 @@ export default function CategoryBar({
             variant="ghost"
             size="sm"
             icon
+            aria-label={`Move ${selected.name} earlier`}
+            title={`Move ${selected.name} earlier`}
+            disabled={pending || selectedIndex === 0}
+            onClick={() => void move(-1)}
+          >
+            <ArrowLeft strokeWidth={1.5} aria-hidden="true" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon
+            aria-label={`Move ${selected.name} later`}
+            title={`Move ${selected.name} later`}
+            disabled={pending || selectedIndex === categories.length - 1}
+            onClick={() => void move(1)}
+          >
+            <ArrowRight strokeWidth={1.5} aria-hidden="true" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon
             aria-label={`Rename ${selected.name}`}
             title={`Rename ${selected.name}`}
             onClick={() => start({ kind: 'renaming', id: selected.id }, selected.name)}
@@ -172,6 +222,7 @@ export default function CategoryBar({
         <Plus strokeWidth={1.5} aria-hidden="true" />
         New category
       </Button>
+      {error && <p className="w-full text-sm text-danger">{error}</p>}
     </div>
   )
 }
