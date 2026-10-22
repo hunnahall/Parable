@@ -58,7 +58,9 @@ select cron.schedule(
       (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
     ),
     timeout_milliseconds := 300000
-  );
+  )
+  -- Skipped while automatic updates are paused (Settings).
+  where not public.automatic_updates_paused();
   $$
 );
 
@@ -92,7 +94,9 @@ select cron.schedule(
       'x-cron-secret',
       (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
     )
-  );
+  )
+  -- Skipped while automatic updates are paused (Settings).
+  where not public.automatic_updates_paused();
   $$
 );
 

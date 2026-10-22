@@ -9,6 +9,7 @@ import Segmented from '@/components/ui/Segmented'
 import { useToast } from '@/components/ui/Toast'
 import SettingsActions from './SettingsActions'
 import UsageBox from './UsageBox'
+import AutomationPanel from './AutomationPanel'
 
 const THEME_OPTIONS: { value: ThemeChoice; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -22,10 +23,13 @@ export default function SettingsForm({
   // Supabase client in this app.
   usage,
   spend,
+  paused,
 }: {
   initialPreferences: UserPreferences
   usage: UsageWindow | null
   spend: SpendEntry[]
+  // Automatic updates paused (app_settings).
+  paused: boolean
 }) {
   const toast = useToast()
   const [theme, setTheme] = useState(initialPreferences.theme)
@@ -60,6 +64,8 @@ export default function SettingsForm({
 
         <UsageBox usage={usage} spend={spend} />
       </div>
+
+      <AutomationPanel key={String(paused)} paused={paused} />
 
       <SettingsActions />
     </div>

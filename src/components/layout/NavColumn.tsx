@@ -52,7 +52,7 @@ export default function NavColumn({
       </div>
 
       <div className="border-t border-border px-2 py-2">
-        <StatusLine lastSuccessAt={shell.lastSuccessAt} staleHours={shell.staleHours} />
+        <StatusLine lastSuccessAt={shell.lastSuccessAt} staleHours={shell.staleHours} paused={shell.paused} />
         {/* Keyed on the theme so a change made elsewhere (Settings, the palette) moves its check mark. */}
         <AccountMenu key={shell.theme} userEmail={shell.userEmail} theme={shell.theme} onNavigate={onNavigate} />
       </div>

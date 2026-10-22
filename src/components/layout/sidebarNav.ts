@@ -69,4 +69,6 @@ export interface ShellData {
   // Last successful ingest, and the hours after which it counts as down.
   lastSuccessAt: string | null
   staleHours: number
+  // Automatic updates paused in Settings.
+  paused: boolean
 }

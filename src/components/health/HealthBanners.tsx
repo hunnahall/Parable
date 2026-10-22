@@ -2,14 +2,24 @@ import Link from 'next/link'
 import Alert from '@/components/ui/Alert'
 import { FEED_FAILING_RUNS, type Health } from '@/lib/health/data'
 
-// Inbox banners for the two failures an empty Inbox would otherwise hide:
-// Parable itself not loading anything, and a feed that stopped loading.
+// Inbox banners for the two failures an empty Inbox would otherwise hide
+// (Parable itself not loading anything, and a feed that stopped loading),
+// and a note while automatic updates are paused, which replaces the first.
 export default function HealthBanners({ health }: { health: Health }) {
-  const { ingestStale, failingFeeds } = health
-  if (!ingestStale && failingFeeds.length === 0) return null
+  const { ingestStale, failingFeeds, paused } = health
+  if (!ingestStale && failingFeeds.length === 0 && !paused) return null
 
   return (
     <div className="space-y-2">
+      {paused && (
+        <Alert tone="info" title="Automatic updates are paused">
+          No new articles load and nothing expires until you resume them in{' '}
+          <Link href="/settings" className="underline underline-offset-4">
+            Settings
+          </Link>
+          . Refresh loads new articles now.
+        </Alert>
+      )}
       {ingestStale && (
         <Alert tone="danger" title="Parable isn't loading new articles">
           {ingestStale.hoursSince === null

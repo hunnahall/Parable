@@ -62,6 +62,7 @@ export default async function RootLayout({
     theme: prefs.theme,
     lastSuccessAt: health?.lastSuccessAt ?? null,
     staleHours: INGEST_STALE_HOURS,
+    paused: health?.paused ?? false,
   }
 
   return (

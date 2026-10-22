@@ -6,6 +6,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { getHealth, INGEST_INTERVAL_HOURS } from '@/lib/health/data'
 import { getUserPreferences } from '@/lib/preferences/data'
 import InboxViewSwitch from '@/components/stories/InboxViewSwitch'
+import RefreshButton from '@/components/stories/RefreshButton'
 import { listRecentFilteredTitles } from '@/lib/filters/data'
 import FilteredToday from '@/components/filters/FilteredToday'
 import PageHeader from '@/components/layout/PageHeader'
@@ -52,7 +53,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         title={category?.name ?? 'Inbox'}
         wide={front}
         wideFrom1280={!front}
-        actions={category ? undefined : <InboxViewSwitch initial={prefs.inboxView} />}
+        actions={
+          <>
+            <RefreshButton />
+            {!category && <InboxViewSwitch initial={prefs.inboxView} />}
+          </>
+        }
         figure={{ value: shown.length.toLocaleString('en-US'), label: 'Stories, last 12 hours' }}
       />
       {/* The front page uses the wide content width; the list goes full width at 1280px for the reading pane. */}

@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { feedItemsRpc, UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { matchedAutoDeleteKeyword } from '@/lib/feeds/autoDelete'
+import { adminClient } from '@/lib/supabase/admin'
+import { PAUSE_KEY } from './automation'
 
 // Wipes everything that belongs to this account — subscriptions, folders,
 // per-article curation (saved, archived, notes, read state, folder
@@ -136,4 +138,22 @@ export async function runAutoDeleteRulesNow(): Promise<{
   revalidatePath('/inbox')
   revalidatePath('/', 'layout')
   return { error: null, deletedCount: matchedIds.length }
+}
+
+// Pauses or resumes automatic updates for every account: while paused the
+// cron jobs skip their calls (see supabase/cron.sql), so no new articles
+// load and nothing expires. Written with the service role, since
+// app_settings is read-only to signed-in users.
+export async function setAutomaticUpdatesPaused(paused: boolean): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  const { error } = await adminClient()
+    .from('app_settings')
+    .upsert({ key: PAUSE_KEY, value: paused, updated_at: new Date().toISOString(), updated_by: user.id })
+  if (error) return { error: error.message }
+
+  // The status line in the layout, the Inbox banner and Settings all show it.
+  revalidatePath('/', 'layout')
+  return { error: null }
 }
