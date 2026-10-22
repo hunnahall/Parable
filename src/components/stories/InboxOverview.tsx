@@ -5,9 +5,12 @@ import type { Story } from '@/lib/stories/data'
 import type { CategoryRow } from '@/lib/categories/data'
 import type { FilteredTitle } from '@/lib/filters/data'
 
-// The chart palette has twelve colors (tokens.css --chart-1..12, Parable's
-// signature first). Past that, categories are grouped as Other.
-const CHART_COLORS = 12
+// Shades of the signature color (Hunter, 2026-10-22: one hue rather than
+// the twelve chart colors), from full strength down, mixed into the panel
+// surface so they work in both themes. Five stay distinguishable beside
+// each other; past that, categories are grouped as Other. The legend with
+// values always shows, so no category relies on its shade alone.
+const SHADES = [100, 75, 55, 40, 28].map((pct) => `color-mix(in srgb, var(--accent) ${pct}%, var(--surface))`)
 const MUTED = 'var(--fg-3)'
 
 interface Segment {
@@ -18,8 +21,8 @@ interface Segment {
 }
 
 // Today's stories by category, each story counted once by its lead (newest)
-// source's category. Colors follow the category's place in the user's order,
-// never its rank, so a category keeps its color as counts change.
+// source's category. Shades follow the category's place in the user's order,
+// never its rank, so a category keeps its shade as counts change.
 function segmentsFor(stories: Story[], categories: CategoryRow[]): Segment[] {
   const counts = new Map<string, number>()
   for (const story of stories) {
@@ -33,7 +36,7 @@ function segmentsFor(stories: Story[], categories: CategoryRow[]): Segment[] {
     const count = counts.get(category.id) ?? 0
     counts.delete(category.id)
     if (count === 0) return
-    if (i < CHART_COLORS) segments.push({ key: category.id, name: category.name, count, color: `var(--chart-${i + 1})` })
+    if (i < SHADES.length) segments.push({ key: category.id, name: category.name, count, color: SHADES[i] })
     else other += count
   })
   if (other > 0) segments.push({ key: 'other', name: 'Other', count: other, color: MUTED })
