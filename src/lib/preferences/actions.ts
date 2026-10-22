@@ -9,6 +9,7 @@ const COLUMNS: Record<keyof UserPreferences, string> = {
   sidebarCollapsed: 'sidebar_collapsed',
   language: 'language',
   autoDeleteKeywords: 'auto_delete_keywords',
+  inboxView: 'inbox_view',
 }
 
 // Writes only the fields passed. Sending the whole preferences object from

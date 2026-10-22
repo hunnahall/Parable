@@ -6,6 +6,10 @@ import { DEFAULT_LANGUAGE } from '@/lib/languages'
 // data-theme on <html> in src/app/layout.tsx.
 export type ThemeChoice = 'system' | 'dark' | 'light'
 
+// The Inbox's layout: the list, or the front page (category panels with
+// their top stories, at 1000px and up).
+export type InboxView = 'list' | 'front'
+
 export interface UserPreferences {
   theme: ThemeChoice
   sidebarCollapsed: boolean
@@ -17,6 +21,7 @@ export interface UserPreferences {
   // title — see runIngest in src/lib/feeds/ingest.ts for where this is
   // applied.
   autoDeleteKeywords: string[]
+  inboxView: InboxView
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -24,6 +29,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   sidebarCollapsed: false,
   language: DEFAULT_LANGUAGE,
   autoDeleteKeywords: [],
+  inboxView: 'list',
 }
 
 // No row is created for a user until they first change a setting — every
@@ -36,7 +42,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('theme, sidebar_collapsed, language, auto_delete_keywords')
+    .select('theme, sidebar_collapsed, language, auto_delete_keywords, inbox_view')
     .eq('user_id', user.id)
     .maybeSingle()
   logQueryError('preferences/getUserPreferences', error)
@@ -47,5 +53,6 @@ export async function getUserPreferences(): Promise<UserPreferences> {
     sidebarCollapsed: data.sidebar_collapsed,
     language: data.language,
     autoDeleteKeywords: data.auto_delete_keywords ?? [],
+    inboxView: data.inbox_view === 'front' ? 'front' : 'list',
   }
 }

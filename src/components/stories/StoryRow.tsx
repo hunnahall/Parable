@@ -64,6 +64,7 @@ export default function StoryRow({
   seen = false,
   leaving = false,
   selectedInPane = false,
+  compact = false,
   onSelect,
   onSeen,
   onFolderCreated,
@@ -79,6 +80,8 @@ export default function StoryRow({
   // At 1280px and up the Inbox has a reading pane: the title and Reader
   // view open the story there instead of the publisher or the modal.
   selectedInPane?: boolean
+  // The front page's tighter rows: less padding, smaller titles.
+  compact?: boolean
   onSelect?: (story: Story) => void
   onSeen?: (story: Story) => void
   onFolderCreated: (folder: FolderOption) => void
@@ -210,7 +213,7 @@ export default function StoryRow({
       {/* Clipped only while collapsing, so menus can overflow the row. */}
       <div className={`min-h-0 ${leaving ? 'overflow-hidden' : ''}`}>
         <div
-          className={`group flex gap-3 px-4 py-3 transition-colors duration-[var(--dur-std)] hover:bg-fill-hover ${
+          className={`group flex gap-3 px-4 transition-colors ${compact ? 'py-2' : 'py-3'} duration-[var(--dur-std)] hover:bg-fill-hover ${
             selected ? 'bg-accent-soft shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent-soft' : ''
           }`}
         >
@@ -267,7 +270,7 @@ export default function StoryRow({
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
-              className={`block w-full break-words text-left text-lg min-[640px]:hidden ${titleWeight}`}
+              className={`block w-full break-words text-left ${compact ? 'text-base' : 'text-lg'} min-[640px]:hidden ${titleWeight}`}
             >
               {lead.title}
             </button>
@@ -289,12 +292,12 @@ export default function StoryRow({
                     void markArticleRead(lead.id)
                   }}
                   aria-current={selectedInPane ? 'true' : undefined}
-                  className={`block break-words text-lg underline-offset-4 hover:underline ${titleWeight}`}
+                  className={`block break-words ${compact ? 'text-base' : 'text-lg'} underline-offset-4 hover:underline ${titleWeight}`}
                 >
                   {lead.title}
                 </a>
               ) : (
-                <span className={`block break-words text-lg ${titleWeight}`}>{lead.title}</span>
+                <span className={`block break-words ${compact ? 'text-base' : 'text-lg'} ${titleWeight}`}>{lead.title}</span>
               )}
             </div>
 

@@ -4,6 +4,8 @@ import { getStories } from '@/lib/stories/data'
 import { listCategories } from '@/lib/categories/data'
 import { listFolderOptions } from '@/lib/folders/data'
 import { getHealth, INGEST_INTERVAL_HOURS } from '@/lib/health/data'
+import { getUserPreferences } from '@/lib/preferences/data'
+import InboxViewSwitch from '@/components/stories/InboxViewSwitch'
 import { listRecentFilteredTitles } from '@/lib/filters/data'
 import FilteredToday from '@/components/filters/FilteredToday'
 import PageHeader from '@/components/layout/PageHeader'
@@ -16,12 +18,13 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
 
   const params = await searchParams
 
-  const [stories, folders, categories, health, filtered] = await Promise.all([
+  const [stories, folders, categories, health, filtered, prefs] = await Promise.all([
     getStories('inbox'),
     listFolderOptions(),
     listCategories(),
     getHealth(),
     listRecentFilteredTitles(),
+    getUserPreferences(),
   ])
 
   // An empty Inbox says whether it was cleared (and when more is due) or
@@ -39,16 +42,23 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   // ?category=<id> shows one category's section (the sidebar's category
   // links). An id that isn't one of the user's categories shows everything.
   const category = categories.find((c) => c.id === params.category)
+  // The front page is an All-view layout; a category's view is always a list.
+  const front = prefs.inboxView === 'front' && !category
   const shown = category ? stories.filter((story) => story.sources.some((s) => s.categoryId === category.id)) : stories
 
   return (
     <>
       <PageHeader
         title={category?.name ?? 'Inbox'}
-        wideFrom1280
+        wide={front}
+        wideFrom1280={!front}
+        actions={category ? undefined : <InboxViewSwitch initial={prefs.inboxView} />}
         figure={{ value: shown.length.toLocaleString('en-US'), label: 'Stories, last 12 hours' }}
       />
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8 min-[1280px]:max-w-none">
+      {/* The front page uses the wide content width; the list goes full width at 1280px for the reading pane. */}
+      <div
+        className={`mx-auto max-w-3xl space-y-4 px-4 py-6 min-[1000px]:px-8 ${front ? 'min-[1000px]:max-w-[var(--content-max)]' : 'min-[1280px]:max-w-none'}`}
+      >
         <HealthBanners health={health} />
         <FilteredToday titles={filtered} />
         <StoryList
@@ -59,6 +69,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
           categoryId={category?.id ?? null}
           filteredTitles={filtered}
           inboxClear={inboxClear}
+          inboxView={prefs.inboxView}
           query=""
           basePath="/inbox"
         />

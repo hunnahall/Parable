@@ -15,7 +15,8 @@ import InboxOverview from './InboxOverview'
 import AcrossFeedsBand from './AcrossFeedsBand'
 import ReaderView from './ReaderView'
 import ReadingPane from './ReadingPane'
-import { PANE_QUERY, useMediaQuery } from './useMediaQuery'
+import { FRONT_QUERY, PANE_QUERY, useMediaQuery } from './useMediaQuery'
+import type { InboxView } from '@/lib/preferences/data'
 import Button, { buttonClass } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import EmptyState from '@/components/ui/EmptyState'
@@ -76,6 +77,19 @@ function nextUpdateText(at: string | null): string {
   return `around ${new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
 }
 
+// The front page shows this many stories per category until expanded.
+const FRONT_TOP = 5
+
+const feedCountOf = (story: Story) => new Set(story.sources.map((s) => s.feedId)).size
+
+// Front page order: most feeds first, then latest activity.
+function rankForFront(stories: Story[]): Story[] {
+  return [...stories].sort(
+    (a, b) =>
+      feedCountOf(b) - feedCountOf(a) || new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
+  )
+}
+
 const inCategory = (story: Story, categoryId: string) => story.sources.some((s) => s.categoryId === categoryId)
 
 // How long a removed row takes to collapse: tokens.css --dur-std.
@@ -101,6 +115,7 @@ export default function StoryList({
   categoryId = null,
   filteredTitles = [],
   inboxClear = null,
+  inboxView = 'list',
   query,
   basePath,
 }: {
@@ -114,6 +129,7 @@ export default function StoryList({
   // For the empty Inbox: stories archived in the last 24 hours, and when
   // the next ingest is due.
   inboxClear?: { archivedCount: number; nextUpdateAt: string | null } | null
+  inboxView?: InboxView
   query: string
   basePath: string
 }) {
@@ -122,7 +138,13 @@ export default function StoryList({
   const searchParams = useSearchParams()
   // The reading pane: the Inbox at 1280px and up. ?story=<id> names the
   // story open in it, so it deep-links and the back button works.
-  const paneActive = useMediaQuery(PANE_QUERY) && view === 'inbox'
+  // The front page: the All view of the Inbox at 1000px and up, when chosen.
+  // Assumed wide on the server so a desktop reader doesn't see the list
+  // flash first; a phone switches to the list on hydration.
+  const frontActive = useMediaQuery(FRONT_QUERY, true) && view === 'inbox' && inboxView === 'front' && !categoryId
+  const paneActive = useMediaQuery(PANE_QUERY) && view === 'inbox' && !frontActive
+  // Front page panels showing all their stories rather than the top few.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [removed, setRemoved] = useState<Set<string>>(new Set())
   // Rows collapsing on their way out. A ref mirrors it so the timer that
   // removes them skips any that Undo or an error brought back meanwhile.
@@ -143,7 +165,23 @@ export default function StoryList({
   // What's on screen: one category's stories, or all of them.
   const shown = categoryId ? visible.filter((story) => inCategory(story, categoryId)) : visible
   const showTabs = view === 'inbox' && categories.length > 0
+  const activeCategory = categories.find((c) => c.id === categoryId)
   const paneStory = paneActive ? (shown.find((story) => story.id === searchParams.get('story')) ?? null) : null
+
+  // The sections as displayed: on the front page, ranked and cut to the top
+  // few unless expanded.
+  function displayedSections() {
+    const sections = sectionsFor(shown, query ? [] : activeCategory ? [activeCategory] : categories)
+    if (!frontActive) return sections.map((section) => ({ ...section, total: section.stories.length }))
+    return sections.map((section) => {
+      const ranked = rankForFront(section.stories)
+      return {
+        ...section,
+        total: ranked.length,
+        stories: expanded.has(section.key) ? ranked : ranked.slice(0, FRONT_TOP),
+      }
+    })
+  }
 
   // Changes ?story= without a server round trip; Next keeps useSearchParams
   // in step with history.pushState and replaceState.
@@ -211,9 +249,13 @@ export default function StoryList({
   }
 
   // Archives exactly the stories on screen when pressed. An article that
-  // arrives afterwards isn't in this list, so it stays in the Inbox.
+  // arrives afterwards isn't in this list, so it stays in the Inbox. On the
+  // front page that's what the panels display, not their collapsed rest.
   async function archiveAll() {
-    const targets = shown.filter((story) => !leavingRef.current.has(story.id))
+    const onScreen = frontActive
+      ? [...new Map(displayedSections().flatMap((s) => s.stories).map((story) => [story.id, story])).values()]
+      : shown
+    const targets = onScreen.filter((story) => !leavingRef.current.has(story.id))
     if (targets.length === 0) return
     setBulkPending(true)
     await archive(targets)
@@ -285,7 +327,6 @@ export default function StoryList({
   }
 
   const tabCounts = new Map(categories.map((c) => [c.id, visible.filter((story) => inCategory(story, c.id)).length]))
-  const activeCategory = categories.find((c) => c.id === categoryId)
 
   function commitSearch() {
     const q = queryDraft.trim()
@@ -377,21 +418,21 @@ export default function StoryList({
           </EmptyState>
         )
       ) : (
-        <div className="space-y-6">
+        <div className={frontActive ? 'grid grid-cols-2 items-start gap-4' : 'space-y-6'}>
           {/* Search results are one flat list, so each story is one result. */}
-          {sectionsFor(shown, query ? [] : activeCategory ? [activeCategory] : categories).map((section) => (
+          {displayedSections().map((section) => (
             // No overflow: hidden on the panel; it would stop the head
             // from sticking.
             <section key={section.key} aria-label={section.title ?? undefined} className="cw-panel">
               {section.title && (
                 <div
-                  className={`cw-panel__head sticky top-0 z-[5] bg-surface ${
+                  className={`cw-panel__head bg-surface ${frontActive ? '' : 'sticky top-0 z-[5]'} ${
                     showTabs ? 'max-[999px]:top-[calc(3.5rem+var(--tabs-h))]' : 'max-[999px]:top-14'
                   }`}
                 >
                   <h2 className="text-sm font-medium">
                     {section.title}{' '}
-                    <span className="font-mono text-xs font-normal tabular-nums text-muted">{section.stories.length}</span>
+                    <span className="font-mono text-xs font-normal tabular-nums text-muted">{section.total}</span>
                   </h2>
                   {view === 'inbox' && (
                     <button
@@ -420,6 +461,7 @@ export default function StoryList({
                       toast('Story saved')
                     }}
                     seen={isSeen(story)}
+                    compact={frontActive}
                     leaving={leaving.has(story.id)}
                     selectedInPane={paneStory?.id === story.id}
                     onSelect={paneActive ? selectStory : undefined}
@@ -427,6 +469,25 @@ export default function StoryList({
                   />
                 ))}
               </ul>
+              {frontActive && section.total > FRONT_TOP && (
+                <div className="border-t border-border px-4 py-2">
+                  <button
+                    type="button"
+                    aria-expanded={expanded.has(section.key)}
+                    onClick={() =>
+                      setExpanded((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(section.key)) next.delete(section.key)
+                        else next.add(section.key)
+                        return next
+                      })
+                    }
+                    className="cw-btn cw-btn--ghost cw-btn--sm"
+                  >
+                    {expanded.has(section.key) ? 'Show fewer' : `+${section.total - FRONT_TOP} more`}
+                  </button>
+                </div>
+              )}
             </section>
           ))}
         </div>
