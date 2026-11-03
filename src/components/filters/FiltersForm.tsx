@@ -30,30 +30,45 @@ export default function FiltersForm({
   // No Save button — every control commits on change. Local state updates
   // immediately (so the control feels instant); the save + refresh happen
   // in the background after.
-  async function applyChange(patch: Partial<UserPreferences>) {
+  // Resolves true once saved.
+  async function applyChange(patch: Partial<UserPreferences>, savedMessage = 'Filters saved'): Promise<boolean> {
     const next = { ...prefs, ...patch }
     setPrefs(next)
     const result = await updatePreferences(patch)
     if (result.error !== null) {
       toast(result.error, 'danger')
-      return
+      return false
     }
-    toast('Filters saved')
+    if (savedMessage) toast(savedMessage)
     router.refresh()
+    return true
   }
 
-  function addFilter() {
+  // A new word also clears matching stories already in the Inbox, as Hide
+  // word does. Ingest only filters articles as they arrive.
+  async function addFilter() {
     const trimmed = filterInput.trim()
     if (!trimmed) return
     setFilterInput('')
     if (prefs.autoDeleteKeywords.some((word) => word.toLowerCase() === trimmed.toLowerCase())) return
     setRulesRunResult(null)
-    applyChange({ autoDeleteKeywords: [...prefs.autoDeleteKeywords, trimmed] })
+    if (!(await applyChange({ autoDeleteKeywords: [...prefs.autoDeleteKeywords, trimmed] }, ''))) return
+    const result = await runAutoDeleteRulesNow()
+    if (result.error !== null) {
+      toast(`Filter saved. Matching stories weren't cleared: ${result.error}`, 'danger')
+      return
+    }
+    toast(
+      result.deletedCount === 0
+        ? 'Filter saved'
+        : `Filter saved. ${result.deletedCount} matching ${result.deletedCount === 1 ? 'article' : 'articles'} removed`
+    )
+    router.refresh()
   }
 
   function removeFilter(word: string) {
     setRulesRunResult(null)
-    applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
+    void applyChange({ autoDeleteKeywords: prefs.autoDeleteKeywords.filter((k) => k !== word) })
   }
 
   async function handleRunRulesNow() {
@@ -94,7 +109,7 @@ export default function FiltersForm({
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
-                addFilter()
+                void addFilter()
               }
             }}
             placeholder="A word or phrase"

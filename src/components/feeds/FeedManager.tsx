@@ -269,8 +269,6 @@ export default function FeedManager({
                   Checked {ingestSummary.feedsProcessed} feed
                   {ingestSummary.feedsProcessed === 1 ? '' : 's'} and added {ingestSummary.itemsInserted} article
                   {ingestSummary.itemsInserted === 1 ? '' : 's'}
-                  {ingestSummary.itemsAutoDeleted > 0 &&
-                    `, ${ingestSummary.itemsAutoDeleted} filtered out`}
                   .
                 </p>
                 {ingestSummary.feedsFailed.length > 0 && (

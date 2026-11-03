@@ -5,7 +5,6 @@ import { embedTexts } from '@/lib/embeddings'
 import { fetchAndExtractContent, paragraphsOf } from '@/lib/articles/extract'
 import { DEFAULT_LANGUAGE } from '@/lib/languages'
 import { matchedAutoDeleteKeyword } from './autoDelete'
-import { UNFILED_EXCLUDED_STATES } from '@/lib/articles/list'
 import { detectArticles } from './buildFeed'
 import { mapWithConcurrency } from '@/lib/concurrency'
 import { addIngestUsage, EMPTY_INGEST_USAGE, EMPTY_USAGE, type IngestUsage } from '@/lib/usage/tokens'
@@ -129,7 +128,6 @@ export interface IngestSummary {
   feedsProcessed: number
   feedsFailed: FeedFailure[]
   itemsInserted: number
-  itemsAutoDeleted: number
   // New articles recognized as a story another feed already carried.
   duplicatesFound: number
   // Articles whose full text (not a teaser) was stored.
@@ -146,8 +144,11 @@ export interface IngestSummary {
 // setting rather than a per-account one; per-account target languages
 // would need a feed_item_translations table keyed by language.
 //
-// Auto-delete keywords are genuinely per-user and are applied after the
-// fetch instead — see applyAutoDeleteRules below.
+// Filter keywords are per-user and are applied per subscriber at the
+// filter gate instead (see prepareItems). Articles already ingested when
+// a word is added are cleared at that moment by runAutoDeleteRulesNow
+// (Hide word, and adding a word on /filters); until 2026-11-03 every run
+// also rescanned every Inbox for that, which the two paths made redundant.
 const INGEST_TARGET_LANGUAGE = process.env.INGEST_TARGET_LANGUAGE || DEFAULT_LANGUAGE
 
 // Filter keywords are per-user but feed_items rows are shared, so a feed
@@ -942,81 +943,6 @@ async function processFeed(
   }
 }
 
-// A backstop pass over each user's whole Inbox, not the primary filter:
-// prepareItems already drops a matching title before it costs a fetch. This catches the cases that path can't: a keyword
-// added after an article was already ingested, and an article ingested
-// for one subscriber while another's list would have rejected it. Writes
-// the same 'deleted' tombstone the manual "Run filters now" action does
-// (see runAutoDeleteRulesNow in src/lib/settings/actions.ts).
-async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
-  const { data: prefRows, error: prefsError } = await supabase
-    .from('user_preferences')
-    .select('user_id, auto_delete_keywords')
-  if (prefsError) {
-    console.error('ingest: failed to load auto-delete preferences', prefsError.message)
-    return 0
-  }
-
-  let tombstoned = 0
-  const now = new Date().toISOString()
-
-  for (const prefs of prefRows ?? []) {
-    const keywords: string[] = prefs.auto_delete_keywords ?? []
-    if (keywords.length === 0) continue
-
-    // Bound: rpc reads this.rest, so a detached copy threw "Cannot read
-    // properties of undefined (reading 'rest')" and failed the whole run
-    // once anyone had a hidden word.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see feedItemsRpc in src/lib/articles/list.ts
-    const rpc = (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => any).bind(supabase)
-    const { data: items, error: itemsError } = await rpc('feed_items_excluding_states', {
-      p_user_id: prefs.user_id,
-      p_exclude_states: UNFILED_EXCLUDED_STATES,
-    }).select('id, feed_id, title, title_en, link')
-    if (itemsError) {
-      console.error(`ingest: auto-delete lookup failed for ${prefs.user_id}`, itemsError.message)
-      continue
-    }
-
-    const matched = (
-      (items ?? []) as { id: string; feed_id: string; title: string; title_en: string | null; link: string | null }[]
-    ).flatMap((item) => {
-      const title = item.title_en ?? item.title
-      const keyword = matchedAutoDeleteKeyword(title, keywords)
-      return keyword === null ? [] : [{ item, title, keyword }]
-    })
-    if (matched.length === 0) continue
-    const matchedIds = matched.map(({ item }) => item.id)
-
-    const { error: writeError } = await supabase.from('article_states').upsert(
-      matchedIds.map((feedItemId) => ({
-        user_id: prefs.user_id,
-        feed_item_id: feedItemId,
-        state: 'deleted',
-        archived_at: now,
-      })),
-      { onConflict: 'user_id,feed_item_id' }
-    )
-    if (writeError) {
-      console.error(`ingest: auto-delete write failed for ${prefs.user_id}`, writeError.message)
-      continue
-    }
-    await logFilteredTitles(
-      supabase,
-      matched.map(({ item, title, keyword }) => ({
-        user_id: prefs.user_id,
-        feed_id: item.feed_id,
-        title,
-        link: item.link,
-        keyword,
-      }))
-    )
-    tombstoned += matchedIds.length
-  }
-
-  return tombstoned
-}
-
 // Shared by the cron route and the Sync button, so both apply the same
 // cutoff. Parable covers the last 12 hours (see [[context]]): an older
 // article would leave the Inbox the moment it arrived, and a feed's first
@@ -1057,6 +983,24 @@ async function recordRun(
   if (error) console.error('ingest: failed to record run', error.message)
 }
 
+// The run's first reads, retried. About 30% of scheduled runs from
+// 2026-10-27 to 2026-11-03 failed on their first query with a 401, "JWT
+// issued at future": Supabase's gateway stamps the service key's token a
+// moment ahead of the database's clock, and the run gave up at once. A
+// second or two later the same read succeeds.
+const READ_RETRY_DELAYS_MS = [1000, 2000]
+
+async function readWithRetry<T extends { error: { message: string } | null }>(read: () => PromiseLike<T>): Promise<T> {
+  let result = await read()
+  for (const delay of READ_RETRY_DELAYS_MS) {
+    if (!result.error) break
+    console.error(`ingest: first read failed (${result.error.message}), retrying in ${delay}ms`)
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    result = await read()
+  }
+  return result
+}
+
 export interface RunIngestOptions {
   // Limit the run to feeds this user subscribes to (the manual Sync
   // button). Every subscriber of those feeds still gets their filters
@@ -1072,19 +1016,18 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
 
   // Only feeds someone subscribes to are worth fetching. Each feed also
   // needs its subscribers' filter keywords, so an item nobody wants is
-  // dropped before it costs anything (see prepareItems).
-  const [{ data: subs, error: subsError }, { data: prefRows, error: prefsError }] =
-    await Promise.all([
-      supabase.from('subscriptions').select('feed_id, user_id'),
-      supabase.from('user_preferences').select('user_id, auto_delete_keywords'),
-    ])
+  // dropped before it costs anything (see prepareItems). Both are needed:
+  // the filter gate is the only pass over new articles, so a run without
+  // the keywords would let filtered titles in.
+  const [{ data: subs, error: subsError }, { data: prefRows, error: prefsError }] = await Promise.all([
+    readWithRetry(() => supabase.from('subscriptions').select('feed_id, user_id')),
+    readWithRetry(() => supabase.from('user_preferences').select('user_id, auto_delete_keywords')),
+  ])
   if (subsError) {
     throw new Error(`Failed to load subscriptions: ${subsError.message}`)
   }
   if (prefsError) {
-    // Not fatal: without keywords every item simply survives the filter
-    // gate, which is the same outcome as nobody having any.
-    console.error('ingest: failed to load auto-delete preferences', prefsError.message)
+    throw new Error(`Failed to load filter keywords: ${prefsError.message}`)
   }
 
   const keywordsByUser = new Map<string, string[]>(
@@ -1112,7 +1055,6 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
       feedsProcessed: 0,
       feedsFailed: [],
       itemsInserted: 0,
-      itemsAutoDeleted: 0,
       duplicatesFound: 0,
       textsStored: 0,
       usage: EMPTY_INGEST_USAGE,
@@ -1165,13 +1107,10 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
     }
   }
 
-  const itemsAutoDeleted = await applyAutoDeleteRules(supabase)
-
   const summary: IngestSummary = {
     feedsProcessed,
     feedsFailed,
     itemsInserted,
-    itemsAutoDeleted,
     duplicatesFound,
     textsStored,
     usage,
