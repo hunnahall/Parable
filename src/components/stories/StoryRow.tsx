@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Archive, ArchiveRestore, BookOpen, ChevronDown, Ellipsis, EyeOff, ExternalLink, FolderPlus, Sparkles } from 'lucide-react'
+import { Archive, ArchiveRestore, BookOpen, Bookmark, ChevronDown, Ellipsis, EyeOff, ExternalLink, FolderPlus, Sparkles } from 'lucide-react'
 import type { Story } from '@/lib/stories/data'
 import type { StoryViewMode } from './StoryList'
 import { markArticleRead } from '@/lib/articles/actions'
@@ -269,7 +269,7 @@ export default function StoryRow({
 
             {summaryOpen && <StorySummary story={story} />}
 
-            <div className="-ml-2 mt-1.5 hidden items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 group-focus-within:opacity-100 min-[640px]:flex [@media(hover:none)]:opacity-100">
+            <div className="-ml-2 mt-1.5 hidden items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-haspopup][aria-expanded=true]]:opacity-100 min-[640px]:flex [@media(hover:none)]:opacity-100">
               <Tooltip label="Summary">
                 <button
                   type="button"
@@ -319,7 +319,7 @@ export default function StoryRow({
                     </button>
                   </Tooltip>
                   {moreOpen && (
-                    <div role="menu" className="cw-menu absolute left-0 top-full z-30 mt-1">
+                    <div role="menu" className="cw-menu absolute left-0 top-full z-30 mt-1 whitespace-nowrap">
                       {view === 'inbox' && (
                         <button
                           type="button"
@@ -348,7 +348,7 @@ export default function StoryRow({
                           className="cw-menu__item no-underline"
                         >
                           <ExternalLink strokeWidth={1.5} aria-hidden="true" />
-                          Open {lead.feedTitle ?? 'publisher'}
+                          Open article
                         </a>
                       )}
                     </div>
@@ -396,7 +396,7 @@ export default function StoryRow({
                 className="cw-btn cw-btn--ghost justify-start!"
               >
                 <ExternalLink strokeWidth={1.5} aria-hidden="true" />
-                Open {lead.feedTitle ?? 'publisher'}
+                Open article
               </a>
             )}
             <button
@@ -449,7 +449,16 @@ export default function StoryRow({
           </div>
 
           <div className="space-y-1 border-t border-border pt-3">
-            <p className="text-xs text-muted">Save to</p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void saveAndClose([])}
+              className="cw-btn cw-btn--ghost w-full justify-start!"
+            >
+              <Bookmark strokeWidth={1.5} aria-hidden="true" />
+              Save without a folder
+            </button>
+            <p className="pt-2 text-xs text-muted">Save to folder</p>
             {folders.map((folder) => (
               <button
                 key={folder.id}

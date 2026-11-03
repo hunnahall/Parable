@@ -13,7 +13,7 @@ import ArticleFolderPicker from './ArticleFolderPicker'
 //
 // On a list row the whole row is a hover group, so these stay out of the
 // way until the pointer is on the article they belong to. Keyboard focus
-// reveals them too (focus-within), and coarse pointers get them
+// reveals them too (:focus-visible), an open menu keeps them, and coarse pointers get them
 // unconditionally since there is no hover state to reveal them with.
 export default function ArticleCardActionsRow({
   item,
@@ -52,7 +52,7 @@ export default function ArticleCardActionsRow({
         '-ml-2 mt-1.5 flex flex-wrap items-center gap-1 transition-opacity duration-[var(--dur-fast)] ' +
         (alwaysVisible
           ? ''
-          : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100')
+          : 'opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-haspopup][aria-expanded=true]]:opacity-100 [@media(hover:none)]:opacity-100')
       }
     >
       {showFolderPicker && folders && (

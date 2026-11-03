@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { FolderPlus, Check } from 'lucide-react'
+import { Bookmark, FolderPlus, Check } from 'lucide-react'
 import type { FolderOption } from './ArticleCard'
 
 // A checkbox popover rather than a <select>, because an article can now
@@ -17,6 +17,7 @@ export default function ArticleFolderPicker({
   newFolderName,
   setNewFolderName,
   onCreateFolder,
+  onSaveWithoutFolder,
   disabled = false,
   iconOnly = false,
   buttonClassName = '',
@@ -29,6 +30,9 @@ export default function ArticleFolderPicker({
   newFolderName: string
   setNewFolderName: (v: string) => void
   onCreateFolder: () => void
+  // Unsaved stories (Inbox, Archive, reading pane): a first item that saves
+  // without filing, so it shows under Saved but in no folder.
+  onSaveWithoutFolder?: () => void
   disabled?: boolean
   // Inbox rows show the button as an icon; its label moves to aria-label.
   iconOnly?: boolean
@@ -87,6 +91,23 @@ export default function ArticleFolderPicker({
 
       {open && (
         <div className="cw-menu absolute left-0 top-full z-30 mt-1 w-56">
+          {onSaveWithoutFolder && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  onSaveWithoutFolder()
+                }}
+                className="cw-menu__item"
+              >
+                <Bookmark strokeWidth={1.5} aria-hidden="true" />
+                Save without a folder
+              </button>
+              <div className="cw-menu__sep" />
+              <p className="cw-menu__label">Save to folder</p>
+            </>
+          )}
           {folders.length === 0 && !addingFolder && (
             <p className="px-2 py-1.5 text-sm text-muted">No folders yet.</p>
           )}

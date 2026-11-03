@@ -146,3 +146,36 @@ export async function setArticleFolders(
   revalidatePath('/archive')
   return { error: null }
 }
+
+// Saves articles, optionally into folders: a whole story from the Inbox,
+// Archive or reading pane. Saved lists every saved article; a folder lists
+// only the ones filed in it, so an article saved with no folder shows
+// under Saved and under no folder. Adds to any folders an article is
+// already in (setArticleFolders replaces them). One write per table for
+// the whole story.
+export async function saveArticles(feedItemIds: string[], folderIds: string[]): Promise<{ error: string | null }> {
+  const user = await getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (feedItemIds.length === 0) return { error: null }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('article_states').upsert(
+    feedItemIds.map((feedItemId) => ({ user_id: user.id, feed_item_id: feedItemId, state: 'saved' as const, archived_at: null })),
+    { onConflict: 'user_id,feed_item_id' }
+  )
+  if (error) return { error: error.message }
+
+  const folders = [...new Set(folderIds)]
+  if (folders.length > 0) {
+    const { error: folderError } = await supabase.from('article_folders').upsert(
+      feedItemIds.flatMap((feedItemId) => folders.map((folderId) => ({ user_id: user.id, feed_item_id: feedItemId, folder_id: folderId }))),
+      { onConflict: 'feed_item_id,user_id,folder_id', ignoreDuplicates: true }
+    )
+    if (folderError) return { error: folderError.message }
+  }
+
+  revalidatePath('/inbox')
+  revalidatePath('/saved')
+  revalidatePath('/archive')
+  return { error: null }
+}

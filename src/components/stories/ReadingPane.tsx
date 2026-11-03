@@ -181,7 +181,7 @@ function PaneStory({
           {source.link && (
             <a href={source.link} target="_blank" rel="noopener noreferrer" className="cw-btn cw-btn--ghost cw-btn--sm">
               <ExternalLink strokeWidth={1.5} aria-hidden="true" />
-              Open publisher
+              Open article
             </a>
           )}
         </div>

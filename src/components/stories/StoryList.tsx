@@ -43,10 +43,11 @@ interface Section {
   stories: Story[]
 }
 
-// The Inbox and Archive list stories under each category, in the user's order. A story
-// whose feeds span categories appears in each of them; stories keep the
-// server's newest-activity-first order within a section. Without categories
-// it's one list. Stories from uncategorized feeds go last.
+// Stories under each category, in the user's order (sectionCategories says
+// which views use this). A story whose feeds span categories appears in
+// each of them; stories keep the server's newest-activity-first order
+// within a section. Without categories it's one list. Stories from
+// uncategorized feeds go last.
 function sectionsFor(stories: Story[], categories: CategoryRow[]): Section[] {
   if (categories.length === 0) return [{ key: 'all', title: null, stories }]
 
@@ -166,11 +167,16 @@ export default function StoryList({
   const showTabs = view === 'inbox' && categories.length > 0
   const activeCategory = categories.find((c) => c.id === categoryId)
   const paneStory = paneActive ? (shown.find((story) => story.id === searchParams.get('story')) ?? null) : null
+  // The Inbox's All view lists every story in one stream, newest activity
+  // first; a category's view, the front page and the Archive keep the
+  // category sections. Search results are one flat list.
+  const sectionCategories =
+    query || (view === 'inbox' && !activeCategory && !frontActive) ? [] : activeCategory ? [activeCategory] : categories
 
   // The sections as displayed: on the front page, ranked and cut to the top
   // few unless expanded.
   function displayedSections() {
-    const sections = sectionsFor(shown, query ? [] : activeCategory ? [activeCategory] : categories)
+    const sections = sectionsFor(shown, sectionCategories)
     if (!frontActive) return sections.map((section) => ({ ...section, total: section.stories.length }))
     return sections.map((section) => {
       const ranked = rankForFront(section.stories)
@@ -309,7 +315,7 @@ export default function StoryList({
   // Archiving from the pane moves on to the next story in the list, or the
   // one before when it was the last.
   function archiveFromPane(story: Story) {
-    const order = sectionsFor(shown, activeCategory ? [activeCategory] : categories)
+    const order = sectionsFor(shown, sectionCategories)
       .flatMap((section) => section.stories)
       .filter((s, i, all) => all.findIndex((t) => t.id === s.id) === i && (s.id === story.id || !leavingRef.current.has(s.id)))
     const at = order.findIndex((s) => s.id === story.id)

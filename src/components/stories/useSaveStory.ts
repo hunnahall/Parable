@@ -25,9 +25,9 @@ export function useSaveStory({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Resolves true once saved, so a caller can close its panel.
+  // Resolves true once saved, so a caller can close its panel. No folders
+  // saves it to Saved only.
   async function saveTo(folderIds: string[]): Promise<boolean> {
-    if (folderIds.length === 0) return false
     setPending(true)
     setError(null)
     const saveError = await saveStory(story, folderIds)
@@ -64,7 +64,10 @@ export function useSaveStory({
     setNewFolderName,
     // Spread onto ArticleFolderPicker.
     pickerProps: {
-      onChange: (folderIds: string[]) => void saveTo(folderIds),
+      onChange: (folderIds: string[]) => {
+        if (folderIds.length > 0) void saveTo(folderIds)
+      },
+      onSaveWithoutFolder: () => void saveTo([]),
       addingFolder,
       setAddingFolder,
       newFolderName,
