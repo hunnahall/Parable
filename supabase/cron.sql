@@ -1,4 +1,4 @@
--- Supabase Cron jobs that trigger Parable's ingestion routes on a schedule.
+-- Supabase Cron jobs: ingest calls the app over HTTP; retention runs in the database.
 --
 -- Prerequisite (run once, NOT part of this file — it contains a real
 -- secret and should never be committed): store the app's CRON_SECRET in
@@ -66,35 +66,23 @@ select cron.schedule(
 
 -- Parable's whole retention policy in one job: unfiled Inbox articles are
 -- deleted 12h after they arrive, archived ones 24h after they're archived,
--- and shared feed_items rows are reclaimed once nobody wants them — see
--- src/lib/feeds/retention.ts and the three functions it calls.
+-- shared feed_items rows are reclaimed once nobody wants them, and the
+-- bookkeeping tables age out. See public.run_retention() (the
+-- run_retention_in_database migration) and src/lib/feeds/retention.ts.
 --
--- Hourly, not daily. The old policy's windows were 24h/7d/30d, where a
--- once-a-day sweep was plenty of resolution; at 12h and 24h a daily sweep
--- would mean an article's real lifetime varied by up to a full day
--- depending on when it happened to arrive relative to the cron. Offset to
--- :10 so it never fires in the same instant as ingest-feeds on the hours
--- they share.
+-- Runs inside the database since 2026-11-03. It used to call
+-- /api/cron/retention over HTTP, which called seven functions back here
+-- from Vercel; a cold function missed pg_net's 5-second wait every other
+-- hour. No HTTP or secret is involved now.
 --
--- Replaces auto-archive-articles, purge-article-content and
--- purge-archived-metadata. Unschedule those once, they are not part of
--- this file's steady-state schedule:
---
---   select cron.unschedule('auto-archive-articles');
---   select cron.unschedule('purge-article-content');
---   select cron.unschedule('purge-archived-metadata');
+-- Hourly, not daily: at 12h and 24h a daily sweep would make an article's
+-- real lifetime vary by up to a full day. Offset to :10 so it never fires
+-- in the same instant as ingest-feeds on the hours they share.
 select cron.schedule(
   'retention',
   '10 * * * *',
   $$
-  select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/cron/retention',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret',
-      (select decrypted_secret from vault.decrypted_secrets where name = 'parable_cron_secret')
-    )
-  )
+  select public.run_retention()
   -- Skipped while automatic updates are paused (Settings).
   where not public.automatic_updates_paused();
   $$
