@@ -964,8 +964,11 @@ async function applyAutoDeleteRules(supabase: AdminClient): Promise<number> {
     const keywords: string[] = prefs.auto_delete_keywords ?? []
     if (keywords.length === 0) continue
 
+    // Bound: rpc reads this.rest, so a detached copy threw "Cannot read
+    // properties of undefined (reading 'rest')" and failed the whole run
+    // once anyone had a hidden word.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see feedItemsRpc in src/lib/articles/list.ts
-    const rpc = supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => any
+    const rpc = (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => any).bind(supabase)
     const { data: items, error: itemsError } = await rpc('feed_items_excluding_states', {
       p_user_id: prefs.user_id,
       p_exclude_states: UNFILED_EXCLUDED_STATES,
