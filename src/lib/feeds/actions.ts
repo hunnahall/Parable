@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import Parser from 'rss-parser'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { adminClient, type AdminClient } from '@/lib/supabase/admin'
@@ -208,7 +209,7 @@ export async function runIngestNow(): Promise<
   if (!user) return { summary: null, error: 'Not signed in' }
 
   try {
-    const summary = await runIngest({ onlyUserId: user.id })
+    const summary = await runIngest({ onlyUserId: user.id, readTextsLater: after })
     revalidatePath('/feeds')
     revalidatePath('/')
     return { summary, error: null }

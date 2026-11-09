@@ -424,12 +424,59 @@ async function readArticle(
   prepared: PreparedItem
 ): Promise<{ stored: StoredText; imageUrl: string | null }> {
   const { item, feedSummary } = prepared
-  if (feedSummary.length >= MIN_BODY_LENGTH || !item.link) {
+  if (!needsPage(prepared) || !item.link) {
     return { stored: textFrom(feedParagraphs(item, feedSummary), ''), imageUrl: null }
   }
   const extracted = await fetchAndExtractContent(item.link)
   const pageText = 'text' in extracted ? extracted.text : ''
   return { stored: textFrom(feedParagraphs(item, feedSummary), pageText), imageUrl: extracted.imageUrl }
+}
+
+function needsPage(prepared: PreparedItem): boolean {
+  return prepared.feedSummary.length < MIN_BODY_LENGTH && !!prepared.item.link
+}
+
+// An article written with only the feed's own text, whose page is read
+// once the run's headlines are all written (Refresh, see runIngest).
+interface PendingText {
+  feedItemId: string
+  prepared: PreparedItem
+}
+
+// Reading pages is most of a run's time: jsdom parsing is CPU work every
+// feed shares (a 5-feed Refresh took 35s on 2026-11-03, nearly all of it
+// here). Network waits overlap at this concurrency; parsing doesn't.
+const PENDING_TEXT_CONCURRENCY = 8
+
+// Reads the page for each pending article and replaces its stored text,
+// adding the page's header image where the feed gave none. Returns how many
+// got full text. Past the deadline an article keeps the feed's text.
+async function readPendingTexts(
+  supabase: AdminClient,
+  pending: PendingText[],
+  deadline: number
+): Promise<number> {
+  const results = await mapWithConcurrency(pending, PENDING_TEXT_CONCURRENCY, async ({ feedItemId, prepared }) => {
+    if (Date.now() > deadline) return false
+    try {
+      const { stored, imageUrl } = await readArticle(prepared)
+      const { error } = await supabase
+        .from('feed_item_texts')
+        .upsert({ feed_item_id: feedItemId, text: stored.text, kind: stored.kind })
+      if (error) {
+        console.error(`ingest: failed to store text for ${feedItemId}`, error.message)
+        return false
+      }
+      if (imageUrl && !prepared.item.imageUrl) {
+        await supabase.from('feed_items').update({ image_url: imageUrl }).eq('id', feedItemId)
+      }
+      return stored.kind === 'full'
+    } catch (err) {
+      console.error(`ingest: failed to read text for ${feedItemId}`, err)
+      return false
+    }
+  })
+  return results.filter(Boolean).length
 }
 
 // The feed's own description with its paragraphs kept (stripHtml flattens
@@ -544,7 +591,8 @@ async function processItem(
   supabase: AdminClient,
   feed: FeedRow,
   prepared: PreparedItem,
-  runCache: RunCache
+  runCache: RunCache,
+  pendingTexts: PendingText[] | null
 ): Promise<ItemResult> {
   try {
     const { matchTitle } = prepared
@@ -587,9 +635,17 @@ async function processItem(
     const joined = DEDUPE_MODE === 'on' && match !== null
     const storyId = joined && match ? match.storyId : crypto.randomUUID()
 
-    const { stored, imageUrl } = await readArticle(prepared)
+    // With pendingTexts, the page is read after every headline is written:
+    // the article is stored now with the feed's own text.
+    const later = pendingTexts !== null && needsPage(prepared)
+    const { stored, imageUrl } = later
+      ? { stored: textFrom(feedParagraphs(prepared.item, prepared.feedSummary), ''), imageUrl: null }
+      : await readArticle(prepared)
     const result = await writeItem(supabase, feed, prepared, stored, imageUrl, storyId, joined)
-    if (result.feedItemId) runCache.add(prepared, storyId)
+    if (result.feedItemId) {
+      runCache.add(prepared, storyId)
+      if (later) pendingTexts?.push({ feedItemId: result.feedItemId, prepared })
+    }
     return result
   } catch (itemErr) {
     // A single malformed item or a one-off insert failure shouldn't sink
@@ -799,7 +855,8 @@ async function processFeed(
   targetLanguage: string,
   deadline: number,
   runCache: RunCache,
-  runPace: RunPace
+  runPace: RunPace,
+  pendingTexts: PendingText[] | null
 ): Promise<FeedResult> {
   // Accumulated outside the try so the catch below can report what a
   // failed feed had already spent before it threw.
@@ -899,7 +956,7 @@ async function processFeed(
       // Timed so later feeds size their preparation batch against what
       // items are actually costing this run, not a guess.
       const startedAt = Date.now()
-      return processItem(supabase, feed, entry, runCache).finally(() =>
+      return processItem(supabase, feed, entry, runCache, pendingTexts).finally(() =>
         runPace.record(Date.now() - startedAt)
       )
     })
@@ -1006,6 +1063,11 @@ export interface RunIngestOptions {
   // button). Every subscriber of those feeds still gets their filters
   // applied. Omitted by cron, which runs every subscribed feed.
   onlyUserId?: string
+  // Refresh passes Next's after(): headlines are written and the run
+  // returns, then article pages are read in this task once the response
+  // has gone out. The run's ingest_runs row is written when the task ends.
+  // Cron omits it and reads each page inline.
+  readTextsLater?: (task: () => Promise<void>) => void
 }
 
 export async function runIngest(options: RunIngestOptions = {}): Promise<IngestSummary> {
@@ -1082,8 +1144,9 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
   // that sharing is the entire point of it.
   const runCache = new RunCache()
   const runPace = new RunPace()
+  const pendingTexts: PendingText[] | null = options.readTextsLater ? [] : null
   const results = await mapWithConcurrency(feeds, FEED_CONCURRENCY, (feed) =>
-    processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE, deadline, runCache, runPace)
+    processFeed(supabase, feed, cutoffMs, INGEST_TARGET_LANGUAGE, deadline, runCache, runPace, pendingTexts)
   )
 
   let feedsProcessed = 0
@@ -1114,6 +1177,13 @@ export async function runIngest(options: RunIngestOptions = {}): Promise<IngestS
     duplicatesFound,
     textsStored,
     usage,
+  }
+  if (options.readTextsLater && pendingTexts && pendingTexts.length > 0) {
+    options.readTextsLater(async () => {
+      const read = await readPendingTexts(supabase, pendingTexts, deadline)
+      await recordRun(supabase, { ...summary, textsStored: textsStored + read }, Date.now() - startedAt)
+    })
+    return summary
   }
   await recordRun(supabase, summary, Date.now() - startedAt)
   return summary

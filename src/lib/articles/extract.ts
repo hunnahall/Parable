@@ -25,6 +25,37 @@ function extractHeaderImage(document: Document): string | null {
   return og || twitter || null
 }
 
+// response.text() always decodes as UTF-8, which turns a page in another
+// encoding into replacement characters (Babnet's Arabic pages are
+// windows-1256, seen 2026-10-22). The charset comes from the Content-Type
+// header, then a <meta> charset in the first 1024 bytes, then UTF-8: the
+// order browsers use. Exported for Build a Feed, which fetches pages too.
+export async function decodeHtml(response: Response): Promise<string> {
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  const declared =
+    charsetIn(response.headers.get('content-type')) ??
+    charsetIn(new TextDecoder('latin1').decode(bytes.subarray(0, 1024)).match(/<meta[^>]+charset[^>]*>/i)?.[0])
+  try {
+    return new TextDecoder(declared ?? 'utf-8').decode(bytes)
+  } catch {
+    // A label TextDecoder doesn't know.
+    return new TextDecoder('utf-8').decode(bytes)
+  }
+}
+
+function charsetIn(text: string | null | undefined): string | null {
+  return text?.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1] ?? null
+}
+
+// Scripts and styles carry no article text, and jsdom spends most of its
+// parse time on them. Removing them first halved parse time on 30 test
+// pages (2.3s to 1.2s) with identical text on all 30 (2026-11-03).
+// Matches up to the first closing tag, which is where an HTML parser ends
+// a script too.
+function withoutInertTags(html: string): string {
+  return html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+}
+
 // Fetches the article's HTML and extracts the readable body with
 // Readability (the jsdom-backed approach Firefox's Reader View uses).
 // Returns plain text with paragraphs separated by a blank line, which is
@@ -43,7 +74,7 @@ export async function fetchAndExtractContent(url: string): Promise<ExtractResult
     if (!response.ok) {
       return { error: `Fetch failed: HTTP ${response.status}`, imageUrl: null }
     }
-    const html = await response.text()
+    const html = withoutInertTags(await decodeHtml(response))
 
     const dom = new JSDOM(html, { url })
     // Read the header image before Readability's .parse() below, which

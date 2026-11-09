@@ -1,4 +1,5 @@
 import { JSDOM } from 'jsdom'
+import { decodeHtml } from '@/lib/articles/extract'
 
 // Powers "Build a Feed" (see BuildFeedSection.tsx): given a URL with no
 // RSS/Atom feed of its own, heuristically detect its repeating
@@ -276,7 +277,7 @@ export async function detectArticles(sourceUrl: string): Promise<BuildFeedResult
     if (!response.ok) {
       return { preview: null, error: `Fetch failed: HTTP ${response.status}` }
     }
-    html = await response.text()
+    html = await decodeHtml(response)
   } catch (err) {
     return { preview: null, error: `Fetch failed: ${fetchErrorMessage(err)}` }
   } finally {
