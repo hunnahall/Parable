@@ -111,6 +111,8 @@ const FURNITURE =
   /^(?:publicité|advertisement|advertising|sponsored(?: content)?|contenu sponsorisé|إعلان|partager(?: cet article)?|share(?: this article)?|abonnez-vous.*|subscribe.*newsletter.*|inscrivez-vous.*newsletter.*|newsletter.*|اشترك.*)$/iu
 const FURNITURE_MAX_LENGTH = 120
 
+const LONE_TAG = /^<\/?[a-z][^<>]*>$/i
+
 // A block mostly made of link text is a list of other articles. Short
 // blocks only: a long paragraph that links a few phrases is still prose.
 // A sentence that ends like one ("..., which he has denied.") is kept
@@ -150,6 +152,9 @@ function removeLinkLists(document: Document): void {
 export function isArticleText(el: Element): boolean {
   const text = collapse(el.textContent)
   if (!text) return false
+  // A tag escaped in the page's own markup (Babnet writes "&lt;img
+  // src=...&gt;" inside articles), which would otherwise read as text.
+  if (LONE_TAG.test(text)) return false
   if (READ_ALSO.test(text)) return false
   if (text.length <= FURNITURE_MAX_LENGTH && FURNITURE.test(text)) return false
   if (text.length <= LINK_BLOCK_MAX_LENGTH) {
