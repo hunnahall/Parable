@@ -5,6 +5,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { countSavedArticles } from '@/lib/articles/count'
 import PageHeader from '@/components/layout/PageHeader'
 import ArticlesView, { type ArticlesFilters } from '@/components/articles/ArticlesView'
+import { signInUrl } from '@/lib/suite'
 
 export default async function SavedPage({
   searchParams,
@@ -17,7 +18,7 @@ export default async function SavedPage({
   }>
 }) {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/saved'))
 
   const params = await searchParams
   const filters: ArticlesFilters = {

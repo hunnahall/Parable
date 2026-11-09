@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
+import { DB_SCHEMA } from './schema'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -9,6 +10,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      db: { schema: DB_SCHEMA },
       cookies: {
         getAll() {
           return cookieStore.getAll()

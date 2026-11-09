@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { BASE_PATH } from '@/lib/suite'
 
 export interface StreamedText {
   text: string
@@ -28,7 +29,8 @@ export function useStreamedText(url: string | null): StreamedText {
 
     ;(async () => {
       try {
-        const res = await fetch(url, { signal: controller.signal })
+        // A raw fetch doesn't get Next's basePath, so it's added here.
+        const res = await fetch(`${BASE_PATH}${url}`, { signal: controller.signal })
         if (!res.ok || !res.body) {
           update((s) => ({ ...s, loading: false, error: res.status === 404 ? 'This article is gone.' : 'Could not load it.' }))
           return

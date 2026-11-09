@@ -6,10 +6,11 @@ import { getAutomationState } from '@/lib/settings/automation'
 import { formatUsd, USAGE_WINDOW_DAYS } from '@/lib/usage/tokens'
 import PageHeader from '@/components/layout/PageHeader'
 import SettingsForm from '@/components/settings/SettingsForm'
+import { signInUrl } from '@/lib/suite'
 
 export default async function SettingsPage() {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/settings'))
 
   const [preferences, usage, spend, automation] = await Promise.all([
     getUserPreferences(),

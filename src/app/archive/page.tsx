@@ -5,6 +5,7 @@ import { listFolderOptions } from '@/lib/folders/data'
 import { listCategories } from '@/lib/categories/data'
 import PageHeader from '@/components/layout/PageHeader'
 import StoryList from '@/components/stories/StoryList'
+import { signInUrl } from '@/lib/suite'
 
 export default async function ArchivePage({
   searchParams,
@@ -12,7 +13,7 @@ export default async function ArchivePage({
   searchParams: Promise<{ q?: string }>
 }) {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/archive'))
 
   const { q = '' } = await searchParams
   const [stories, folders, categories] = await Promise.all([

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, LogOut, Monitor, Moon, Settings, Sun, type LucideIcon } from 'lucide-react'
-import { signOut } from '@/app/login/actions'
+import { Check, LayoutGrid, LogOut, Monitor, Moon, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react'
 import { updatePreferences } from '@/lib/preferences/actions'
 import { applyTheme } from '@/lib/preferences/applyTheme'
 import type { ThemeChoice } from '@/lib/preferences/data'
@@ -91,6 +90,19 @@ export default function AccountMenu({
             <Settings strokeWidth={1.5} aria-hidden="true" />
             Settings
           </Link>
+          {/* The account and the app list live in the Covenant Works landing
+              app, on the same address outside /parable. Plain <a> tags:
+              next/link would add the base path and try a client-side
+              navigation into an app that isn't this one. */}
+          <a href="/account" role="menuitem" className="cw-menu__item no-underline">
+            <UserRound strokeWidth={1.5} aria-hidden="true" />
+            Account
+          </a>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- "/" here is the landing app, outside Parable */}
+          <a href="/" role="menuitem" className="cw-menu__item no-underline">
+            <LayoutGrid strokeWidth={1.5} aria-hidden="true" />
+            All apps
+          </a>
           <div className="cw-menu__label">Theme</div>
           {THEMES.map((t) => (
             <button
@@ -107,7 +119,9 @@ export default function AccountMenu({
             </button>
           ))}
           <div className="cw-menu__sep" role="separator" />
-          <form action={signOut}>
+          {/* The suite's one sign-out: a native form post to the landing
+              app, which clears the shared session for every app. */}
+          <form action="/auth/sign-out" method="post">
             <button type="submit" role="menuitem" className="cw-menu__item">
               <LogOut strokeWidth={1.5} aria-hidden="true" />
               Sign out

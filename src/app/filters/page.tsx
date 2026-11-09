@@ -4,10 +4,11 @@ import { getUserPreferences } from '@/lib/preferences/data'
 import { countFilterHits } from '@/lib/filters/data'
 import PageHeader from '@/components/layout/PageHeader'
 import FiltersForm from '@/components/filters/FiltersForm'
+import { signInUrl } from '@/lib/suite'
 
 export default async function FiltersPage() {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/filters'))
 
   const [preferences, hits] = await Promise.all([getUserPreferences(), countFilterHits()])
 

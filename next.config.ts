@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
+import { BASE_PATH } from "./src/lib/suite";
 
 const nextConfig: NextConfig = {
+  // Parable is served at covenantworks.vercel.app/parable through the
+  // Covenant Works landing app's rewrites (Vercel multi-zones), so every
+  // page and asset lives under /parable. See src/lib/suite.ts.
+  basePath: BASE_PATH,
+  // Server actions arrive through that rewrite from the suite's address, so
+  // it has to be allowed explicitly (SUITE_HOST, e.g. covenantworks.vercel.app).
+  experimental: {
+    serverActions: {
+      allowedOrigins: [process.env.SUITE_HOST ?? 'covenantworks.vercel.app', 'localhost:3000'],
+    },
+  },
   // jsdom (used for article-content scraping — see src/lib/articles/extract.ts)
   // pulls in a transitive dependency chain (html-encoding-sniffer ->
   // @exodus/bytes) that mixes CommonJS require() with an ES Module in a way

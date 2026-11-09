@@ -12,10 +12,11 @@ import FilteredToday from '@/components/filters/FilteredToday'
 import PageHeader from '@/components/layout/PageHeader'
 import HealthBanners from '@/components/health/HealthBanners'
 import StoryList from '@/components/stories/StoryList'
+import { signInUrl } from '@/lib/suite'
 
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ category?: string }> }) {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/inbox'))
 
   const params = await searchParams
 

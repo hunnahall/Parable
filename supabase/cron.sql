@@ -51,7 +51,7 @@ select cron.schedule(
   '0 */2 * * *',
   $$
   select net.http_post(
-    url := 'https://parable-rss.vercel.app/api/ingest-feeds',
+    url := 'https://parable-rss.vercel.app/parable/api/ingest-feeds',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret',
@@ -60,14 +60,14 @@ select cron.schedule(
     timeout_milliseconds := 300000
   )
   -- Skipped while automatic updates are paused (Settings).
-  where not public.automatic_updates_paused();
+  where not parable.automatic_updates_paused();
   $$
 );
 
 -- Parable's whole retention policy in one job: unfiled Inbox articles are
 -- deleted 12h after they arrive, archived ones 24h after they're archived,
 -- shared feed_items rows are reclaimed once nobody wants them, and the
--- bookkeeping tables age out. See public.run_retention() (the
+-- bookkeeping tables age out. See parable.run_retention() (the
 -- run_retention_in_database migration) and src/lib/feeds/retention.ts.
 --
 -- Runs inside the database since 2026-11-03. It used to call
@@ -79,12 +79,12 @@ select cron.schedule(
 -- real lifetime vary by up to a full day. Offset to :10 so it never fires
 -- in the same instant as ingest-feeds on the hours they share.
 select cron.schedule(
-  'retention',
+  'parable-retention',
   '10 * * * *',
   $$
-  select public.run_retention()
+  select parable.run_retention()
   -- Skipped while automatic updates are paused (Settings).
-  where not public.automatic_updates_paused();
+  where not parable.automatic_updates_paused();
   $$
 );
 

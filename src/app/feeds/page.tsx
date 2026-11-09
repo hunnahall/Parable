@@ -5,6 +5,7 @@ import { getFeedNumbers } from '@/lib/feeds/numbers'
 import { listCategories } from '@/lib/categories/data'
 import PageHeader from '@/components/layout/PageHeader'
 import FeedManager from '@/components/feeds/FeedManager'
+import { signInUrl } from '@/lib/suite'
 
 // The feed budget from context.md. Shown, not enforced.
 const FEED_BUDGET = 50
@@ -38,7 +39,7 @@ function FeedBudget({ count }: { count: number }) {
 
 export default async function FeedsPage() {
   const user = await getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect(signInUrl('/feeds'))
 
   const [feeds, categories, numbers] = await Promise.all([listFeedsDetailed(), listCategories(), getFeedNumbers()])
 
