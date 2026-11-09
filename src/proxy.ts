@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { DB_SCHEMA } from '@/lib/supabase/schema'
+import { signInUrl } from '@/lib/suite'
 
 // This middleware sits in front of every request the app serves, so a
 // stalled Auth server would otherwise hang each one until the platform's
@@ -17,6 +19,7 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      db: { schema: DB_SCHEMA },
       global: {
         fetch: (input, init) =>
           fetch(input, { ...init, signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) }),
@@ -55,10 +58,22 @@ export async function proxy(request: NextRequest) {
   // AUTH_TIMEOUT_MS abort above and this catch, both a hang and a throw
   // end the same way — skip the refresh for this request and pass the
   // existing cookies through unmodified rather than blocking the response.
+  let signedIn = true
   try {
-    await supabase.auth.getClaims()
+    const { data } = await supabase.auth.getClaims()
+    signedIn = Boolean(data?.claims?.sub)
   } catch (err) {
     console.error('proxy: auth.getClaims failed', err)
+  }
+
+  // Signed out: straight to the suite's sign-in page, which brings the
+  // visitor back. /api is left alone: cron calls it with its own secret,
+  // and the streaming routes answer 401 themselves. A failed check above
+  // counts as signed in, so an Auth outage doesn't bounce everyone out;
+  // the pages still check for themselves.
+  const { pathname, search } = request.nextUrl
+  if (!signedIn && !pathname.startsWith('/api/')) {
+    return NextResponse.redirect(signInUrl(`${pathname}${search}`))
   }
 
   return supabaseResponse
